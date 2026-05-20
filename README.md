@@ -65,6 +65,8 @@ updater consumer (`server/updater.js`, invoked via `npm run start:updater`).
   binds durable queue `wiki.updater.queue` to durable topic exchange
   `wiki.events` with routing key `wiki.update.#`, then logs receipts as
   `received wiki.update.<repo> sha=<sha> msg=<title>` before acking.
+  RabbitMQ credentials are supplied via `~/.config/project-wiki-updater.env`
+  as `RABBITMQ_URL=amqp://...`.
 
 ## Plan and roadmap
 

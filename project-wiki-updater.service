@@ -6,7 +6,7 @@ After=network-online.target
 WorkingDirectory=/home/jkeyser/project-wiki
 ExecStart=/usr/bin/npm run start:updater
 Environment="NODE_ENV=production"
-Environment="RABBITMQ_URL=amqp://localhost:5672"
+EnvironmentFile=%h/.config/project-wiki-updater.env
 Restart=always
 RestartSec=5
 
