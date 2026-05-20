@@ -1,80 +1,25 @@
-import { spawn } from 'node:child_process';
 import { SEED_PAGES } from './parser.js';
+import { invoke, resolveProviderConfig } from '../server/providers.js';
 
-// Shells out to a scout-style provider (claude / codex) running with --print
-// so the agent inspects the target repo's source from `cwd` and emits a
-// parseable stdout payload that parser.js splits into the six seed pages.
+// Shells out to a local provider CLI so the agent inspects the target repo's
+// source from `cwd` and emits a parseable stdout payload that parser.js splits
+// into the six seed pages.
 
 export async function runScaffolder({ owner, repo, slug, fullName, cwd, env, log, warn }) {
-  const provider = (env.PROJECT_WIKI_SCAFFOLDER_PROVIDER || 'claude').toLowerCase();
-  const model = env.PROJECT_WIKI_SCAFFOLDER_MODEL || '';
   const prompt = buildPrompt({ owner, repo, slug, fullName });
-
-  const { command, args } = providerInvocation(provider, model);
-  log(`[scaffold] invoking ${command} ${args.join(' ')}`);
-  const out = await spawnAndCapture(command, args, prompt, cwd, env, warn);
-  return out;
-}
-
-function providerInvocation(provider, model) {
-  if (provider === 'claude') {
-    const args = ['--print'];
-    if (model) args.push('--model', model);
-    return { command: 'claude', args };
-  }
-  if (provider === 'codex') {
-    // `codex exec --print` reads the prompt from stdin and writes only the
-    // model response to stdout, matching the contract claude --print uses.
-    const args = ['exec', '--print'];
-    if (model) args.push('--model', model);
-    return { command: 'codex', args };
-  }
-  throw new Error(
-    `unsupported PROJECT_WIKI_SCAFFOLDER_PROVIDER "${provider}" ` +
-    `(supported: claude, codex)`,
-  );
-}
-
-function spawnAndCapture(command, args, stdinInput, cwd, env, warn) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('error', (err) => {
-      if (err && err.code === 'ENOENT') {
-        reject(new Error(
-          `scaffolder binary "${command}" not found on PATH. ` +
-          `Install it or set PROJECT_WIKI_SCAFFOLDER_PROVIDER to a supported alternative.`,
-        ));
-        return;
-      }
-      reject(err);
-    });
-    child.on('close', (code) => {
-      if (code !== 0) {
-        const tail = stderr.trim().split(/\n/).slice(-10).join('\n');
-        reject(new Error(
-          `scaffolder "${command}" exited with code ${code}. ` +
-          `stderr tail:\n${tail || '(empty)'}`,
-        ));
-        return;
-      }
-      if (stderr.trim()) {
-        warn(`[scaffold] stderr (non-fatal): ${stderr.trim().split(/\n/).slice(0, 4).join(' | ')}`);
-      }
-      resolve(stdout);
-    });
-    child.stdin.write(stdinInput);
-    child.stdin.end();
+  const { provider, model } = resolveProviderConfig('generator', env);
+  const result = await invoke({
+    provider,
+    model,
+    prompt,
+    promptMode: 'stdin',
+    cwd,
+    env,
+    logger: { log },
+    purpose: 'scaffold',
   });
+  warn(`[scaffold] completed via ${result.command} in ${Math.round(result.durationMs)}ms`);
+  return result.stdout;
 }
 
 function buildPrompt({ owner, repo, slug, fullName }) {

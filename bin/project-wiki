@@ -2,6 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { runOnboard } from '../cli/onboard.js';
+import { invoke, resolveProviderConfig, SUPPORTED_PROVIDERS } from '../server/providers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,13 +24,22 @@ Commands:
         --scaffold-only  Run scaffold + config update; skip the wiki stub step.
         --stub-only      Run the wiki stub step only; skip scaffold + config update.
 
+  test-provider <provider>
+      Invoke the shared provider abstraction with a fixed prompt and print the
+      model output. Supported providers: ${SUPPORTED_PROVIDERS.join(', ')}.
+
   help
       Print this message.
 
 Environment:
-  PROJECT_WIKI_SCAFFOLDER_PROVIDER  CLI to invoke for scaffold (default: claude).
-                                    Supported: claude, codex.
-  PROJECT_WIKI_SCAFFOLDER_MODEL     Model passed to the provider CLI when set.
+  PROJECT_WIKI_AGENT_PROVIDER       Default CLI provider for agent surfaces.
+  PROJECT_WIKI_GENERATOR_PROVIDER   Generator/scaffolder provider override.
+  PROJECT_WIKI_GENERATOR_MODEL      Generator/scaffolder model override.
+  PROJECT_WIKI_REVIEWER_PROVIDER    Reviewer provider override.
+  PROJECT_WIKI_REVIEWER_MODEL       Reviewer model override.
+  PROJECT_WIKI_BULK_PROVIDER        Bulk provider override.
+  PROJECT_WIKI_SCAFFOLDER_PROVIDER  Legacy alias for generator provider.
+  PROJECT_WIKI_SCAFFOLDER_MODEL     Legacy alias for generator model.
   PROJECT_WIKI_SCAFFOLDER_CWD       Directory the scaffolder runs in
                                     (default: source repo for <owner>/<repo>
                                     resolved at $HOME/<repo>, else this repo).
@@ -41,6 +51,36 @@ async function main() {
   if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
     printUsage();
     return 0;
+  }
+  if (cmd === 'test-provider') {
+    const provider = argv[1];
+    if (!SUPPORTED_PROVIDERS.includes(provider)) {
+      process.stderr.write(
+        `project-wiki test-provider: provider must be one of ${SUPPORTED_PROVIDERS.join(', ')}\n`,
+      );
+      return 2;
+    }
+    try {
+      const agentConfig = resolveProviderConfig('agent', process.env);
+      const result = await invoke({
+        provider,
+        model: agentConfig.model,
+        prompt: 'Reply with a short hello from the selected provider.',
+        systemPrompt:
+          'You are the project-wiki provider smoke test. Respond with one short plain-text line.',
+        promptMode: 'inline',
+        cwd: repoRoot,
+        env: process.env,
+        logger: console,
+        purpose: 'test-provider',
+      });
+      process.stdout.write(result.stdout.trimEnd() + '\n');
+      return 0;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`project-wiki test-provider: ${msg}\n`);
+      return 1;
+    }
   }
   if (cmd !== 'onboard') {
     process.stderr.write(`project-wiki: unknown command "${cmd}"\n\n`);

@@ -5,6 +5,7 @@ import { runScaffolder } from './scaffolder.js';
 import { parsePayload, SEED_PAGES } from './parser.js';
 import { updateAllowlist } from './allowlist.js';
 import { writeWikiStub } from './wiki-stub.js';
+import { resolveProviderConfig } from '../server/providers.js';
 
 export async function runOnboard({
   owner,
@@ -83,8 +84,11 @@ async function runScaffoldPhase({
   log,
   warn,
 }) {
-  log(`[scaffold] provider=${env.PROJECT_WIKI_SCAFFOLDER_PROVIDER || 'claude'}` +
-    (env.PROJECT_WIKI_SCAFFOLDER_MODEL ? ` model=${env.PROJECT_WIKI_SCAFFOLDER_MODEL}` : ''));
+  const scaffolderConfig = resolveProviderConfig('generator', env);
+  log(
+    `[scaffold] provider=${scaffolderConfig.provider}` +
+      (scaffolderConfig.model ? ` model=${scaffolderConfig.model}` : ''),
+  );
 
   const scaffolderCwd = resolveScaffolderCwd({ owner, repo, env });
   log(`[scaffold] inspecting source at ${scaffolderCwd}`);
