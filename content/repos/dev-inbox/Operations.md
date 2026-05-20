@@ -107,7 +107,7 @@ runs that never produced a plan
 Operator-targeted recovery is also possible per slice:
 
 ```bash
-scripts/plan-manager-tools/retry-reviewer.sh <runId> <taskId>
+scripts/plan-manager-tools/retry-reviewer.sh <planId> <sliceId> <runId>
 ```
 
 Re-spawns only the Reviewer for an existing slice, preserving Worker
