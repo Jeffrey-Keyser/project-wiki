@@ -30,9 +30,10 @@ npm run build    # static build into dist/
 
 ## Deployment (Beelink homelab)
 
-In production this repo is served by the auth-gated Express front-server
-(`server/index.js`, invoked via `npm start`) running as a systemd user
-unit on the Beelink host.
+In production this repo runs as two separate Node processes under systemd
+user units on the Beelink host: the auth-gated Express front-server
+(`server/index.js`, invoked via `npm start`) and a standalone RabbitMQ
+updater consumer (`server/updater.js`, invoked via `npm run start:updater`).
 
 - **Local port:** `3062` (set via `PORT` in the systemd unit; picked
   from the 3060-band by inspecting the host with `ss -tlnp` — 3060/3061
@@ -59,6 +60,11 @@ unit on the Beelink host.
   `PAY_AUTH_BASE_URL=https://pay.jeffreykeyser.net`; unauthenticated
   requests `302` to the Pay login UI and only admins can reach the
   Starlight pages.
+- **Updater unit:** `~/.config/systemd/user/project-wiki-updater.service`
+  runs `npm run start:updater` as a separate long-lived consumer. It
+  binds durable queue `wiki.updater.queue` to durable topic exchange
+  `wiki.events` with routing key `wiki.update.#`, then logs receipts as
+  `received wiki.update.<repo> sha=<sha> msg=<title>` before acking.
 
 ## Plan and roadmap
 

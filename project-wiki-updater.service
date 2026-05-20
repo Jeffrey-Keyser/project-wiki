@@ -1,0 +1,14 @@
+[Unit]
+Description=Project Wiki - RabbitMQ updater consumer
+After=network-online.target
+
+[Service]
+WorkingDirectory=/home/jkeyser/project-wiki
+ExecStart=/usr/bin/npm run start:updater
+Environment="NODE_ENV=production"
+Environment="RABBITMQ_URL=amqp://localhost:5672"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
