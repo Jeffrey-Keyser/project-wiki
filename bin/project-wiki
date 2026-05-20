@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { runOnboard } from '../cli/onboard.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, '..');
+
+const argv = process.argv.slice(2);
+
+function printUsage() {
+  process.stdout.write(`Usage: project-wiki <command> [args]
+
+Commands:
+  onboard <owner>/<repo> [flags]
+      Scaffold seed pages under content/repos/<owner>-<repo>/, register the
+      repo in .wiki-config.json, and push the redirect stub to
+      <owner>/<repo>.wiki.git.
+
+      Flags:
+        --dry-run        Plan only; write no files, make no commits, push nothing.
+        --scaffold-only  Run scaffold + config update; skip the wiki stub step.
+        --stub-only      Run the wiki stub step only; skip scaffold + config update.
+
+  help
+      Print this message.
+
+Environment:
+  PROJECT_WIKI_SCAFFOLDER_PROVIDER  CLI to invoke for scaffold (default: claude).
+                                    Supported: claude, codex.
+  PROJECT_WIKI_SCAFFOLDER_MODEL     Model passed to the provider CLI when set.
+  PROJECT_WIKI_SCAFFOLDER_CWD       Directory the scaffolder runs in
+                                    (default: source repo for <owner>/<repo>
+                                    resolved at $HOME/<repo>, else this repo).
+`);
+}
+
+async function main() {
+  const cmd = argv[0];
+  if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
+    printUsage();
+    return 0;
+  }
+  if (cmd !== 'onboard') {
+    process.stderr.write(`project-wiki: unknown command "${cmd}"\n\n`);
+    printUsage();
+    return 2;
+  }
+
+  const rest = argv.slice(1);
+  const flags = {
+    dryRun: false,
+    scaffoldOnly: false,
+    stubOnly: false,
+  };
+  const positional = [];
+  for (const arg of rest) {
+    if (arg === '--dry-run') flags.dryRun = true;
+    else if (arg === '--scaffold-only') flags.scaffoldOnly = true;
+    else if (arg === '--stub-only') flags.stubOnly = true;
+    else if (arg.startsWith('--')) {
+      process.stderr.write(`project-wiki onboard: unknown flag "${arg}"\n`);
+      return 2;
+    } else positional.push(arg);
+  }
+  if (positional.length !== 1) {
+    process.stderr.write(
+      'project-wiki onboard: expected exactly one <owner>/<repo> argument\n',
+    );
+    return 2;
+  }
+  if (flags.scaffoldOnly && flags.stubOnly) {
+    process.stderr.write(
+      'project-wiki onboard: --scaffold-only and --stub-only are mutually exclusive\n',
+    );
+    return 2;
+  }
+
+  const target = positional[0];
+  const match = /^([^\/\s]+)\/([^\/\s]+)$/.exec(target);
+  if (!match) {
+    process.stderr.write(
+      `project-wiki onboard: target "${target}" must be <owner>/<repo>\n`,
+    );
+    return 2;
+  }
+
+  try {
+    await runOnboard({
+      owner: match[1],
+      repo: match[2],
+      flags,
+      repoRoot,
+      stdout: process.stdout,
+      stderr: process.stderr,
+      env: process.env,
+    });
+    return 0;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`project-wiki onboard: ${msg}\n`);
+    if (process.env.PROJECT_WIKI_DEBUG && err instanceof Error && err.stack) {
+      process.stderr.write(err.stack + '\n');
+    }
+    return 1;
+  }
+}
+
+main().then((code) => {
+  process.exit(code);
+});

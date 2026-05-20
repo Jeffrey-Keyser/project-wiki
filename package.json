@@ -3,12 +3,16 @@
   "type": "module",
   "version": "0.0.1",
   "private": true,
+  "bin": {
+    "project-wiki": "bin/project-wiki"
+  },
   "scripts": {
     "dev": "astro dev",
     "start": "node server/index.js",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "test:cli": "node --test cli/__tests__/*.test.js"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.39.2",
