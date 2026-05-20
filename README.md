@@ -28,6 +28,32 @@ npm run dev      # local preview at http://localhost:4321
 npm run build    # static build into dist/
 ```
 
+## Deployment (Beelink homelab)
+
+In production this repo is served by the auth-gated Express front-server
+(`server/index.js`, invoked via `npm start`) running as a systemd user
+unit on the Beelink host.
+
+- **Local port:** `3062` (set via `PORT` in the systemd unit; picked
+  from the 3060-band by inspecting the host with `ss -tlnp` — 3060/3061
+  are nof1, 3070 is logos).
+- **Public URL:** `https://wiki.jeffreykeyser.net`, exposed through the
+  shared `beelink` Cloudflare tunnel. The ingress entry lives in
+  `/etc/cloudflared/config.yml` and forwards to `http://localhost:3062`,
+  matching the pattern used by `business.jeffreykeyser.net`,
+  `pantry-manager.jeffreykeyser.net`, `agency.jeffreykeyser.net`, and
+  `cron.jeffreykeyser.net`.
+- **Service unit:** `~/.config/systemd/user/project-wiki.service` runs
+  `npm start` from `/home/jkeyser/project-wiki/`. Manage it with
+  `systemctl --user {status,restart,start,stop} project-wiki.service`
+  and view logs via `journalctl --user -u project-wiki.service`.
+- **Auth:** the front-server requires `PUBLIC_ORIGIN`,
+  `PAY_AUTH_BASE_URL`, and a built `dist/` (see `.env.example`). The
+  systemd unit pins `PUBLIC_ORIGIN=https://wiki.jeffreykeyser.net` and
+  `PAY_AUTH_BASE_URL=https://pay.jeffreykeyser.net`; unauthenticated
+  requests `302` to the Pay login UI and only admins can reach the
+  Starlight pages.
+
 ## Plan and roadmap
 
 The end-to-end design for this wiki — including the per-repo ingestion pipeline,
