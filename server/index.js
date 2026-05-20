@@ -27,6 +27,24 @@ const PAY_AUTH_LOGIN_URL =
 const PAY_AUTH_COOKIE_NAME = process.env.PAY_AUTH_COOKIE_NAME || 'accessToken';
 const PAY_AUTH_RETURN_URL_PARAM = process.env.PAY_AUTH_RETURN_URL_PARAM || 'returnUrl';
 const PAY_AUTH_DEBUG = process.env.PAY_AUTH_DEBUG === 'true';
+const PUBLIC_ORIGIN_RAW = process.env.PUBLIC_ORIGIN || '';
+const TRUST_PROXY = process.env.TRUST_PROXY || '';
+
+let PUBLIC_ORIGIN = '';
+if (PUBLIC_ORIGIN_RAW) {
+  try {
+    const parsed = new URL(PUBLIC_ORIGIN_RAW);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error(`unsupported protocol ${parsed.protocol}`);
+    }
+    PUBLIC_ORIGIN = `${parsed.protocol}//${parsed.host}`;
+  } catch (err) {
+    console.error(
+      `PUBLIC_ORIGIN is invalid: ${err instanceof Error ? err.message : err}`,
+    );
+    process.exit(1);
+  }
+}
 
 if (!PAY_AUTH_BASE_URL) {
   console.error('PAY_AUTH_BASE_URL is required');
@@ -67,9 +85,15 @@ function getToken(req) {
 }
 
 function buildLoginRedirect(req) {
-  const proto = req.get('x-forwarded-proto') || req.protocol;
-  const host = req.get('host');
-  const returnUrl = `${proto}://${host}${req.originalUrl}`;
+  // Build returnUrl from a configured canonical origin only. Request headers
+  // (Host, X-Forwarded-Proto) are attacker-controlled and were previously the
+  // source of an open-redirect: a crafted Host header would send the user to
+  // an arbitrary external site after Pay login. When PUBLIC_ORIGIN is unset,
+  // fall back to the relative path so Pay's login UI resolves it against its
+  // own origin instead of trusting headers from this request.
+  const returnUrl = PUBLIC_ORIGIN
+    ? `${PUBLIC_ORIGIN}${req.originalUrl}`
+    : req.originalUrl;
   const url = new URL(PAY_AUTH_LOGIN_URL);
   url.searchParams.set(PAY_AUTH_RETURN_URL_PARAM, returnUrl);
   return url.toString();
@@ -107,6 +131,19 @@ async function authGate(req, res, next) {
 
 const app = express();
 app.disable('x-powered-by');
+
+// Trust forwarded headers (X-Forwarded-Proto, X-Forwarded-For) only when the
+// operator has explicitly opted in via TRUST_PROXY. Accepts the same values
+// Express's `trust proxy` setting accepts: a boolean, hop count, IP/CIDR list,
+// or a named preset like "loopback". Default is off so request headers cannot
+// influence the server's view of the client.
+if (TRUST_PROXY) {
+  const lowered = TRUST_PROXY.toLowerCase();
+  if (lowered === 'true') app.set('trust proxy', true);
+  else if (lowered === 'false') app.set('trust proxy', false);
+  else if (/^\d+$/.test(TRUST_PROXY)) app.set('trust proxy', Number(TRUST_PROXY));
+  else app.set('trust proxy', TRUST_PROXY);
+}
 
 app.use(authGate);
 
