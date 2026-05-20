@@ -46,7 +46,13 @@ unit on the Beelink host.
 - **Service unit:** `~/.config/systemd/user/project-wiki.service` runs
   `npm start` from `/home/jkeyser/project-wiki/`. Manage it with
   `systemctl --user {status,restart,start,stop} project-wiki.service`
-  and view logs via `journalctl --user -u project-wiki.service`.
+  and view logs via `journalctl --user -u project-wiki.service`. The
+  unit declares an `ExecStartPost` port-readiness gate that polls
+  `ss -tln "( sport = :3062 )"` for up to ~10s, so `systemctl restart`
+  only returns once node has actually bound `:3062` — without this,
+  immediate post-restart probes (e.g. the dev-inbox verify gate's
+  `curl https://wiki.jeffreykeyser.net/`) can briefly hit `502 Bad
+  Gateway` from the Cloudflare tunnel while node is still booting.
 - **Auth:** the front-server requires `PUBLIC_ORIGIN`,
   `PAY_AUTH_BASE_URL`, and a built `dist/` (see `.env.example`). The
   systemd unit pins `PUBLIC_ORIGIN=https://wiki.jeffreykeyser.net` and
