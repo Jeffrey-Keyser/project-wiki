@@ -30,20 +30,27 @@ const PAY_AUTH_DEBUG = process.env.PAY_AUTH_DEBUG === 'true';
 const PUBLIC_ORIGIN_RAW = process.env.PUBLIC_ORIGIN || '';
 const TRUST_PROXY = process.env.TRUST_PROXY || '';
 
+if (!PUBLIC_ORIGIN_RAW) {
+  console.error(
+    'PUBLIC_ORIGIN is required (e.g. https://wiki.jeffreykeyser.net). ' +
+      'It is the canonical scheme+host used to build the post-login returnUrl ' +
+      'and must be configured to prevent open-redirect via request headers.',
+  );
+  process.exit(1);
+}
+
 let PUBLIC_ORIGIN = '';
-if (PUBLIC_ORIGIN_RAW) {
-  try {
-    const parsed = new URL(PUBLIC_ORIGIN_RAW);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new Error(`unsupported protocol ${parsed.protocol}`);
-    }
-    PUBLIC_ORIGIN = `${parsed.protocol}//${parsed.host}`;
-  } catch (err) {
-    console.error(
-      `PUBLIC_ORIGIN is invalid: ${err instanceof Error ? err.message : err}`,
-    );
-    process.exit(1);
+try {
+  const parsed = new URL(PUBLIC_ORIGIN_RAW);
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`unsupported protocol ${parsed.protocol}`);
   }
+  PUBLIC_ORIGIN = `${parsed.protocol}//${parsed.host}`;
+} catch (err) {
+  console.error(
+    `PUBLIC_ORIGIN is invalid: ${err instanceof Error ? err.message : err}`,
+  );
+  process.exit(1);
 }
 
 if (!PAY_AUTH_BASE_URL) {
@@ -85,15 +92,13 @@ function getToken(req) {
 }
 
 function buildLoginRedirect(req) {
-  // Build returnUrl from a configured canonical origin only. Request headers
-  // (Host, X-Forwarded-Proto) are attacker-controlled and were previously the
-  // source of an open-redirect: a crafted Host header would send the user to
-  // an arbitrary external site after Pay login. When PUBLIC_ORIGIN is unset,
-  // fall back to the relative path so Pay's login UI resolves it against its
-  // own origin instead of trusting headers from this request.
-  const returnUrl = PUBLIC_ORIGIN
-    ? `${PUBLIC_ORIGIN}${req.originalUrl}`
-    : req.originalUrl;
+  // Build returnUrl from PUBLIC_ORIGIN (required). The path portion is taken
+  // from req.originalUrl but normalized to a single leading slash so that a
+  // network-path reference like "//evil.example" cannot resolve to a foreign
+  // origin when the URL is parsed by the browser or Pay's login UI.
+  const rawPath = typeof req.originalUrl === 'string' ? req.originalUrl : '/';
+  const normalizedPath = '/' + rawPath.replace(/^\/+/, '');
+  const returnUrl = `${PUBLIC_ORIGIN}${normalizedPath}`;
   const url = new URL(PAY_AUTH_LOGIN_URL);
   url.searchParams.set(PAY_AUTH_RETURN_URL_PARAM, returnUrl);
   return url.toString();
