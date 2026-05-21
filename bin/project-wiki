@@ -2,6 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { runOnboard } from '../cli/onboard.js';
+import { runReindex } from '../cli/reindex.js';
 import { invoke, resolveProviderConfig, SUPPORTED_PROVIDERS } from '../server/providers.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,12 @@ Commands:
         --dry-run        Plan only; write no files, make no commits, push nothing.
         --scaffold-only  Run scaffold + config update; skip the wiki stub step.
         --stub-only      Run the wiki stub step only; skip scaffold + config update.
+
+  reindex <owner>/<repo>... | --all [--dry-run]
+      Re-run the scaffolder for one or more already-onboarded repos.
+      Equivalent to running \`onboard --scaffold-only\` per repo. Repos must
+      already be present in .wiki-config.json allowlist. Use --all to iterate
+      every entry.
 
   test-provider <provider>
       Invoke the shared provider abstraction with a fixed prompt and print the
@@ -79,6 +86,45 @@ async function main() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       process.stderr.write(`project-wiki test-provider: ${msg}\n`);
+      return 1;
+    }
+  }
+  if (cmd === 'reindex') {
+    const rest = argv.slice(1);
+    const flags = { dryRun: false };
+    let all = false;
+    const targets = [];
+    for (const arg of rest) {
+      if (arg === '--dry-run') flags.dryRun = true;
+      else if (arg === '--all') all = true;
+      else if (arg.startsWith('--')) {
+        process.stderr.write(`project-wiki reindex: unknown flag "${arg}"\n`);
+        return 2;
+      } else targets.push(arg);
+    }
+    for (const t of targets) {
+      if (!/^([^\/\s]+)\/([^\/\s]+)$/.test(t)) {
+        process.stderr.write(`project-wiki reindex: target "${t}" must be <owner>/<repo>\n`);
+        return 2;
+      }
+    }
+    try {
+      await runReindex({
+        targets,
+        all,
+        flags,
+        repoRoot,
+        stdout: process.stdout,
+        stderr: process.stderr,
+        env: process.env,
+      });
+      return 0;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`project-wiki reindex: ${msg}\n`);
+      if (process.env.PROJECT_WIKI_DEBUG && err instanceof Error && err.stack) {
+        process.stderr.write(err.stack + '\n');
+      }
       return 1;
     }
   }
