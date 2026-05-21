@@ -5,6 +5,12 @@
     "Jeffrey-Keyser/nanoclaw",
     "Jeffrey-Keyser/agency-hq",
     "Jeffrey-Keyser/beelink-deploy",
-    "Jeffrey-Keyser/solo-vault"
+    "Jeffrey-Keyser/solo-vault",
+    "Jeffrey-Keyser/cron-service",
+    "Jeffrey-Keyser/openclaw-bridge",
+    "Jeffrey-Keyser/pantry-manager",
+    "Jeffrey-Keyser/logos",
+    "Jeffrey-Keyser/image-studio",
+    "Jeffrey-Keyser/ai-proxy"
   ]
 }
