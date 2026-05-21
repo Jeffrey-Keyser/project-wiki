@@ -1,6 +1,10 @@
 {
   "allowlist": [
     "Jeffrey-Keyser/dev-inbox",
-    "Jeffrey-Keyser/business-hq"
+    "Jeffrey-Keyser/business-hq",
+    "Jeffrey-Keyser/nanoclaw",
+    "Jeffrey-Keyser/agency-hq",
+    "Jeffrey-Keyser/beelink-deploy",
+    "Jeffrey-Keyser/solo-vault"
   ]
 }
