@@ -1,0 +1,73 @@
+---
+const returnUrl = Astro.url.searchParams.get('returnUrl') ?? '/';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Sign in — Project Wiki</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; background: #0b0b0e; color: #eee; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+      form { background: #15151b; padding: 2rem 2.25rem; border-radius: 10px; width: min(360px, 92vw); box-shadow: 0 1px 0 #2a2a33 inset, 0 8px 30px rgba(0,0,0,.35); }
+      h1 { margin: 0 0 1.25rem; font-size: 1.25rem; font-weight: 600; letter-spacing: .01em; }
+      label { display: block; font-size: .8rem; color: #9aa; margin: .85rem 0 .25rem; }
+      input { width: 100%; box-sizing: border-box; background: #0e0e13; color: #eee; border: 1px solid #2a2a33; border-radius: 6px; padding: .55rem .65rem; font: inherit; }
+      input:focus { outline: 2px solid #4c8bf5; outline-offset: 1px; }
+      button { margin-top: 1.25rem; width: 100%; background: #4c8bf5; color: white; border: 0; border-radius: 6px; padding: .65rem; font: inherit; font-weight: 600; cursor: pointer; }
+      button[disabled] { opacity: .55; cursor: progress; }
+      .err { margin-top: .85rem; color: #ff8080; font-size: .85rem; min-height: 1.1em; }
+      .hint { margin-top: 1rem; font-size: .75rem; color: #777; }
+    </style>
+  </head>
+  <body>
+    <form id="login-form" novalidate>
+      <h1>Sign in to Project Wiki</h1>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required />
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+      <button id="submit" type="submit">Sign in</button>
+      <div class="err" id="err" role="alert" aria-live="polite"></div>
+      <div class="hint">Admin-only. Pay-auth session.</div>
+      <input type="hidden" id="returnUrl" value={returnUrl} />
+    </form>
+    <script is:inline>
+      const form = document.getElementById('login-form');
+      const errEl = document.getElementById('err');
+      const submitBtn = document.getElementById('submit');
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errEl.textContent = '';
+        submitBtn.disabled = true;
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const returnUrl = document.getElementById('returnUrl').value || '/';
+        try {
+          const resp = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+            credentials: 'same-origin',
+          });
+          const body = await resp.json().catch(() => ({}));
+          if (!resp.ok || !body.success) {
+            errEl.textContent = body.message || `Sign in failed (${resp.status})`;
+            submitBtn.disabled = false;
+            return;
+          }
+          let safeReturn = '/';
+          try {
+            const u = new URL(returnUrl, window.location.origin);
+            if (u.origin === window.location.origin) safeReturn = u.pathname + u.search + u.hash;
+          } catch {}
+          window.location.replace(safeReturn);
+        } catch (err) {
+          errEl.textContent = (err && err.message) || 'Network error';
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

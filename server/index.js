@@ -150,6 +150,55 @@ if (TRUST_PROXY) {
   else app.set('trust proxy', TRUST_PROXY);
 }
 
+const loginPagePaths = new Set(['/login', '/login/', '/login/index.html']);
+function serveLoginPage(req, res, next) {
+  if (!loginPagePaths.has(req.path)) return next();
+  const file = path.join(distDir, 'login', 'index.html');
+  fs.access(file, fs.constants.R_OK, (err) => {
+    if (err) return next();
+    res.sendFile(file);
+  });
+}
+
+app.post(
+  '/api/auth/login',
+  express.json({ limit: '4kb' }),
+  async (req, res) => {
+    const { email, password } = req.body ?? {};
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+      return res.status(400).json({ success: false, message: 'email and password required' });
+    }
+    let upstream;
+    try {
+      upstream = await fetch(`${PAY_AUTH_BASE_URL.replace(/\/+$/, '')}/api/v1/users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, passwordPlainText: password }),
+      });
+    } catch (err) {
+      console.error('[auth] pay login fetch failed:', err instanceof Error ? err.message : err);
+      return res.status(502).json({ success: false, message: 'auth service unreachable' });
+    }
+    const body = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || !body?.success || !body?.data?.accessToken) {
+      return res
+        .status(upstream.status === 200 ? 401 : upstream.status)
+        .json({ success: false, message: body?.message || 'invalid credentials' });
+    }
+    const expiresIn = Number(body.data.expiresIn) || 3600;
+    res.cookie(PAY_AUTH_COOKIE_NAME, body.data.accessToken, {
+      httpOnly: true,
+      secure: PUBLIC_ORIGIN.startsWith('https:'),
+      sameSite: 'lax',
+      path: '/',
+      maxAge: expiresIn * 1000,
+    });
+    return res.json({ success: true, expiresIn });
+  },
+);
+
+app.use(serveLoginPage);
+
 app.use(authGate);
 
 app.use(
