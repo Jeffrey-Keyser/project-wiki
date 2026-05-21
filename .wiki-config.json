@@ -1,3 +1,6 @@
 {
-  "allowlist": ["Jeffrey-Keyser/dev-inbox"]
+  "allowlist": [
+    "Jeffrey-Keyser/dev-inbox",
+    "Jeffrey-Keyser/business-hq"
+  ]
 }
