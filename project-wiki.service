@@ -1,0 +1,21 @@
+[Unit]
+Description=Project Wiki - Auth-gated Starlight front-server
+After=network-online.target
+
+[Service]
+WorkingDirectory=/home/jkeyser/project-wiki
+ExecStart=/usr/bin/npm start
+# Block `systemctl restart` until port 3062 is actually bound, so the
+# verify gate's immediate curl doesn't hit a brief Cloudflare-tunnel 502
+# while node is still booting. Capped at ~10s; never fails the unit.
+ExecStartPost=/usr/bin/bash -c 'for i in $(seq 1 100); do /usr/bin/ss -tlnH "( sport = :3062 )" | /usr/bin/grep -q LISTEN && exit 0; sleep 0.1; done; exit 0'
+Environment="PORT=3062"
+Environment="NODE_ENV=production"
+Environment="PUBLIC_ORIGIN=https://wiki.jeffreykeyser.net"
+Environment="PAY_AUTH_BASE_URL=https://pay.jeffreykeyser.net"
+Environment="PAY_AUTH_LOGIN_URL=https://wiki.jeffreykeyser.net/login"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
