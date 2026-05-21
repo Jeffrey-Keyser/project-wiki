@@ -11,6 +11,12 @@
     "Jeffrey-Keyser/pantry-manager",
     "Jeffrey-Keyser/logos",
     "Jeffrey-Keyser/image-studio",
-    "Jeffrey-Keyser/ai-proxy"
+    "Jeffrey-Keyser/ai-proxy",
+    "Jeffrey-Keyser/pay",
+    "Jeffrey-Keyser/pay-auth-integration",
+    "Jeffrey-Keyser/prompt-registry",
+    "Jeffrey-Keyser/feedback-registry",
+    "Jeffrey-Keyser/qa-patrol",
+    "Jeffrey-Keyser/Switchboard"
   ]
 }
