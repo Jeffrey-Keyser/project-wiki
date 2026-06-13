@@ -6,6 +6,12 @@ After=network-online.target
 WorkingDirectory=/home/jkeyser/project-wiki
 ExecStart=/usr/bin/npm run start:updater
 Environment="NODE_ENV=production"
+# Sticky checkout MUST be the live serving repo (front-server runs from here;
+# poll-rebuild git-pulls it + restarts the front-server). The code default
+# /var/cache/project-wiki/source is root-owned + unwritable -> EACCES on every
+# message. Baked here so a reprovision can't silently regress to the default.
+Environment="PROJECT_WIKI_SOURCE_CHECKOUT=/home/jkeyser/project-wiki"
+Environment="PROJECT_WIKI_SOURCE_REMOTE=git@github.com:Jeffrey-Keyser/project-wiki.git"
 EnvironmentFile=%h/.config/project-wiki-updater.env
 Restart=always
 RestartSec=5
