@@ -199,7 +199,7 @@ test('handleUpdateMessage skips repos not on the allowlist without mutating cont
     });
 
     assert.equal(events.acked, 1);
-    assert.equal(events.published[0].routingKey, 'wiki.update.skipped');
+    assert.equal(events.published[0].routingKey, 'wiki.event.skipped');
     assert.equal(events.published[0].payload.reason, 'repo-not-allowlisted');
     assert.equal(
       fs.readFileSync(path.join(checkoutPath, 'content', 'repos', 'dev-inbox', 'Home.md'), 'utf8'),
@@ -225,7 +225,7 @@ test('handleUpdateMessage treats empty or byte-identical proposals as no-op skip
     });
 
     assert.equal(events.acked, 1);
-    assert.equal(events.published.at(-1).routingKey, 'wiki.update.skipped');
+    assert.equal(events.published.at(-1).routingKey, 'wiki.event.skipped');
     assert.equal(events.published.at(-1).payload.reason, 'no-changes-proposed');
     assert.ok(!gitCalls.some((call) => call[0] === 'commit'));
   });
@@ -261,7 +261,7 @@ ${'x'.repeat(MIN_GENERATED_PAGE_LENGTH)}
     });
 
     assert.equal(events.acked, 1);
-    assert.equal(events.published.at(-1).routingKey, 'wiki.update.guardrail');
+    assert.equal(events.published.at(-1).routingKey, 'wiki.event.guardrail');
     assert.equal(events.published.at(-1).payload.reason, 'fence-strip');
     assert.ok(!gitCalls.some((call) => call[0] === 'commit'));
   });
@@ -346,7 +346,7 @@ flowchart TD
     });
 
     assert.equal(replayEvents.acked, 1);
-    assert.equal(replayEvents.published.at(-1).routingKey, 'wiki.update.skipped');
+    assert.equal(replayEvents.published.at(-1).routingKey, 'wiki.event.skipped');
     assert.equal(replayEvents.published.at(-1).payload.reason, 'no-changes-proposed');
     assert.equal(replayEvents.published.filter((event) => event.routingKey === 'wiki.page.updated').length, 0);
   });

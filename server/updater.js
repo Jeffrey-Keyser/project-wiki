@@ -588,7 +588,13 @@ function buildCommitMessage({ subject, traceId, runId }) {
 async function emitEvent({ channel, logger, type, payload }) {
   const body = Buffer.from(JSON.stringify(payload), 'utf8');
   if (typeof channel.publish === 'function') {
-    channel.publish(WIKI_EVENTS_EXCHANGE, type, body, { persistent: true });
+    // Telemetry events must NOT re-enter the work queue, which is bound to
+    // wiki.update.# — publishing them under wiki.update.* makes the updater
+    // consume its own output in an infinite loop. Route under wiki.event.*.
+    const eventRoutingKey = type.startsWith('wiki.update.')
+      ? `wiki.event.${type.slice('wiki.update.'.length)}`
+      : type;
+    channel.publish(WIKI_EVENTS_EXCHANGE, eventRoutingKey, body, { persistent: true });
   }
   logger.log?.(`[updater] event=${type} ${JSON.stringify(payload)}`);
 }
