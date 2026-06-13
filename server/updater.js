@@ -267,8 +267,20 @@ export async function pollForAstroRebuild({
 
   if (currentCommit && currentCommit !== lastRenderedCommit) {
     logger.log?.(
-      `[updater] source checkout advanced to ${shortSha(currentCommit)}; restarting project-wiki.service after ${Math.round(intervalMs / 1000)}s poll`,
+      `[updater] source checkout advanced to ${shortSha(currentCommit)}; rebuilding + restarting project-wiki.service after ${Math.round(intervalMs / 1000)}s poll`,
     );
+    // The front-server serves a prebuilt Astro dist (node server/index.js does
+    // NOT build), so a bare restart would re-serve stale content. Build first.
+    // If the build fails, keep the previous render (stale dist keeps serving),
+    // skip the restart, and leave state unrecorded so the next poll retries.
+    try {
+      await runCommand(['npm', 'run', 'build'], { cwd: checkoutPath });
+    } catch (err) {
+      logger.log?.(
+        `[updater] astro build failed; keeping previous render: ${err instanceof Error ? err.message : err}`,
+      );
+      return { restarted: false, commit: currentCommit, buildFailed: true };
+    }
     await runCommand(['systemctl', '--user', 'restart', 'project-wiki.service'], {
       cwd: checkoutPath,
     });

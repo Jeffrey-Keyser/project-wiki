@@ -344,7 +344,10 @@ flowchart TD
     );
     assert.equal(events.published.filter((event) => event.routingKey === 'wiki.page.updated').length, 1);
     assert.equal(events.published.find((event) => event.routingKey === 'wiki.page.updated').payload.page_slug, 'home');
-    assert.deepEqual(restartCalls, [['systemctl', '--user', 'restart', 'project-wiki.service']]);
+    assert.deepEqual(restartCalls, [
+      ['npm', 'run', 'build'],
+      ['systemctl', '--user', 'restart', 'project-wiki.service'],
+    ]);
 
     const replayEvents = { published: [], acked: 0 };
     await handleUpdateMessage(message, {
@@ -392,7 +395,10 @@ test('pollForAstroRebuild restarts only when the pulled source checkout is newer
       logger: { log() {} },
     });
     assert.equal(first.restarted, true);
-    assert.deepEqual(systemCalls, [['systemctl', '--user', 'restart', 'project-wiki.service']]);
+    assert.deepEqual(systemCalls, [
+      ['npm', 'run', 'build'],
+      ['systemctl', '--user', 'restart', 'project-wiki.service'],
+    ]);
 
     currentHead = '1111111111111111111111111111111111111111';
     const second = await pollForAstroRebuild({
@@ -404,7 +410,7 @@ test('pollForAstroRebuild restarts only when the pulled source checkout is newer
       logger: { log() {} },
     });
     assert.equal(second.restarted, false);
-    assert.equal(systemCalls.length, 1);
+    assert.equal(systemCalls.length, 2);
     assert.equal(gitCalls.filter((args) => args[0] === 'pull').length, 2);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
