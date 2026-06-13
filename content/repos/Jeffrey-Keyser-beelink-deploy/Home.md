@@ -22,14 +22,14 @@ Single-host deploy controller. Runs as a systemd service on the Beelink, listens
 
 - **Jeff (operator).** Configures repos in `config/*.json`, triggers manual deploys via `POST /deploy/:owner/:repo` with `X-Deploy-Key` ([src/server.ts:273-308](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L273-L308)).
 - **GitHub.** Pushes `push` and `pull_request` webhooks at `https://deploy.jeffrey-keyser.com/webhook` ([README.md:71-78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L71-L78)).
-- **Downstream consumers on RabbitMQ.** `packages.events` topic feeds `openclaw-bridge`; `wiki.events` topic feeds the central wiki pipeline ([src/rabbit.ts:10-11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L10-L11), [src/rabbit.ts:108-156](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L108-L156)).
+- **Downstream consumers on RabbitMQ.** `packages.events` topic feeds `openclaw-bridge`; `wiki.events` topic feeds the central wiki pipeline ([src/rabbit.ts:10-11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L10-L11), [src/rabbit.ts:108-180](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L108-L180)).
 
 ## How work moves through it
 
 1. GitHub fires webhook → Express receives at `/webhook` with raw body cached for HMAC ([src/server.ts:75-129](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L75-L129)).
 2. Signature validated; event dispatched by `X-GitHub-Event` header ([src/server.ts:115-198](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L115-L198)).
 3. `push` to a service repo → run `deploy.sh` if present, else `git pull && npm ci --production && systemctl restart <service>` ([src/deploy.ts:141-160](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L141-L160)).
-4. `pull_request` merged on a package repo → publish to `packages.events` and `wiki.events` exchanges ([src/server.ts:163-191](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L163-L191)).
+4. `pull_request` merged → publish to `wiki.events` for **all** repos (wiki updater self-filters un-onboarded repos); if the repo is also a package repo, publish to `packages.events` ([src/server.ts:147-210](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L147-L210)).
 5. After deploy: store last 20 log entries in memory, write status JSON, poll `healthUrl`, notify Telegram ([src/deploy.ts:21-78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L21-L78), [src/server.ts:240-269](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L240-L269)).
 
 ## Wiki pages
