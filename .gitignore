@@ -20,3 +20,6 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# updater runtime state (poll-rebuild last-rendered-commit tracker)
+.wiki-updater-build-state.json

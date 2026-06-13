@@ -119,14 +119,41 @@ export function buildPromptPayload({ repoFullName, repoDirName, update, existing
     .join('\n');
 }
 
+// Provider CLIs (claude --print, etc.) often wrap the JSON payload in a prose
+// preamble ("Based on the change, here is...") or a ```json fence. Recover the
+// object instead of failing the whole update on chatty output.
+export function extractJsonObject(text) {
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) {
+    try {
+      return JSON.parse(fence[1].trim());
+    } catch {
+      // fall through to brace-slice
+    }
+  }
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if (first !== -1 && last > first) {
+    try {
+      return JSON.parse(text.slice(first, last + 1));
+    } catch {
+      // fall through to undefined
+    }
+  }
+  return undefined;
+}
+
 export function parseGeneratedPages(stdout) {
   let parsed;
   try {
     parsed = JSON.parse(stdout);
   } catch (err) {
-    throw new Error(
-      `generator returned invalid JSON: ${err instanceof Error ? err.message : err}`,
-    );
+    parsed = extractJsonObject(stdout);
+    if (parsed === undefined) {
+      throw new Error(
+        `generator returned invalid JSON: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new Error('generator response must be a JSON object');

@@ -97,15 +97,29 @@ test('buildPromptPayload truncates existing pages near the 50KB cap', () => {
   assert.ok(!payload.includes('Architecture.md'));
 });
 
-test('parseGeneratedPages requires strict JSON object output', () => {
-  assert.throws(
-    () => parseGeneratedPages('```json\n{"pages":[]}\n```'),
-    /generator returned invalid JSON/,
-  );
+test('parseGeneratedPages parses strict JSON object output', () => {
   assert.deepEqual(parseGeneratedPages('{"trace_id":"abc","pages":[]}'), {
     traceId: 'abc',
     pages: [],
   });
+});
+
+test('parseGeneratedPages recovers JSON wrapped in prose or code fences', () => {
+  // chatty model: prose preamble + fenced JSON
+  assert.deepEqual(
+    parseGeneratedPages('Based on the change, here is the update:\n\n```json\n{"trace_id":"x","pages":[]}\n```'),
+    { traceId: 'x', pages: [] },
+  );
+  // prose preamble + bare JSON object, no fence
+  assert.deepEqual(
+    parseGeneratedPages('Here you go: {"pages":[{"page_slug":"home","content":"hi"}]}'),
+    { traceId: '', pages: [{ pageSlug: 'home', content: 'hi' }] },
+  );
+  // genuinely no JSON object -> still throws
+  assert.throws(
+    () => parseGeneratedPages('I could not complete this request.'),
+    /generator returned invalid JSON/,
+  );
 });
 
 test('startUpdater declares the durable queue/binding and consumes with manual ack', async () => {
