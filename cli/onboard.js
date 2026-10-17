@@ -5,7 +5,7 @@ import { runScaffolder } from './scaffolder.js';
 import { parsePayload, SEED_PAGES } from './parser.js';
 import { updateAllowlist } from './allowlist.js';
 import { writeWikiStub } from './wiki-stub.js';
-import { resolveProviderConfig } from '../server/providers.js';
+import { resolveGeneratorConfig } from '../server/model-control.js';
 
 export async function runOnboard({
   owner,
@@ -84,7 +84,7 @@ async function runScaffoldPhase({
   log,
   warn,
 }) {
-  const scaffolderConfig = resolveProviderConfig('generator', env);
+  const scaffolderConfig = await resolveGeneratorConfig(env);
   log(
     `[scaffold] provider=${scaffolderConfig.provider}` +
       (scaffolderConfig.model ? ` model=${scaffolderConfig.model}` : ''),

@@ -5,7 +5,8 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { invoke, resolveProviderConfig } from './providers.js';
+import { invoke } from './providers.js';
+import { invokeGenerator } from './model-control.js';
 
 export const WIKI_EVENTS_EXCHANGE = 'wiki.events';
 export const WIKI_UPDATER_QUEUE = 'wiki.updater.queue';
@@ -303,6 +304,7 @@ export async function processWikiUpdate(message, context) {
     logger = console,
     env = process.env,
     invokeProvider = invoke,
+    modelConfigFetch = fetch,
     git = runGit,
     runCommand = runCommandDefault,
   } = context;
@@ -371,12 +373,9 @@ export async function processWikiUpdate(message, context) {
     update,
     existingPages: repoContent.pages,
   });
-  const providerConfig = resolveProviderConfig('generator', env);
   const systemPrompt =
     env.PROJECT_WIKI_UPDATER_SYSTEM_PROMPT?.trim() || DEFAULT_UPDATER_SYSTEM_PROMPT;
-  const providerResult = await invokeProvider({
-    provider: providerConfig.provider,
-    model: providerConfig.model,
+  const providerResult = await invokeGenerator({
     prompt,
     systemPrompt,
     promptMode: 'stdin',
@@ -384,7 +383,7 @@ export async function processWikiUpdate(message, context) {
     env,
     logger,
     purpose: 'wiki-update',
-  });
+  }, { invokeProvider, fetcher: modelConfigFetch });
   const parsed = parseGeneratedPages(providerResult.stdout);
 
   if (!parsed.pages.length) {

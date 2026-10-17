@@ -1,5 +1,5 @@
 import { SEED_PAGES } from './parser.js';
-import { invoke, resolveProviderConfig } from '../server/providers.js';
+import { invokeGenerator } from '../server/model-control.js';
 
 // Shells out to a local provider CLI so the agent inspects the target repo's
 // source from `cwd` and emits a parseable stdout payload that parser.js splits
@@ -7,10 +7,7 @@ import { invoke, resolveProviderConfig } from '../server/providers.js';
 
 export async function runScaffolder({ owner, repo, slug, fullName, cwd, env, log, warn }) {
   const prompt = buildPrompt({ owner, repo, slug, fullName });
-  const { provider, model } = resolveProviderConfig('generator', env);
-  const result = await invoke({
-    provider,
-    model,
+  const result = await invokeGenerator({
     prompt,
     promptMode: 'stdin',
     cwd,

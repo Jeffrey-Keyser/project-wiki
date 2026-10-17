@@ -20,6 +20,7 @@ import { spawn } from 'node:child_process';
  * @property {Provider} provider
  * @property {string} prompt
  * @property {string} [model]
+ * @property {string} [thinkingLevel]
  * @property {string} [systemPrompt]
  * @property {PromptMode} [promptMode]
  * @property {string} [cwd]
@@ -97,6 +98,7 @@ export async function invoke(opts) {
     provider,
     prompt,
     model = '',
+    thinkingLevel = '',
     systemPrompt = '',
     promptMode = 'inline',
     cwd = process.cwd(),
@@ -120,6 +122,7 @@ export async function invoke(opts) {
     invocation = buildInvocation({
       provider: normalizedProvider,
       model,
+      thinkingLevel,
       prompt,
       systemPrompt,
       promptMode,
@@ -182,11 +185,11 @@ function createSystemPromptFile(systemPrompt) {
   return filePath;
 }
 
-function buildInvocation({ provider, model, prompt, systemPrompt, promptMode, systemPromptPath }) {
+function buildInvocation({ provider, model, thinkingLevel, prompt, systemPrompt, promptMode, systemPromptPath }) {
   const renderedPrompt = systemPromptPath
     ? prompt
     : withInlineSystemPrompt(prompt, systemPrompt);
-  const args = providerBaseArgs(provider, model);
+  const args = providerBaseArgs(provider, model, thinkingLevel);
   if (systemPromptPath) {
     args.push('--system-prompt-file', systemPromptPath);
   }
@@ -243,7 +246,7 @@ function withInlineSystemPrompt(prompt, systemPrompt) {
   return `System instructions:\n${systemPrompt}\n\nUser request:\n${prompt}`;
 }
 
-function providerBaseArgs(provider, model) {
+function providerBaseArgs(provider, model, thinkingLevel) {
   if (provider === 'claude') {
     const args = [
       '--print',
@@ -252,6 +255,7 @@ function providerBaseArgs(provider, model) {
       'bypassPermissions',
     ];
     if (model) args.push('--model', model);
+    if (thinkingLevel) args.push('--effort', thinkingLevel);
     return args;
   }
   if (provider === 'codex') {
@@ -261,6 +265,7 @@ function providerBaseArgs(provider, model) {
       '--skip-git-repo-check',
     ];
     if (model) args.push('-m', model);
+    if (thinkingLevel) args.push('-c', `model_reasoning_effort=${JSON.stringify(thinkingLevel)}`);
     return args;
   }
   const args = ['--print'];

@@ -39,6 +39,8 @@ Commands:
       Print this message.
 
 Environment:
+  PROJECT_WIKI_MODEL_SOURCE         Set env to bypass Agency generator settings.
+  PROJECT_WIKI_AGENCY_URL           Agency base URL (default: local port 3040).
   PROJECT_WIKI_AGENT_PROVIDER       Default CLI provider for agent surfaces.
   PROJECT_WIKI_GENERATOR_PROVIDER   Generator/scaffolder provider override.
   PROJECT_WIKI_GENERATOR_MODEL      Generator/scaffolder model override.

@@ -74,3 +74,43 @@ The end-to-end design for this wiki — including the per-repo ingestion pipelin
 allowlist semantics, and hosting decisions — lives in
 `~/dev-inbox/plans/project-wiki-plan.md`. Read that plan before adding new
 features to this repo so changes stay aligned with the broader roadmap.
+
+
+## Generator model control
+
+Agency HQ **Models → Project Wiki / Page generation** controls the
+`project-wiki-generator` role for automatic updates, onboarding and reindexing.
+The next invocation reads the saved provider, model and reasoning level; active
+calls retain their selection. Claude, Codex and Kimi use the existing CLI
+adapters and output validators. No automatic cross-provider retry is added.
+
+A missing row, HTTP 5xx or an unreachable registry retains the existing
+`PROJECT_WIKI_GENERATOR_*`, agent-provider and scaffolder-alias defaults.
+Malformed rows, unsupported adapters, invalid selectors and other HTTP errors
+fail closed. Central selections replace the whole tuple, so an old environment
+model cannot leak into a different provider. An empty central model uses that
+CLI's own default. Saving in Agency validates against its existing model catalog.
+
+Set `PROJECT_WIKI_MODEL_SOURCE=env` to bypass central settings for a process or
+CLI command; restart the updater after changing its environment. Set
+`PROJECT_WIKI_AGENCY_URL` to override the default `http://127.0.0.1:3040`.
+The explicit `test-provider <provider>` smoke command remains request-selected.
+Reviewer and bulk roles are declared defaults without invocation paths; agent
+is only consulted by the explicit smoke command. They are not independent
+production controls. Reindexing currently uses the generator, not the bulk role.
+
+Selector-only receipts are written atomically to
+`~/.local/state/project-wiki/model-status/project-wiki-generator.json`; use the
+same `PROJECT_WIKI_MODEL_STATUS_DIR` in Wiki and Agency if relocating them.
+They record CLI running/finished/failed observations, not proof of a provider's
+underlying model identity or publication success. Output validation and Git
+publication occur after the CLI finishes. Concurrent calls report the most
+recent receipt; a restart can leave a historical running observation. No prompts,
+credentials or raw errors are stored. No invocation means unknown status.
+
+Deploy the source and restart `project-wiki-updater.service` only when its queue
+has zero unacknowledged messages and its cgroup has no active provider/build
+children. The CLI reads updated source on its next invocation. This change does
+not require a static-site rebuild or front-server restart. Roll back to the
+previous source revision and restart the idle updater, or use the environment
+bypass above. No existing model preferences are seeded or rewritten.

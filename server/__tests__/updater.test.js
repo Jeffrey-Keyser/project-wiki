@@ -487,6 +487,8 @@ async function withStickyRepo(fn) {
     ),
   };
   const env = {
+    PROJECT_WIKI_MODEL_SOURCE: 'env',
+    PROJECT_WIKI_MODEL_STATUS_DIR: path.join(dir, 'model-status'),
     PROJECT_WIKI_SOURCE_CHECKOUT: checkoutPath,
     PROJECT_WIKI_SOURCE_REMOTE: '',
     PROJECT_WIKI_REBUILD_POLL_INTERVAL_MS: '1',
@@ -501,3 +503,27 @@ async function withStickyRepo(fn) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
+
+
+test('updater forwards central generation selectors and still validates generated pages', async () => {
+  await withStickyRepo(async ({ checkoutPath, env, message, events, logger }) => {
+    let captured;
+    await handleUpdateMessage(message, {
+      channel: createChannelRecorder(events), logger,
+      env: { ...env, PROJECT_WIKI_MODEL_SOURCE: 'central' },
+      modelConfigFetch: async () => ({ ok: true, status: 200, json: async () => ({ success: true,
+        data: { role: 'project-wiki-generator', provider: 'codex', model: 'gpt-6.1-sol',
+          thinking_level: 'high', auto_fallback: false, updated_at: '2026-10-17T00:00:00Z' } }) }),
+      invokeProvider: async (opts) => { captured = opts; return { stdout: 'invalid JSON' }; },
+      git: createGitStub(checkoutPath), runCommand: async () => {},
+    });
+    assert.equal(captured.provider, 'codex');
+    assert.equal(captured.model, 'gpt-6.1-sol');
+    assert.equal(captured.thinkingLevel, 'high');
+    assert.equal(captured.cwd, checkoutPath);
+    assert.equal(captured.promptMode, 'stdin');
+    assert.equal(events.published.at(-1).routingKey, 'wiki.event.failed');
+    assert.match(events.published.at(-1).payload.reason, /invalid JSON/);
+    assert.equal(fs.readFileSync(path.join(checkoutPath, 'content/repos/dev-inbox/Home.md'), 'utf8'), FIXTURE_PAGE);
+  });
+});
