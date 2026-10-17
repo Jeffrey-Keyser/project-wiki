@@ -114,3 +114,11 @@ children. The CLI reads updated source on its next invocation. This change does
 not require a static-site rebuild or front-server restart. Roll back to the
 previous source revision and restart the idle updater, or use the environment
 bypass above. No existing model preferences are seeded or rewritten.
+
+
+Verification for the 2026-10-17 integration: all 22 server and 17 CLI tests
+passed, including HTTP registry fixtures, provider argument capture, failure
+handling, and updater output validation. Provider tests use local fake binaries;
+no paid inference is needed. Release `87c7392` was loaded by an idle updater
+restart; a read-only resolver check using its environment retained the existing
+Claude/default selection. No dispatch preferences were written.
