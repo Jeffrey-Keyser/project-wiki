@@ -28,9 +28,10 @@ Single-host deploy controller. Runs as a systemd service on the Beelink, listens
 
 1. GitHub fires webhook → Express receives at `/webhook` with raw body cached for HMAC ([src/server.ts:75-129](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L75-L129)).
 2. Signature validated; event dispatched by `X-GitHub-Event` header ([src/server.ts:115-198](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L115-L198)).
-3. `push` to a service repo → run `deploy.sh` if present, else `git pull && npm ci --production && systemctl restart <service>` ([src/deploy.ts:141-160](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L141-L160)).
-4. `pull_request` merged → publish to `wiki.events` for **all** repos (wiki updater self-filters un-onboarded repos); if the repo is also a package repo, publish to `packages.events` ([src/server.ts:147-210](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L147-L210)).
-5. After deploy: store last 20 log entries in memory, write status JSON, poll `healthUrl`, notify Telegram ([src/deploy.ts:21-78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L21-L78), [src/server.ts:240-269](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L240-L269)).
+3. `push` → if it targets the repo's default branch, publish `wiki.update` (carrying the changed files) before any deploy gate; skipped for package repos and the wiki content repo, opt-out with `[skip wiki]` ([src/wiki-push.ts:18-53](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/wiki-push.ts#L18-L53), [src/server.ts:247-255](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L247-L255)).
+4. `push` to a service repo → run `deploy.sh` if present, else `git pull && npm ci --production && systemctl restart <service>` ([src/deploy.ts:141-160](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L141-L160)).
+5. `pull_request` merged → publish to `wiki.events` for **all** repos (wiki updater self-filters un-onboarded repos); if the repo is also a package repo, publish to `packages.events` ([src/server.ts:147-210](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L147-L210)).
+6. After deploy: store last 20 log entries in memory, write status JSON, poll `healthUrl`, notify Telegram ([src/deploy.ts:21-78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L21-L78), [src/server.ts:240-269](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L240-L269)).
 
 ## Wiki pages
 
