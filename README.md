@@ -68,6 +68,18 @@ updater consumer (`server/updater.js`, invoked via `npm run start:updater`).
   RabbitMQ credentials are supplied via `~/.config/project-wiki-updater.env`
   as `RABBITMQ_URL=amqp://...`.
 
+### Source diff in the prompt
+
+The generator sees the pushed change's diff, not just its commit message and file
+list. The updater fetches the commit over SSH into a bare partial clone per repo
+(`PROJECT_WIKI_SOURCE_DIFF_CACHE`, default `~/.cache/project-wiki/source-diffs/`;
+commits and trees only, diffed blobs load lazily) and diffs the push's `before`
+when the event carries it, else the head commit's first parent. Lockfiles and build
+output are excluded; source files get the budget before tests, each file is capped
+at 8 KB and the whole diff at 40 KB, and files that do not fit are listed by name.
+If the fetch fails the update runs without a diff. `PROJECT_WIKI_SOURCE_DIFF=off`
+turns it off.
+
 ## Plan and roadmap
 
 The end-to-end design for this wiki — including the per-repo ingestion pipeline,
@@ -125,6 +137,8 @@ Codex and Kimi selections ignore the setting. Aliases map to API models:
 from `PROJECT_WIKI_AI_PROXY_KEY_FILE` (default
 `~/.config/project-wiki/ai-proxy.key`). That application allows only Haiku and
 Sonnet 5.5. `PROJECT_WIKI_AI_PROXY_URL` defaults to `http://127.0.0.1:3005`.
+Replies may use up to `PROJECT_WIKI_AI_PROXY_MAX_TOKENS` (default 64000): full page
+rewrites for several pages plus thinking overran the old 16000 cap.
 
 Every generator call and every processed update appends one line to
 `runs.jsonl` beside the receipt (`project-wiki-run/v1`).

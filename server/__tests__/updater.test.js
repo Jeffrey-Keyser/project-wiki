@@ -504,6 +504,7 @@ async function withStickyRepo(fn) {
     PROJECT_WIKI_SOURCE_REMOTE: '',
     PROJECT_WIKI_REBUILD_POLL_INTERVAL_MS: '1',
     PROJECT_WIKI_UPDATER_SYSTEM_PROMPT: 'Test system prompt',
+    PROJECT_WIKI_SOURCE_DIFF: 'off',
   };
   const events = { published: [], acked: 0 };
   const logger = { log() {}, error() {} };
@@ -536,5 +537,29 @@ test('updater forwards central generation selectors and still validates generate
     assert.equal(events.published.at(-1).routingKey, 'wiki.event.failed');
     assert.match(events.published.at(-1).payload.reason, /invalid JSON/);
     assert.equal(fs.readFileSync(path.join(checkoutPath, 'content/repos/dev-inbox/Home.md'), 'utf8'), FIXTURE_PAGE);
+  });
+});
+
+test('updater puts the source diff in the generator prompt and carries on without it', async () => {
+  await withStickyRepo(async ({ checkoutPath, env, message, events, logger }) => {
+    const prompts = [];
+    const context = {
+      channel: createChannelRecorder(events), logger, env,
+      invokeProvider: async (opts) => { prompts.push(opts.prompt); return { stdout: '{"pages":[]}' }; },
+      git: createGitStub(checkoutPath), runCommand: async () => {},
+    };
+    await handleUpdateMessage(message, { ...context, sourceDiff: async () => ({
+      base: 'b'.repeat(40), head: 'a'.repeat(40), label: 'bbbbbbbbbbbb..aaaaaaaaaaaa',
+      stat: ' server/updater.js | 2 +-', patch: 'diff --git a/server/updater.js b/server/updater.js\n+new line\n',
+      omitted: ['server/huge.js'], truncated: true,
+    }) });
+    assert.match(prompts[0], /Diff bbbbbbbbbbbb\.\.aaaaaaaaaaaa \(truncated/);
+    assert.match(prompts[0], /```diff\ndiff --git a\/server\/updater\.js[\s\S]*\+new line\n```/);
+    assert.match(prompts[0], /omitted from the diff for size:\n- server\/huge\.js/);
+
+    await handleUpdateMessage(message, { ...context, sourceDiff: async () => { throw new Error('ssh down'); } });
+    assert.equal(prompts.length, 2);
+    assert.doesNotMatch(prompts[1], /```diff/);
+    assert.equal(events.published.at(-1).routingKey, 'wiki.event.skipped');
   });
 });

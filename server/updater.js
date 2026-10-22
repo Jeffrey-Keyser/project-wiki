@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { invoke } from './providers.js';
 import { appendRunLog, errorKind, invokeGenerator } from './model-control.js';
+import { fetchSourceDiff } from './source-diff.js';
 
 export const WIKI_EVENTS_EXCHANGE = 'wiki.events';
 export const WIKI_UPDATER_QUEUE = 'wiki.updater.queue';
@@ -29,7 +30,8 @@ const DEFAULT_UPDATER_SYSTEM_PROMPT = [
   '- Do not rename pages or invent new page slugs.',
   '- Keep existing frontmatter unless the source change requires an update.',
   '- Preserve code fences, Mermaid fences, and section continuity when they still apply.',
-  '- Prefer minimal, source-cited edits grounded in the merged PR metadata.',
+  '- Prefer minimal, source-cited edits grounded in the commit message and diff.',
+  '- Update a page when the diff changes something it describes: behaviour, interfaces, data flow, operations or terminology. Ignore cosmetic, test-only and formatting changes.',
   '- If no page should change, return {"pages":[]}.',
 ].join('\n');
 
@@ -98,7 +100,7 @@ export function parseUpdateMessage(content) {
   };
 }
 
-export function buildPromptPayload({ repoFullName, repoDirName, update, existingPages }) {
+export function buildPromptPayload({ repoFullName, repoDirName, update, existingPages, sourceDiff = null }) {
   const existingPagesText = renderExistingPages(existingPages);
   return [
     `Repository: ${repoFullName}`,
@@ -112,6 +114,7 @@ export function buildPromptPayload({ repoFullName, repoDirName, update, existing
           .map((file) => `- ${file.path}${file.summary ? ` — ${file.summary}` : ''}`)
           .join('\n')}`
       : 'Changed files:\n- (not provided)',
+    sourceDiff ? renderSourceDiff(sourceDiff) : null,
     '',
     `Existing wiki pages (truncated to ${EXISTING_PAGES_CHAR_LIMIT} bytes total):`,
     existingPagesText || '(none)',
@@ -305,6 +308,7 @@ export async function processWikiUpdate(message, context) {
     env = process.env,
     invokeProvider = invoke,
     modelConfigFetch = fetch,
+    sourceDiff: loadSourceDiff = fetchSourceDiff,
     git = runGit,
     runCommand = runCommandDefault,
   } = context;
@@ -367,11 +371,25 @@ export async function processWikiUpdate(message, context) {
     return { status: 'skipped', reason: 'no-existing-pages', repo: repoFullName };
   }
 
+  // The diff is what lets the generator tell a real change from a cosmetic
+  // one; without it the update still runs on the message and file list.
+  let sourceDiff = null;
+  try {
+    sourceDiff = await loadSourceDiff({ repoFullName, update, env });
+    if (sourceDiff) {
+      logger.log(`[updater] source diff ${sourceDiff.label} ` +
+        `${sourceDiff.patch.length} chars${sourceDiff.truncated ? ' (truncated)' : ''}`);
+    }
+  } catch (err) {
+    logger.error(`[updater] source diff unavailable for ${repoFullName}@${update.sha}: ${err instanceof Error ? err.message : err}`);
+  }
+
   const prompt = buildPromptPayload({
     repoFullName,
     repoDirName: repoContent.repoDirName,
     update,
     existingPages: repoContent.pages,
+    sourceDiff,
   });
   const systemPrompt =
     env.PROJECT_WIKI_UPDATER_SYSTEM_PROMPT?.trim() || DEFAULT_UPDATER_SYSTEM_PROMPT;
@@ -704,6 +722,15 @@ function normalizePageSlug(value) {
     .replace(/[^A-Za-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .toLowerCase();
+}
+
+function renderSourceDiff({ label, stat, patch, omitted = [], truncated }) {
+  return [
+    `Diff ${label}${truncated ? ' (truncated; lockfiles and build output excluded)' : ' (lockfiles and build output excluded)'}:`,
+    stat || '(no changes outside excluded paths)',
+    patch ? `\`\`\`diff\n${patch.trimEnd()}\n\`\`\`` : null,
+    omitted.length ? `Files changed but omitted from the diff for size:\n${omitted.map((file) => `- ${file}`).join('\n')}` : null,
+  ].filter(Boolean).join('\n');
 }
 
 function renderExistingPages(pages) {
