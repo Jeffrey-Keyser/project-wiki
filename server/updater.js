@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { invoke } from './providers.js';
-import { invokeGenerator } from './model-control.js';
+import { appendRunLog, errorKind, invokeGenerator } from './model-control.js';
 
 export const WIKI_EVENTS_EXCHANGE = 'wiki.events';
 export const WIKI_UPDATER_QUEUE = 'wiki.updater.queue';
@@ -383,6 +383,7 @@ export async function processWikiUpdate(message, context) {
     env,
     logger,
     purpose: 'wiki-update',
+    meta: { repo: repoFullName, sha: update.sha },
   }, { invokeProvider, fetcher: modelConfigFetch });
   const parsed = parseGeneratedPages(providerResult.stdout);
 
@@ -516,12 +517,17 @@ export async function handleUpdateMessage(message, context) {
   if (!message) return;
   const { channel, logger = console } = context;
   const routingKey = message.fields?.routingKey || '';
+  const outcome = (record) => appendRunLog({ kind: 'outcome', routingKey, ...record }, context.env || process.env, logger);
   try {
-    return await processWikiUpdate(message, context);
+    const result = await processWikiUpdate(message, context);
+    await outcome({ repo: result?.repo || null, status: result?.status || 'unknown', reason: result?.reason || null,
+      changedPages: Array.isArray(result?.changedPages) ? result.changedPages.length : 0 });
+    return result;
   } catch (err) {
     logger.error(
       `[updater] failed ${routingKey}: ${err instanceof Error ? err.message : err}`,
     );
+    await outcome({ status: 'failed', errorKind: errorKind(err) });
     try {
       const update = safeParseMessage(message.content);
       await emitEvent({

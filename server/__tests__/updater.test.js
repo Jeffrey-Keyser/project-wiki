@@ -219,6 +219,13 @@ test('handleUpdateMessage skips repos not on the allowlist without mutating cont
       fs.readFileSync(path.join(checkoutPath, 'content', 'repos', 'dev-inbox', 'Home.md'), 'utf8'),
       FIXTURE_PAGE,
     );
+    // Every processed update leaves one outcome line, including skips.
+    const runs = fs.readFileSync(path.join(env.PROJECT_WIKI_MODEL_STATUS_DIR, 'runs.jsonl'), 'utf8')
+      .trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].kind, 'outcome');
+    assert.equal(runs[0].status, 'skipped');
+    assert.equal(runs[0].reason, 'repo-not-allowlisted');
   });
 });
 

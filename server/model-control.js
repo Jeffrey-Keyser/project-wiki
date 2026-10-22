@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { invoke, resolveProviderConfig, SUPPORTED_PROVIDERS } from './providers.js';
+import { invoke, invokeAiProxy, resolveProviderConfig, SUPPORTED_PROVIDERS } from './providers.js';
 
 export const GENERATOR_ROLE = 'project-wiki-generator';
 
@@ -41,15 +41,20 @@ export async function resolveGeneratorConfig(env = process.env, fetcher = fetch)
     thinkingLevel: row.thinking_level || '', source: 'central', revision: new Date(row.updated_at).toISOString() };
 }
 
+function statusDir(env) {
+  return env.PROJECT_WIKI_MODEL_STATUS_DIR || path.join(os.homedir(), '.local/state/project-wiki/model-status');
+}
+
 /** Selector-only evidence shared by the updater and CLI. Never stores prompts or errors. */
-async function receipt(selection, state, id, env, logger) {
-  const dir = env.PROJECT_WIKI_MODEL_STATUS_DIR || path.join(os.homedir(), '.local/state/project-wiki/model-status');
+async function receipt(selection, state, id, env, logger, transport = 'cli') {
+  const dir = statusDir(env);
   const temporary = path.join(dir, `.${id}.json`);
   try {
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
     await fs.writeFile(temporary, JSON.stringify({ schema: 'model-consumption/v1', role: GENERATOR_ROLE,
       selection, invocation: { id, state, provider: selection.provider, model: selection.model,
-        thinkingLevel: selection.thinkingLevel, at: new Date().toISOString(), exitCode: state === 'finished' ? 0 : null } }), { mode: 0o600 });
+        thinkingLevel: selection.thinkingLevel, transport, at: new Date().toISOString(),
+        exitCode: state === 'finished' ? 0 : null } }), { mode: 0o600 });
     await fs.rename(temporary, path.join(dir, `${GENERATOR_ROLE}.json`));
   } catch {
     logger.warn?.('[models] Could not write Project Wiki selector status');
@@ -57,19 +62,84 @@ async function receipt(selection, state, id, env, logger) {
   }
 }
 
-export async function invokeGenerator(opts, { fetcher = fetch, invokeProvider = invoke } = {}) {
+const RUN_LOG_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Coarse failure class for the run log; error text can quote prompt content, so it is never stored. */
+export function errorKind(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const http = message.match(/HTTP (\d{3})(?: ([A-Z_]+))?/);
+  if (http) return http[2] ? `http-${http[1]}-${http[2]}` : `http-${http[1]}`;
+  const exit = message.match(/exited with code (\d+)/);
+  if (exit) return `exit-${exit[1]}`;
+  if (/timeout|timed out|aborted/i.test(message)) return 'timeout';
+  if (/no usable text/.test(message)) return 'no-usable-text';
+  return 'error';
+}
+
+/**
+ * Append one JSON line per generator invocation and per processed update to
+ * runs.jsonl beside the selector receipt, so runs can be counted and traced
+ * after the fact (the receipt keeps only the latest call). Rotates once past
+ * 5 MiB. Best-effort: a logging failure never fails the update.
+ */
+export async function appendRunLog(record, env = process.env, logger = console) {
+  const dir = statusDir(env);
+  const file = path.join(dir, 'runs.jsonl');
+  try {
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    const size = await fs.stat(file).then((s) => s.size, () => 0);
+    if (size > RUN_LOG_MAX_BYTES) await fs.rename(file, `${file}.1`);
+    await fs.appendFile(file, `${JSON.stringify({ schema: 'project-wiki-run/v1', at: new Date().toISOString(), ...record })}\n`,
+      { mode: 0o600 });
+  } catch {
+    logger.warn?.('[models] Could not append Project Wiki run log');
+  }
+}
+
+/**
+ * PROJECT_WIKI_AI_PROXY selects how a claude selection is transported:
+ * off (default) = claude CLI only; primary = AI Proxy first, claude CLI if the
+ * proxy refuses or fails; fallback = CLI first, proxy if the CLI fails.
+ */
+export function aiProxyMode(env = process.env) {
+  const mode = String(env.PROJECT_WIKI_AI_PROXY || 'off').trim().toLowerCase();
+  return ['primary', 'fallback'].includes(mode) ? mode : 'off';
+}
+
+export async function invokeGenerator(opts, { fetcher = fetch, invokeProvider = invoke, invokeProxy = invokeAiProxy } = {}) {
   const env = opts.env || process.env;
   const selection = await resolveGeneratorConfig(env, fetcher);
   const id = randomUUID();
   const logger = opts.logger || console;
-  await receipt(selection, 'running', id, env, logger);
-  try {
-    const result = await invokeProvider({ ...opts, provider: selection.provider, model: selection.model,
-      thinkingLevel: selection.thinkingLevel });
-    await receipt(selection, 'finished', id, env, logger);
-    return result;
-  } catch (error) {
-    await receipt(selection, 'failed', id, env, logger);
-    throw error;
+  const meta = { id, purpose: opts.purpose || 'invoke', repo: opts.meta?.repo || null, sha: opts.meta?.sha || null,
+    provider: selection.provider, model: selection.model, thinkingLevel: selection.thinkingLevel, source: selection.source };
+  const mode = selection.provider === 'claude' ? aiProxyMode(env) : 'off';
+  const viaCli = () => invokeProvider({ ...opts, provider: selection.provider, model: selection.model,
+    thinkingLevel: selection.thinkingLevel });
+  const viaProxy = () => invokeProxy({ ...opts, env, model: selection.model, thinkingLevel: selection.thinkingLevel });
+  const order = mode === 'primary' ? [['ai-proxy', viaProxy], ['cli', viaCli]]
+    : mode === 'fallback' ? [['cli', viaCli], ['ai-proxy', viaProxy]] : [['cli', viaCli]];
+
+  await receipt(selection, 'running', id, env, logger, order[0][0]);
+  let fallbackFrom = null;
+  for (const [index, [transport, run]] of order.entries()) {
+    const startedAt = Date.now();
+    try {
+      const result = await run();
+      await receipt(selection, 'finished', id, env, logger, transport);
+      await appendRunLog({ kind: 'invocation', ...meta, transport, state: 'finished', fallbackFrom,
+        durationMs: Date.now() - startedAt, usage: result.usage || null }, env, logger);
+      return result;
+    } catch (error) {
+      const kind = errorKind(error);
+      await appendRunLog({ kind: 'invocation', ...meta, transport, state: 'failed', fallbackFrom, errorKind: kind,
+        durationMs: Date.now() - startedAt }, env, logger);
+      if (index === order.length - 1) {
+        await receipt(selection, 'failed', id, env, logger, transport);
+        throw error;
+      }
+      logger.warn?.(`[models] ${transport} failed (${kind}); falling back to ${order[index + 1][0]}`);
+      fallbackFrom = transport;
+    }
   }
 }

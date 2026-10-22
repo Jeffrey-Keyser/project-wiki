@@ -323,3 +323,66 @@ function spawnAndCapture({ command, args, stdinInput, closeStdin, cwd, env, prov
 function stderrTail(stderr) {
   return stderr.trim().split(/\r?\n/).filter(Boolean).slice(-10).join('\n') || '(empty)';
 }
+
+const AI_PROXY_ALIASES = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' };
+
+/**
+ * Run a Claude selection through AI Proxy `/v1/chat` instead of the claude CLI,
+ * so it is paid from the plan's monthly API credit (the proxy prices and caps
+ * it). Text in, text out: the generator only needs the JSON page reply, and
+ * the updater writes and commits pages itself.
+ */
+export async function invokeAiProxy({
+  prompt,
+  systemPrompt = '',
+  model = '',
+  thinkingLevel = '',
+  env = process.env,
+  logger = console,
+  purpose = 'invoke',
+  fetcher = fetch,
+  timeoutMs = 330_000,
+}) {
+  const url = (env.PROJECT_WIKI_AI_PROXY_URL || 'http://127.0.0.1:3005').replace(/\/$/, '');
+  const keyFile = env.PROJECT_WIKI_AI_PROXY_KEY_FILE ||
+    path.join(os.homedir(), '.config/project-wiki/ai-proxy.key');
+  const key = fs.readFileSync(keyFile, 'utf8').trim();
+  const apiModel = AI_PROXY_ALIASES[model] || model || 'claude-haiku-5-5';
+  logger.log?.(`[providers] purpose=${purpose} provider=claude transport=ai-proxy model=${apiModel}`);
+  const startedAt = process.hrtime.bigint();
+  const response = await fetcher(`${url}/v1/chat`, {
+    method: 'POST',
+    // The generator's model comes from its Agency row; keep proxy-side preferences out of it.
+    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', 'x-model-source': 'request' },
+    body: JSON.stringify({
+      model: apiModel,
+      max_tokens: 16000,
+      messages: [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        { role: 'user', content: prompt },
+      ],
+      ...(thinkingLevel ? { reasoning_effort: thinkingLevel } : {}),
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(`ai-proxy returned HTTP ${response.status}${data?.error?.code ? ` ${data.error.code}` : ''}`);
+  }
+  const choice = data.choices?.[0];
+  const text = choice?.message?.content;
+  if (choice?.finish_reason !== 'stop' || typeof text !== 'string' || !text.trim()) {
+    throw new Error(`ai-proxy returned no usable text (finish_reason ${choice?.finish_reason})`);
+  }
+  return {
+    provider: 'claude',
+    transport: 'ai-proxy',
+    command: 'POST /v1/chat',
+    args: [],
+    stdout: text,
+    exitCode: 0,
+    durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6,
+    model: data.model || apiModel,
+    usage: data.usage || {},
+  };
+}

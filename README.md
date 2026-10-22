@@ -108,6 +108,36 @@ publication occur after the CLI finishes. Concurrent calls report the most
 recent receipt; a restart can leave a historical running observation. No prompts,
 credentials or raw errors are stored. No invocation means unknown status.
 
+### Claude API lane and run log
+
+`PROJECT_WIKI_AI_PROXY` picks how a **claude** selection reaches the model. The
+Agency row still picks the model and effort.
+
+| Value | Behaviour |
+|---|---|
+| `off` (default) | claude CLI only, as above. |
+| `primary` | AI Proxy `/v1/chat` first, paid from the Max plan's monthly API credit (the proxy prices and caps it). If the proxy refuses (budget exhausted, HTTP error, truncated or empty reply), the claude CLI runs instead. |
+| `fallback` | CLI first; the proxy answers only if the CLI fails. |
+
+Codex and Kimi selections ignore the setting. Aliases map to API models:
+`haiku` → `claude-haiku-5-5`, `sonnet` → `claude-sonnet-5-5`,
+`opus` → `claude-opus-5-5`. The key is the proxy's `project-wiki` application, read
+from `PROJECT_WIKI_AI_PROXY_KEY_FILE` (default
+`~/.config/project-wiki/ai-proxy.key`). That application allows only Haiku and
+Sonnet 5.5. `PROJECT_WIKI_AI_PROXY_URL` defaults to `http://127.0.0.1:3005`.
+
+Every generator call and every processed update appends one line to
+`runs.jsonl` beside the receipt (`project-wiki-run/v1`).
+- `kind: "invocation"` lines record repo, sha, model, transport, state, duration,
+  token usage and any fallback.
+- `kind: "outcome"` lines record each message's result (`updated`, `skipped` with
+  its reason, or `failed`) and the number of pages changed.
+
+Failures are stored as a coarse `errorKind` (such as `http-429-ANTHROPIC_BUDGET_EXHAUSTED`
+or `exit-1`), never as prompt or error text. The file rotates to `runs.jsonl.1`
+past 5 MiB. Quick look:
+`tail -n 20 ~/.local/state/project-wiki/model-status/runs.jsonl | jq -c .`
+
 Deploy the source and restart `project-wiki-updater.service` only when its queue
 has zero unacknowledged messages and its cgroup has no active provider/build
 children. The CLI reads updated source on its next invocation. This change does
