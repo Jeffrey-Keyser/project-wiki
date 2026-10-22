@@ -356,7 +356,9 @@ export async function invokeAiProxy({
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', 'x-model-source': 'request' },
     body: JSON.stringify({
       model: apiModel,
-      max_tokens: 16000,
+      // Full page rewrites for several pages plus thinking overran 16000 and
+      // came back as finish_reason length; Haiku and Sonnet 5.5 allow 128K.
+      max_tokens: Number(env.PROJECT_WIKI_AI_PROXY_MAX_TOKENS) || 64_000,
       messages: [
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
         { role: 'user', content: prompt },
