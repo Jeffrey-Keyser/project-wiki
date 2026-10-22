@@ -355,6 +355,21 @@ export async function processWikiUpdate(message, context) {
     return { status: 'skipped', reason: 'repo-not-allowlisted', repo: repoFullName };
   }
 
+  if (onlyIgnoredPathsChanged(update.files, loadIgnoredPaths(checkoutPath, repoFullName))) {
+    await emitEvent({
+      channel,
+      logger,
+      type: 'wiki.update.skipped',
+      payload: {
+        repo: repoFullName,
+        reason: 'ignored-paths-only',
+        sha: update.sha,
+        run_id: update.runId,
+      },
+    });
+    return { status: 'skipped', reason: 'ignored-paths-only', repo: repoFullName };
+  }
+
   const repoContent = loadRepoContent(checkoutPath, repoFullName);
   if (!repoContent.pages.length) {
     await emitEvent({
@@ -666,12 +681,18 @@ async function emitEvent({ channel, logger, type, payload }) {
 }
 
 function resolveRepoFullName(repoKey, messageRepoFullName, checkoutPath) {
-  if (messageRepoFullName) return messageRepoFullName;
   const allowlist = loadAllowlist(checkoutPath);
-  const normalizedKey = String(repoKey || '').trim();
+  // GitHub names are case-insensitive and webhooks send the repo's display
+  // casing (Jeffrey-Keyser/AI-Proxy); use the allowlist's spelling so the
+  // allowlist check and the content directory lookup both match.
+  if (messageRepoFullName) {
+    const wanted = messageRepoFullName.toLowerCase();
+    return allowlist.find((entry) => entry.toLowerCase() === wanted) || messageRepoFullName;
+  }
+  const normalizedKey = String(repoKey || '').trim().toLowerCase();
   if (!normalizedKey) return '';
   const exact = allowlist.find(
-    (entry) => entry.replace(/\//g, '-') === normalizedKey,
+    (entry) => entry.replace(/\//g, '-').toLowerCase() === normalizedKey,
   );
   if (exact) return exact;
   if (allowlist.length === 1) return allowlist[0];
@@ -683,6 +704,21 @@ function loadAllowlist(repoRoot) {
   const json = readJsonFile(configPath, { allowlist: [] });
   if (!Array.isArray(json.allowlist)) return [];
   return json.allowlist.filter((value) => typeof value === 'string' && value.trim());
+}
+
+/**
+ * Path globs per repo whose changes never warrant a wiki update, from
+ * `.wiki-config.json` `ignorePaths` (e.g. dev-inbox's `design/**` records).
+ */
+function loadIgnoredPaths(repoRoot, repoFullName) {
+  const json = readJsonFile(path.join(repoRoot, '.wiki-config.json'), {});
+  const globs = json.ignorePaths?.[repoFullName];
+  return Array.isArray(globs) ? globs.filter((glob) => typeof glob === 'string' && glob.trim()) : [];
+}
+
+export function onlyIgnoredPathsChanged(files, globs) {
+  return files.length > 0 && globs.length > 0 &&
+    files.every((file) => globs.some((glob) => path.matchesGlob(file.path, glob)));
 }
 
 function isRepoAllowlisted(repoRoot, repoFullName) {

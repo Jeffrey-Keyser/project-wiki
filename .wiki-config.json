@@ -24,5 +24,10 @@
     "Jeffrey-Keyser/cream-city-web",
     "Jeffrey-Keyser/insta-travel-map",
     "Jeffrey-Keyser/myrrs"
-  ]
+  ],
+  "ignorePaths": {
+    "Jeffrey-Keyser/dev-inbox": [
+      "design/**"
+    ]
+  }
 }

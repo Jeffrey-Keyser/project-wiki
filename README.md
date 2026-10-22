@@ -15,7 +15,7 @@ content/
   index.md            # landing page
   repos/              # per-repository wiki content (added by later slices)
     _smoke/           # build smoke tests (kept out of the navigation tree)
-.wiki-config.json     # repo allowlist for downstream tooling
+.wiki-config.json     # repo allowlist + per-repo ignorePaths for the updater
 astro.config.mjs      # Astro + Starlight + Mermaid configuration
 src/content.config.ts # Starlight docs collection pointed at ../content
 ```
@@ -67,6 +67,14 @@ updater consumer (`server/updater.js`, invoked via `npm run start:updater`).
   `received wiki.update.<repo> sha=<sha> msg=<title>` before acking.
   RabbitMQ credentials are supplied via `~/.config/project-wiki-updater.env`
   as `RABBITMQ_URL=amqp://...`.
+
+### Ignored paths
+
+`.wiki-config.json` `ignorePaths` maps a repo to path globs whose changes never
+warrant a wiki update. A push whose changed files all match is skipped as
+`ignored-paths-only` before the diff fetch and the generator call. dev-inbox ignores
+`design/**`: its design-record commits (propose / complete / accept, dozens a day)
+only touch `design/INDEX.json` and per-record files.
 
 ### Source diff in the prompt
 

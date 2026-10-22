@@ -15,6 +15,7 @@ import {
   buildPromptPayload,
   getRabbitMqUrl,
   handleUpdateMessage,
+  onlyIgnoredPathsChanged,
   parseGeneratedPages,
   parseUpdateMessage,
   pollForAstroRebuild,
@@ -561,5 +562,61 @@ test('updater puts the source diff in the generator prompt and carries on withou
     assert.equal(prompts.length, 2);
     assert.doesNotMatch(prompts[1], /```diff/);
     assert.equal(events.published.at(-1).routingKey, 'wiki.event.skipped');
+  });
+});
+
+test('onlyIgnoredPathsChanged needs every changed file inside an ignored path', () => {
+  const files = (...paths) => paths.map((p) => ({ path: p, summary: '' }));
+  assert.equal(onlyIgnoredPathsChanged(files('design/INDEX.json', 'design/x/meta.json'), ['design/**']), true);
+  assert.equal(onlyIgnoredPathsChanged(files('design/INDEX.json', 'scripts/run.sh'), ['design/**']), false);
+  assert.equal(onlyIgnoredPathsChanged([], ['design/**']), false);
+  assert.equal(onlyIgnoredPathsChanged(files('design/INDEX.json'), []), false);
+});
+
+test('updater skips pushes that only touch ignored paths, without calling the generator', async () => {
+  await withStickyRepo(async ({ checkoutPath, env, events, logger }) => {
+    fs.writeFileSync(path.join(checkoutPath, '.wiki-config.json'), JSON.stringify({
+      allowlist: ['Jeffrey-Keyser/dev-inbox'],
+      ignorePaths: { 'Jeffrey-Keyser/dev-inbox': ['design/**'] },
+    }), 'utf8');
+    const message = {
+      fields: { routingKey: 'wiki.update.Jeffrey-Keyser.dev-inbox' },
+      content: Buffer.from(JSON.stringify({
+        repo: 'Jeffrey-Keyser/dev-inbox',
+        commit: { sha: 'a'.repeat(40), message: 'design: accept some-record' },
+        changedFiles: [{ path: 'design/INDEX.json', status: 'modified' }, { path: 'design/some-record/meta.json', status: 'modified' }],
+      })),
+    };
+    let invoked = false;
+    const result = await handleUpdateMessage(message, {
+      channel: createChannelRecorder(events), logger, env,
+      invokeProvider: async () => { invoked = true; return { stdout: '{"pages":[]}' }; },
+      sourceDiff: async () => { invoked = true; return null; },
+      git: createGitStub(checkoutPath), runCommand: async () => {},
+    });
+    assert.equal(result.reason, 'ignored-paths-only');
+    assert.equal(invoked, false);
+    assert.equal(events.published.at(-1).payload.reason, 'ignored-paths-only');
+  });
+});
+
+test('updater matches the allowlist regardless of the webhook repo casing', async () => {
+  await withStickyRepo(async ({ checkoutPath, env, events, logger }) => {
+    const message = {
+      fields: { routingKey: 'wiki.update.Jeffrey-Keyser.DEV-INBOX' },
+      content: Buffer.from(JSON.stringify({
+        repo: 'Jeffrey-Keyser/DEV-INBOX',
+        commit: { sha: 'b'.repeat(40), message: 'Change the planner' },
+        changedFiles: [{ path: 'scripts/plan.sh', status: 'modified' }],
+      })),
+    };
+    let prompt = '';
+    const result = await handleUpdateMessage(message, {
+      channel: createChannelRecorder(events), logger, env,
+      invokeProvider: async (opts) => { prompt = opts.prompt; return { stdout: '{"pages":[]}' }; },
+      git: createGitStub(checkoutPath), runCommand: async () => {},
+    });
+    assert.equal(result.reason, 'no-changes-proposed');
+    assert.match(prompt, /^Repository: Jeffrey-Keyser\/dev-inbox$/m);
   });
 });
