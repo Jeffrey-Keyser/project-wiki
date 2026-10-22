@@ -12,6 +12,10 @@ Environment="NODE_ENV=production"
 # message. Baked here so a reprovision can't silently regress to the default.
 Environment="PROJECT_WIKI_SOURCE_CHECKOUT=/home/jkeyser/project-wiki"
 Environment="PROJECT_WIKI_SOURCE_REMOTE=git@github.com:Jeffrey-Keyser/project-wiki.git"
+# The generator's provider comes from its Agency HQ row and can be claude,
+# codex or kimi. Their CLIs install under the home directory, outside the
+# systemd user PATH, so a CLI selection failed with "binary not found".
+Environment="PATH=%h/.local/bin:%h/.npm-global/bin:%h/.kimi-code/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=%h/.config/project-wiki-updater.env
 Restart=always
 RestartSec=5
