@@ -69,6 +69,7 @@ end-to-end. Writes `results/<runId>/observer.json`. Toggled via
 | `scripts/write-review.sh` | Writes per-slice `review.json` ([CLAUDE.md:33](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L33)) |
 | `scripts/acquire-slot.sh` / `scripts/release-slot.sh` | Concurrency slot semaphore (`results/.slots/`) — max 12 by default ([acquire-slot.sh:22](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/acquire-slot.sh#L22)) |
 | `scripts/recover-orphans.sh` | Orphan / leaked-state recovery ([recover-orphans.sh:1-13](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/recover-orphans.sh#L1-L13)) |
+| `scripts/cleanup-zombie-sessions.sh` | Reaps abandoned legacy `dev-inbox-*` tmux sessions; dry-run unless `--force`. Run hourly by `dev-inbox-zombie-cleanup.timer` and by `scripts/maintenance-cleanup.sh` |
 | `scripts/mark-orphaned-runs-failed.sh` | Backfill `failed.json` for plan-less runs |
 | `scripts/lib/dispatch-events.sh` | `DispatchEventLogger` — writes `dispatch-events.jsonl` ([CLAUDE.md:48](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L48)) |
 | `scripts/lib/event-types.sh` | Frozen event-type registry ([CLAUDE.md:48](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L48)) |
@@ -92,6 +93,9 @@ end-to-end. Writes `results/<runId>/observer.json`. Toggled via
 | `DEV_INBOX_PLANNER_PROVIDER` / `_MODEL` / `_CLI` | per script | Override Planner provider / model / CLI ([spawn-planner.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-planner.sh)) |
 | `DEV_INBOX_PLANNER_TIMEOUT_SECONDS` | `600` | Planner-stage timeout |
 | `DEV_INBOX_WORKER_NO_AUTO_COMMIT` | `0` | If `1`, disable auto-salvage of a dirty worktree ([spawn-common.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/spawn-common.sh)) |
+| `DEV_INBOX_LEGACY_CLEANUP_OBS_TIMEOUT` | `10` | Per-call tmux/ps observation timeout (seconds) for `scripts/cleanup-zombie-sessions.sh` |
+| `DEV_INBOX_LEGACY_CLEANUP_KILL_TIMEOUT` | `15` | Timeout (seconds) for the session kill step in `scripts/cleanup-zombie-sessions.sh` |
+| `DEV_INBOX_LEGACY_CLEANUP_LOCK_WAIT` | `60` | Seconds to wait for `results/.legacy-session-cleanup.lock` before skipping a forced pass |
 | `PROGRESS_POLL_DISABLED` | `0` | Disable progress polling of Workers ([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)) |
 | `PROGRESS_POLL_INTERVAL` | `30s` | Worker poll cadence |
 | `PROGRESS_POLL_MAX_SECONDS` | `6h` | Max time to wait for a Worker |

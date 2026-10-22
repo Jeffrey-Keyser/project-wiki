@@ -114,6 +114,27 @@ Re-spawns only the Reviewer for an existing slice, preserving Worker
 artifacts and worktree state
 ([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)).
 
+## Clean up legacy zombie sessions
+
+Abandoned `dev-inbox-*` tmux sessions from earlier runs are reaped by
+`scripts/cleanup-zombie-sessions.sh`. It runs hourly from
+`dev-inbox-zombie-cleanup.timer` (with `--force`) and as a pass inside
+`scripts/maintenance-cleanup.sh`. Without `--force` it is a dry run that
+reports `WOULD-KILL` and kills nothing.
+
+```bash
+scripts/cleanup-zombie-sessions.sh                # dry run
+scripts/cleanup-zombie-sessions.sh --force        # kill eligible sessions
+scripts/cleanup-zombie-sessions.sh --max-age 48   # only sessions older than 48h
+```
+
+A session is preserved when it has attached clients, is younger than the
+max age, has a viewer or handoff window, has a live worker-like workload
+or descendant process in a pane, belongs to a correlated active run, or
+has an incomplete or contradictory observation. Each kill is recorded in
+the cleanup provenance file with actor `legacy-session-cleanup`. Passes
+are serialized by `results/.legacy-session-cleanup.lock`.
+
 ## Where logs land
 
 | Source | Where to read |
@@ -141,5 +162,8 @@ The most impactful environment variables for an operator:
 - `PLAN_MANAGER_BACKEND=bash` — force the bash projector during the
   bake period
   ([CLAUDE.md:11](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L11)).
+- `DEV_INBOX_LEGACY_CLEANUP_OBS_TIMEOUT`, `DEV_INBOX_LEGACY_CLEANUP_KILL_TIMEOUT`,
+  `DEV_INBOX_LEGACY_CLEANUP_LOCK_WAIT` — timeouts and lock wait for the
+  legacy zombie-session cleanup.
 
 A fuller list is in the [Glossary](../glossary/).

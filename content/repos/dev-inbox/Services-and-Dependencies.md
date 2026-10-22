@@ -118,8 +118,11 @@ and `results/<runId>/failed.json` markers that Agency HQ polls
 Three background units run on the Beelink homelab (see
 [Operations](../operations/) for the journalctl commands):
 
-- `dev-inbox-zombie-cleanup.timer` — 15-minute cadence cleanup
-  ([systemd/README.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/systemd/README.md)).
+- `dev-inbox-zombie-cleanup.timer` — hourly sweep of abandoned legacy
+  `dev-inbox-*` tmux sessions; the service runs
+  `scripts/cleanup-zombie-sessions.sh --force`
+  ([systemd/dev-inbox-zombie-cleanup.timer](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/systemd/dev-inbox-zombie-cleanup.timer),
+  [systemd/README.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/systemd/README.md)).
 - `dev-inbox-bake-telemetry.timer` — daily telemetry retention
   ([CLAUDE.md:69](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L69)).
 - `dev-inbox-plan-watchdog.service` — plan-stage timeout watchdog.
