@@ -573,6 +573,10 @@ export async function startUpdater({
     WIKI_EVENTS_EXCHANGE,
     WIKI_UPDATE_ROUTING_KEY,
   );
+  // One update at a time: generation runs before the page locks are taken and
+  // every update commits in the same checkout, so concurrent updates (bursts
+  // of pushes) could overwrite each other's pages or commit each other's files.
+  await channel.prefetch(1);
   await channel.consume(
     WIKI_UPDATER_QUEUE,
     async (message) => {

@@ -122,7 +122,7 @@ test('parseGeneratedPages recovers JSON wrapped in prose or code fences', () => 
   );
 });
 
-test('startUpdater declares the durable queue/binding and consumes with manual ack', async () => {
+test('startUpdater declares the durable queue/binding and consumes one message at a time with manual ack', async () => {
   const calls = [];
   let consumeHandler = null;
   const channel = {
@@ -134,6 +134,9 @@ test('startUpdater declares the durable queue/binding and consumes with manual a
     },
     async bindQueue(queue, exchange, routingKey) {
       calls.push(['bindQueue', queue, exchange, routingKey]);
+    },
+    async prefetch(count) {
+      calls.push(['prefetch', count]);
     },
     async consume(queue, handler, options) {
       calls.push(['consume', queue, options]);
@@ -181,7 +184,8 @@ test('startUpdater declares the durable queue/binding and consumes with manual a
     ['assertQueue', WIKI_UPDATER_QUEUE, { durable: true }],
     ['bindQueue', WIKI_UPDATER_QUEUE, WIKI_EVENTS_EXCHANGE, WIKI_UPDATE_ROUTING_KEY],
   ]);
-  assert.deepEqual(calls[5], ['consume', WIKI_UPDATER_QUEUE, { noAck: false }]);
+  assert.deepEqual(calls[5], ['prefetch', 1]);
+  assert.deepEqual(calls[6], ['consume', WIKI_UPDATER_QUEUE, { noAck: false }]);
   assert.ok(
     logs.includes(
       `[updater] consuming ${WIKI_UPDATER_QUEUE} from ${WIKI_EVENTS_EXCHANGE} (${WIKI_UPDATE_ROUTING_KEY})`,
