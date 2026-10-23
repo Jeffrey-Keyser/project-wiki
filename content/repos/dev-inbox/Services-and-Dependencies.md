@@ -95,6 +95,25 @@ The script POSTs `artifacts[]` entries from the result file to
 `IMAGE_STUDIO_JWT`
 ([CLAUDE.md:72](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L72)).
 
+### Solo Vault — opt-in package-install credential
+
+Repository bootstrap (`internal/worktreebootstrap`) can read one GitHub
+package token from Solo Vault, but only when the repository's
+`config/bootstrap/<repo>.json` sets `githubTokenSecret` to a three-part
+secret reference such as `dev-inbox/production/GITHUB_ISSUE_TOKEN`
+([config/bootstrap/README.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/config/bootstrap/README.md),
+[credentials.go](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/internal/worktreebootstrap/credentials.go)).
+
+- The lookup happens only on a dependency-cache miss. Cache hits make no
+  Solo Vault request. A host `GITHUB_TOKEN` takes precedence and skips the lookup.
+- The lookup uses the existing Solo Vault loader credential. Bootstrap
+  removes that loader from the install child's environment.
+- The token is passed only to the install child as `GITHUB_TOKEN`. Its
+  value is redacted from logs and failure receipts. It is never written
+  to config, cache identity, the parent environment, or the worker agent.
+- A lookup failure, or an empty or invalid value, stops bootstrap before
+  any install command runs.
+
 ## Inbound dependencies
 
 ### `/orchestrate` slash command
