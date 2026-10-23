@@ -23,7 +23,16 @@
     "Jeffrey-Keyser/analytics-pulse",
     "Jeffrey-Keyser/cream-city-web",
     "Jeffrey-Keyser/insta-travel-map",
-    "Jeffrey-Keyser/myrrs"
+    "Jeffrey-Keyser/myrrs",
+    "Jeffrey-Keyser/spanish-studio",
+    "Jeffrey-Keyser/nof1",
+    "Jeffrey-Keyser/music-store",
+    "Jeffrey-Keyser/beelink-steward",
+    "Jeffrey-Keyser/homelab",
+    "Jeffrey-Keyser/message-contracts",
+    "Jeffrey-Keyser/struct",
+    "Jeffrey-Keyser/personal-ui-kit",
+    "Jeffrey-Keyser/presence-signal"
   ],
   "ignorePaths": {
     "Jeffrey-Keyser/dev-inbox": [

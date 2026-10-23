@@ -1,0 +1,26 @@
+---
+title: "Spanish Studio Glossary"
+description: "Project-specific terms used in spanish-studio, each with source citations."
+---
+
+# Glossary
+
+- **Ping database.** The shared database; Spanish Studio uses the `spanish` schema ([README.md:4-5](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/README.md#L4-L5)).
+- **Persona.** A conversation partner row with name, voice, mood, and minimum level ([conversation-types.ts:46-49](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-types.ts#L46-L49)).
+- **Cast.** The per-conversation set of speakers ([conversation-types.ts:51-57](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-types.ts#L51-L57)). Seeded members come from the catalog; generated members use the default voice ([conversation-start.ts:103-109](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-start.ts#L103-L109), [conversation-start.ts:111-130](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-start.ts#L111-L130)).
+- **Scenario meta.** The structured situation stored with a conversation, including title, setting, cast, and opening complication ([conversation-start.ts:199-206](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-start.ts#L199-L206)).
+- **Complexity profile.** The set of dials that control generated difficulty ([complexity-profiles.ts:18-19](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/complexity-profiles.ts#L18-L19)).
+- **Progression ladder.** Cumulative steps applied on top of level defaults ([complexity-profiles.ts:143-148](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/complexity-profiles.ts#L143-L148)).
+- **Target vocabulary.** Words a conversation tries to elicit, with hit and miss evidence ([conversation-advance.ts:107-112](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-advance.ts#L107-L112)).
+- **Code-switch gap.** An English span in a learner turn that is answered with a Spanish fill word ([code-switch-gap.ts:4-6](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/code-switch-gap.ts#L4-L6)).
+- **Coach review.** Post-scenario feedback with per-turn callouts ([conversation-review.ts:61-72](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-review.ts#L61-L72)).
+- **Content score.** The coach's 0 to 100 content score, kept separate from Azure articulation and null when absent ([conversation-types.ts:110-112](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-types.ts#L110-L112)).
+- **Completion stage.** Ordered stages: scoring, coach review, finalizing, done ([conversation-types.ts:85-93](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-types.ts#L85-L93)).
+- **LearnerVocabularyPort.** The port to spanish-tutor vocabulary and SM-2 data ([README.md:153-158](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/README.md#L153-L158)).
+- **Provider port.** A named domain interface over one AI or speech vendor ([README.md:202-207](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/README.md#L202-L207)).
+- **Intonation lane.** The F0 contour comparison, with per-word pitch deviation in semitones ([README.md:21-24](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/README.md#L21-L24)).
+- **Word audio slice.** A single word cut from a learner WAV using review timings ([conversation-word-audio.ts:4-6](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/src/lib/conversation-word-audio.ts#L4-L6)).
+- **Migration ledger.** The `spanish_studio_schema_migrations` table with filename and checksum ([sql-migrations.js:143-150](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/scripts/sql-migrations.js#L143-L150)).
+- **Modified or missing migration.** A checksum mismatch or absent file that blocks apply ([database-migrations.md:37-40](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/docs/database-migrations.md#L37-L40)).
+- **Observation.** Reading evidence that can be triaged or promoted ([README.md:133-134](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/README.md#L133-L134)).
+- **QA Patrol.** A live HTTP role-play check: start, advance, end, review ([phase2-smoke.js:46-54](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/server/scripts/phase2-smoke.js#L46-L54)).

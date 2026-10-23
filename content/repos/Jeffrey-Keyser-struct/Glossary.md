@@ -1,0 +1,21 @@
+---
+title: "Struct Glossary"
+description: "Project-specific terms used in Struct, each with a source citation."
+---
+
+# Glossary
+
+- **Structured mode.** A request with a schema. Output is extracted, validated, and retried on mismatch ([CLAUDE.md:L20](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/CLAUDE.md#L20)).
+- **Passthrough mode.** A request with a null or omitted schema. Raw CLI output is returned ([CLAUDE.md:L21](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/CLAUDE.md#L21), [server/services/StructRunner.ts:L313-L333](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/services/StructRunner.ts#L313-L333)).
+- **Response envelope.** The `success`, `data` or `error`, `code`, and `meta` shape returned for runs ([server/types/api.ts:L118-L140](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/types/api.ts#L118-L140)).
+- **Provider.** The value of `AGENT_CLI_PROVIDER` that selects a runner: `claude-code`, `codex`, `kimi`, or `opencode` ([server/config/providers.ts:L3](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/config/providers.ts#L3)).
+- **Runtime selection.** The provider, model, and thinking level in use, along with its source ([server/services/RuntimeConfig.ts:L12-L27](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/services/RuntimeConfig.ts#L12-L27)).
+- **Dispatch role.** The Agency HQ row key Struct reads, set by `STRUCT_DISPATCH_ROLE` with default `struct` ([server/config/env.ts:L283](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/config/env.ts#L283), [CLAUDE.md:L58](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/CLAUDE.md#L58)).
+- **Runtime smoke.** The `--version` check and one small test call a new selection must pass before it is applied ([server/services/RuntimeConfig.ts:L116-L118](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/services/RuntimeConfig.ts#L116-L118)).
+- **Semaphore and queue.** The concurrency limit and bounded wait queue that gate runner calls ([server/services/StructRunner.ts:L17-L27](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/services/StructRunner.ts#L17-L27), [server/services/StructRunner.ts:L77-L84](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/services/StructRunner.ts#L77-L84)).
+- **Template key and vars.** `templateKey` names a Prompt Registry entry. `templateVars` fill `{{var}}` placeholders ([server/types/api.ts:L52-L55](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/types/api.ts#L52-L55)).
+- **Unresolved template variables.** Placeholders left after substitution cause a 400 failure ([server/services/TemplateService.ts:L111-L122](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/services/TemplateService.ts#L111-L122)).
+- **Async job.** An in-memory job with an ID, status, and expiry, created by `/api/v1/run/async` ([server/services/AsyncJobService.ts:L12-L22](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/services/AsyncJobService.ts#L12-L22)).
+- **Readiness snapshot.** The CLI and Prompt Registry check results returned by `/ready` ([server/services/ReadinessService.ts:L13-L21](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/server/services/ReadinessService.ts#L13-L21)).
+- **Live provider smoke.** An opt-in script gated by `RUN_LIVE_PROVIDER_SMOKE=1`, excluded from CI ([README.md:L36](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/README.md#L36)).
+- **Idle gate.** The deploy step that waits for no active or queued calls before restarting ([deploy.sh:L47-L60](https://github.com/Jeffrey-Keyser/struct/blob/bc94f30f2343c96088092304214eda45a68c596f/deploy.sh#L47-L60)).
