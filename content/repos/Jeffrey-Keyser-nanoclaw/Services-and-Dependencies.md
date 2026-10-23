@@ -1,41 +1,57 @@
 ---
-title: Services and Dependencies
-description: Inbound and outbound integrations for NanoClaw — what it depends on and what depends on it.
+title: "Services and Dependencies"
+description: "What NanoClaw depends on, and which callers are confirmed versus expected or unknown."
 ---
 
 # Services and Dependencies
 
 ## Depends on
 
-### Runtime + tooling
-- **Node.js ≥20** ([package.json:64-66](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L64-L66)).
-- **tmux** on macOS or Linux — the shipping agent runtime ([README.md:128](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L128), [src/runtime-adapter.ts:34-40](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/runtime-adapter.ts#L34-L40)).
-- **Claude Code** CLI for setup + skill execution ([README.md:130](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L130)).
+### Host tooling
+- **tmux and Node.js:** `tmux` must be on `PATH`. The runtime adapter throws a fatal error if `tmux -V` fails ([src/runtime-adapter.ts:L60-L96](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/runtime-adapter.ts#L60-L96)). Node.js 20 or newer is required ([package.json:L65-L67](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/package.json#L65-L67)).
+- **Agent CLIs:** the configured agent CLI binaries default to the `opencode` backend, with `codex` as the fallback ([src/config.ts:L148-L160](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L148-L160)).
+- **Claude Code:** used for setup and for running skills ([README.md:L126-L132](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L126-L132)).
 
-### npm runtime dependencies
-- `@jeffrey-keyser/message-contracts` — shared message contracts ([package.json:37](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L37)).
-- `amqplib` + `@types/amqplib` — AMQP / RabbitMQ client used by the messaging integration ([package.json:38-39](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L38-L39)).
-- `better-sqlite3` — embedded SQLite store ([package.json:40](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L40)).
-- `cron-parser` — schedule parsing for the task scheduler ([package.json:41](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L41)).
-- `grammy` — Telegram bot framework backing the in-core Telegram channel ([package.json:42](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L42)).
-- `pino` + `pino-pretty` — structured logging ([package.json:43-44](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L43-L44)).
-- `yaml`, `zod` — config + schema validation ([package.json:45-46](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L45-L46)).
+### npm libraries
+The runtime dependencies are listed in [package.json:L37-L47](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/package.json#L37-L47):
+- `better-sqlite3`
+- `grammy`
+- `cron-parser`
+- `pino`
+- `zod`
+- `yaml`
+- `amqplib`
+- `@jeffrey-keyser/message-contracts`
 
-### External services
-- **Anthropic API** (or any Claude-API-compatible endpoint) reached through the host-side credential proxy; configurable via `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` ([README.md:230-244](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L230-L244), [README.md:79](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L79)).
-- **Agency HQ** for dispatch slots, worktree management, and stall recovery ([README.md:76](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L76), [src/lifecycle.ts:50-56](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L50-L56)). The dispatch loop writes `dispatch_blocked_until` back to Agency HQ via `PUT /api/v1/tasks/:id` ([CLAUDE.md:117-127](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L117-L127)).
-- **Solo Vault** at `https://api.vault.jeffreykeyser.net` for encrypted secret fetch; falls back to `.env` when `SOLO_VAULT_TOKEN` is unset ([src/config.ts:72-80](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L72-L80)).
-- **Telegram Bot API** via `grammy` for the in-core Telegram channel ([package.json:42](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L42), [README.md:72](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L72)).
-- **GitHub CLI (`gh`)** for the PR workflow helpers ([README.md:138-146](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L138-L146), [CLAUDE.md:34-40](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L34-L40)).
+This page does not infer what the contracts package is used for.
 
-### Filesystem inputs
-- Host-side allowlists outside the project root: `~/.config/nanoclaw/mount-allowlist.json` and `~/.config/nanoclaw/sender-allowlist.json` ([src/config.ts:22-34](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L22-L34)).
-- Project-local `store/`, `groups/`, `data/` directories ([src/config.ts:35-37](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L35-L37)).
+### External services referenced in config
+All of the defaults below are overridable. Their presence in config does not prove that a given installation uses them.
+
+- **Agency HQ** at `AGENCY_HQ_URL`, default `http://localhost:3040` ([src/config.ts:L94-L98](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L94-L98)).
+  - NanoClaw's own polling dispatcher only runs when `NANOCLAW_LEGACY_AGENCY_DISPATCH=true` ([src/agency-hq-dispatcher.ts:L49-L51](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/agency-hq-dispatcher.ts#L49-L51)).
+  - In legacy mode the PostgreSQL slot backend calls `/dispatch-slots/*` ([src/dispatch-slot-backends.ts:L132-L165](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/dispatch-slot-backends.ts#L132-L165)).
+  - `npm run verify` reads `/api/v1/dispatch-config/:role` ([src/cli/verify-config.ts:L64-L82](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/cli/verify-config.ts#L64-L82)).
+- **Solo Vault** for secrets. When `SOLO_VAULT_TOKEN` is unset, secrets fall back to `.env` ([src/config.ts:L72-L82](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L72-L82)).
+- **RabbitMQ** at `RABBITMQ_URL`. NanoClaw subscribes to `CronJobTriggered` events on the `cron.jobs` exchange ([src/config.ts:L89-L92](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L89-L92)).
+- **Pantry Manager** at `PANTRY_MANAGER_URL`, default `http://localhost:3052` ([src/config.ts:L84-L87](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L84-L87)).
+- **Model API:** any Claude-API-compatible endpoint, set with `ANTHROPIC_BASE_URL` ([README.md:L246-L253](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L246-L253)).
+  - The proxy injects the real credential at request time ([docs/SECURITY.md:L73-L79](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SECURITY.md#L73-L79)).
+
+### Host files
+- **Allowlists:** the mount and sender allowlists live under `~/.config/nanoclaw/` ([src/config.ts:L22-L34](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L22-L34)).
+- **Project directories:** `store/`, `groups/` and `data/` ([src/config.ts:L35-L37](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L35-L37)).
 
 ## Consumed by
 
-- **Messaging channels** (Telegram in-core; WhatsApp, Slack, Discord, Gmail, X via skills) — they push inbound messages into the router and receive outbound replies ([README.md:72-86](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L72-L86)).
-- **Agency HQ orchestration** consumes NanoClaw's `/health` snapshot and dispatch reports; NanoClaw is the worker side of that exchange ([README.md:76](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L76), [CLAUDE.md:97-100](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L97-L100)).
-- **Claude Code skills** ship under `.claude/skills/` and transform a NanoClaw fork in place; the repo is their target surface ([CONTRIBUTING.md:9-21](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CONTRIBUTING.md#L9-L21)).
-- **The host user**, through the main channel self-chat, which is the admin/control surface for groups, scheduled tasks, and cross-group visibility ([README.md:74](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L74), [README.md:98-104](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L98-L104)).
-- **HTTP probes** (operator scripts, uptime monitors) consume `GET /skills` and `GET /health` exposed from the skill/health server ([CLAUDE.md:13](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L13), [README.md:78](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L78)).
+### Confirmed in source
+- **Telegram channel:** registered through the channel barrel ([src/channels/index.ts:L10-L11](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/channels/index.ts#L10-L11)). It feeds the shared `onMessage` callback ([src/lifecycle.ts:L349-L350](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/lifecycle.ts#L349-L350)).
+- **`scripts/reload-service.mjs`:** calls the health check and the agent-event smoke ([scripts/reload-service.mjs:L74-L113](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/scripts/reload-service.mjs#L74-L113)).
+  - The smoke posts to `/api/v1/agent-events` and reads the result back ([README.md:L157-L162](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L157-L162)).
+- **`npm run verify`:** reads `/health` on `SKILL_SERVER_PORT` ([src/cli/verify-config.ts:L84-L95](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/cli/verify-config.ts#L84-L95)).
+- **Agent runner:** spawns the `nanoclaw` MCP stdio server for each invocation ([container/agent-runner/src/index.ts:L113-L119](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/agent-runner/src/index.ts#L113-L119)).
+
+### Expected, with unverified callers
+- **Message API:** `POST /api/v1/messages` is documented for proactive outbound messaging ([docs/MESSAGE_API.md:L1-L13](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/MESSAGE_API.md#L1-L13)). No external caller is identified in the attached source.
+- **Agency HQ and dev-inbox:** these own dispatch and the `slot.*` event stream ([README.md:L167-L169](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L167-L169)). The exact interface they use to hand work to NanoClaw is not shown here.
+- **Skills and forks:** additional channels and integrations are expected to arrive this way ([README.md:L81-L86](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L81-L86)).

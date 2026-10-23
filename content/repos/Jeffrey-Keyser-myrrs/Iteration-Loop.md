@@ -1,40 +1,48 @@
 ---
-title: Iteration Loop
-description: How a change moves from local edit to a running Beelink deploy.
+title: "Myrrs Iteration Loop"
+description: "Contributor workflow for Myrrs grounded in the workspace scripts, the deploy script, and the CI files present in source."
 ---
 
 # Iteration Loop
 
-The repo follows a "backend first, then frontend" change flow with a single-command deploy script targeting the homelab ([CLAUDE.md:113-118](https://github.com/Jeffrey-Keyser/myrrs/blob/main/CLAUDE.md#L113-L118), [deploy.sh:1-23](https://github.com/Jeffrey-Keyser/myrrs/blob/main/deploy.sh#L1-L23)).
+Contributors work backend first, then frontend, then ship from `main` with `deploy.sh` ([CLAUDE.md:L145-L154](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/CLAUDE.md#L145-L154)). This page lists only scripts and workflows that appear in the excerpts.
 
 ```mermaid
 sequenceDiagram
   participant Dev as Developer
-  participant Server as src/server
-  participant Client as src/client
-  participant Git as main branch
-  participant Box as Beelink (systemd)
-
-  Dev->>Server: add service / repo / route
-  Dev->>Server: npm test (jest)
-  Dev->>Client: add component + RTK Query slice
-  Dev->>Client: npm test (vitest)
-  Dev->>Git: commit + push to main
-  Dev->>Box: ./deploy.sh
-  Box->>Git: git pull origin main
-  Box->>Server: npm ci --production && npm run build
-  Box->>Client: npm ci --production && npm run build
-  Box->>Box: systemctl --user restart myrrs-api myrrs-frontend
+  participant Local as Local workspaces
+  participant Repo as main branch
+  participant Box as Homelab host
+  Dev->>Local: edit server routes services and DAL
+  Dev->>Local: run server lint and test
+  Dev->>Local: run client dev and test
+  Dev->>Repo: commit and push to main
+  Dev->>Box: run deploy.sh
+  Box->>Repo: git pull origin main
+  Box->>Box: npm ci then build server then build client
+  Box->>Box: restart myrrs-api and myrrs-frontend
 ```
 
-## Step-by-step
+## Local loop
 
-1. **Schema first when needed.** New table or column lands as a migration in `src/server/db/migrations/`, then TS types in `src/server/types/`, then repositories and mappers ([CLAUDE.md:131-135](https://github.com/Jeffrey-Keyser/myrrs/blob/main/CLAUDE.md#L131-L135)).
-2. **Backend feature.** Service logic → repository call → route handler under `src/server/routes/` mounted in `app.ts` ([src/server/app.ts:123-132](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L123-L132)).
-3. **Backend tests.** Jest with `ts-jest`; full-build smoke when tests behave oddly: `rm -rf dist && npm run build && npm test` ([src/server/package.json:13](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/package.json#L13), [CLAUDE.md:64-66](https://github.com/Jeffrey-Keyser/myrrs/blob/main/CLAUDE.md#L64-L66)).
-4. **Frontend integration.** Add RTK Query endpoints in `src/client/src/reducers/*Api.ts`, wire to a component under `src/client/src/components/` and a page under `src/client/src/pages/` ([src/client/src/reducers](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/src/reducers), [src/client/src/pages](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/src/pages)).
-5. **Frontend tests.** Vitest + React Testing Library: `npm test` inside `src/client` ([src/client/package.json:35](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/package.json#L35)).
-6. **Local end-to-end check.** Dev servers: client `vite` on :3002, API `ts-node ./bin/www.ts` ([src/client/package.json:32](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/package.json#L32), [src/server/package.json:8](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/package.json#L8), [src/server/app.ts:54-55](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L54-L55)).
-7. **Ship.** Push to `main`, run `deploy.sh` on the Beelink — it pulls, builds both workspaces, restarts systemd units ([deploy.sh:5-21](https://github.com/Jeffrey-Keyser/myrrs/blob/main/deploy.sh#L5-L21)).
+**Server.** From `src/server`: `npm run dev` (ts-node on `bin/www.ts`), `npm run build` (tsc), `npm run lint` (eslint), and `npm test` (jest) ([src/server/package.json:L7-L13](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/package.json#L7-L13)). Jest uses the ts-jest preset in a node environment ([src/server/jest.config.js:L2-L3](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/jest.config.js#L2-L3)). `npm run seed` runs `db/seed.ts`, which the TypeScript build excludes ([src/server/tsconfig.json:L31](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/tsconfig.json#L31)).
 
-There is no separate staging environment in-repo; `main` is the deploy branch.
+**Client.** From `src/client`: `npm run dev` (Vite), `npm run build`, and `npm test` (`vitest --run`) ([src/client/package.json:L32-L35](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/package.json#L32-L35)). The dev server port is 3002 ([src/client/vite.config.js:L7](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/vite.config.js#L7)).
+
+**Clean rebuild.** When tests behave oddly, the documented fix is `rm -rf dist && npm run build && npm test` in the server ([CLAUDE.md:L58-L59](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/CLAUDE.md#L58-L59)). This is guidance, not a script.
+
+**Schema changes.** The documented steps are: add a migration under `src/server/db/migrations/`, update types, update repositories and mappers, then run tests ([CLAUDE.md:L156-L160](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/CLAUDE.md#L156-L160)). The migrations folder is not in the excerpts. The DB deploy script loads only the `schema` and `stored_procedures` folders ([src/server/db/deploy.sh:L30-L31](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/db/deploy.sh#L30-L31)), so how migrations are applied is unclear.
+
+## Ship
+
+`deploy.sh` runs `git pull origin main`, `npm ci`, builds the server and client, and restarts both user units ([deploy.sh:L5-L23](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/deploy.sh#L5-L23)). The script contains no test or lint step ([deploy.sh:L1-L25](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/deploy.sh#L1-L25)), so tests must be run before pushing.
+
+## CI files present
+
+Three GitHub workflow files sit under `src/.github/workflows/`, not the repo root:
+
+- UI build and S3 sync with CloudFront invalidation, triggered on push to `main` ([src/.github/workflows/deploy-ui.yml:L3-L6](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/.github/workflows/deploy-ui.yml#L3-L6), [L44-L49](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/.github/workflows/deploy-ui.yml#L44-L49)).
+- Docker image push to ECR and Lambda code update, triggered on push to `main` ([src/.github/workflows/lambda-push.yml:L3-L6](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/.github/workflows/lambda-push.yml#L3-L6), [L51-L53](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/.github/workflows/lambda-push.yml#L51-L53)).
+- Manual Terraform apply with auto-approve ([src/.github/workflows/terraform_deploy.yml:L3-L4](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/.github/workflows/terraform_deploy.yml#L3-L4), [L36](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/.github/workflows/terraform_deploy.yml#L36)).
+
+These describe a Lambda/CloudFront path that conflicts with the homelab flow in `deploy.sh`. Their `working-directory: ./client` entries ([deploy-ui.yml:L32](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/.github/workflows/deploy-ui.yml#L32)) do not match the `src/client` layout ([package.json:L4-L7](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/package.json#L4-L7)). GitHub normally reads workflows from the root `.github` directory, so these files may be inert. Whether they run is unknown.

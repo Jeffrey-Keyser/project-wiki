@@ -1,59 +1,44 @@
 ---
-title: Architecture
-description: Internal module layout of the Cream City Web repo — operator runbook, scripts, API server, workers, templates, and shared Postgres database.
+title: "Architecture"
+description: "Internal module layout of the Cream City Web repo: operator runbook, CLI scripts, payment API, static server, email worker, templates, and the PostgreSQL schema."
 ---
 
 # Architecture
 
-Cream City Web is a single Node 22 ESM workspace ([.nvmrc](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/.nvmrc) + [package.json:5](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/package.json#L5)) organized into a runbook, a set of CLI scripts, a long-running HTTP server, a static-site server, a Cloudflare worker, and a Postgres schema.
+Cream City Web is a single Node ESM package. Its `package.json` has no `main` or `exports` field, so it is not published as a library ([package.json:L1-L26](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/package.json#L1-L26)). Most parts are on-demand CLIs. Two HTTP services are defined, and a Cloudflare worker forwards inbound mail.
 
 ## Component diagram
 
 ```mermaid
 flowchart LR
-  Trigger[cron-service / ad-hoc] -->|RabbitMQ ccw.run| Bridge[openclaw-bridge]
-  Bridge --> Session[Claude Code session]
-  Session --> Scripts[(scripts/*.mjs CLIs)]
-  Scripts --> DB[(PostgreSQL cream_city_web)]
-  Scripts --> Sites[sites/{slug}/]
-  Scripts --> Templates[templates/{general,restaurant,services}]
-  Scripts --> Resend[Resend API]
-  Scripts --> PayAPI[pay-api.jeffreykeyser.net]
-  API[api/server.mjs Express] --> DB
-  API --> PayAPI
-  API --> Resend
-  Stripe[Stripe Webhooks] --> API
-  Serve[scripts/serve.mjs static] --> Sites
-  Tunnel[Cloudflare Tunnel] --> Serve
-  Worker[workers/email-receiver CF Worker] --> Webhook[webhook.creamcityweb.com]
-  Webhook --> Bridge
+  A["Scheduled or ad-hoc trigger"] --> B["RabbitMQ cron jobs queue"]
+  B --> C["openclaw-bridge source not in snapshot"]
+  C --> D["Claude Code operator session"]
+  D --> E["Operator CLIs in scripts"]
+  E --> F["PostgreSQL cream_city_web"]
+  E --> G["sites directory"]
+  E --> H["Resend email API"]
+  E --> I["Pay API"]
+  J["Stripe webhooks"] --> K["Payment API port 3051"]
+  K --> F
+  K --> I
+  K --> H
+  L["Cloudflare Email Routing worker"] --> M["Webhook endpoint"]
+  M --> C
+  G --> N["Static server port 3050"]
+  N --> O["Cloudflare Tunnel beelink"]
 ```
 
-## Role contracts
+The diagram shows documented links. Arrows into `openclaw-bridge` and the Stripe path are not verified by the provided source.
 
-### Operator runbook (`CLAUDE.md`)
-Defines identity, run procedure, decision framework, compliance, and escalation policy that every Claude session must follow ([CLAUDE.md:1-189](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/CLAUDE.md#L1-L189)). Outreach is currently gated behind three explicit prerequisites ([CLAUDE.md:104-128](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/CLAUDE.md#L104-L128)).
+## Components and contracts
 
-### Scripts (`scripts/*.mjs`)
-Operator-invoked CLIs. Notable entries:
-- `run.mjs` — start/end/log run rows, send Telegram via NanoClaw IPC ([scripts/run.mjs:23-34](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/scripts/run.mjs#L23-L34)).
-- `leads.mjs`, `scout.mjs`, `lead-queries.mjs` — pipeline CRUD + scoring ([tools.md:65-83](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L65-L83)).
-- `build-site.mjs`, `site.mjs`, `site-modifier.mjs`, `staging.mjs` — render templates into `sites/{slug}/` ([tools.md:85-100](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L85-L100)).
-- `deploy.mjs` — create DNS, update DB, test live URL via Cloudflare Tunnel ([tools.md:91-96](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L91-L96)).
-- `send-email.mjs`, `poll-email.mjs`, `email-intent.mjs`, `approval-flow.mjs` — Resend outbound + inbound intent classification ([scripts/poll-email.mjs:1-26](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/scripts/poll-email.mjs#L1-L26)).
-- `billing.mjs`, `secrets.mjs`, `db.mjs`, `serve.mjs` — billing CLI, Solo Vault secret loader, pg pool helper, static file server.
-
-### Express payment API (`api/server.mjs`)
-Long-running HTTP service on `CCW_API_PORT` (default 3051). Routes: `POST /payment/verify-code`, `POST /payment/create-checkout`, `POST /webhook/stripe`, `GET /health` ([api/server.mjs:1-12](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/api/server.mjs#L1-L12)). Loads `.env` then overrides with Solo Vault secrets ([api/server.mjs:26-44](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/api/server.mjs#L26-L44)).
-
-### Static site server (`scripts/serve.mjs`)
-Serves rendered sites on port 3050 behind a Cloudflare Tunnel — the systemd unit `cream-city-web-server` is wired to this script ([cream-city-web-server.service:6-12](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/cream-city-web-server.service#L6-L12)).
-
-### Email receiver worker (`workers/email-receiver`)
-Cloudflare Worker `ccw-email-receiver` POSTs incoming mail to `webhook.creamcityweb.com/email/inbound` ([workers/email-receiver/wrangler.toml:1-7](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/workers/email-receiver/wrangler.toml#L1-L7)). Webhook forwards through openclaw-bridge into a Claude session for intent processing ([tools.md:37-43](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L37-L43)).
-
-### Templates (`templates/`)
-Three layout families — `general`, `restaurant`, `services` — consumed by `build-site.mjs <template> <data.json> sites/{slug}` ([tools.md:85-89](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L85-L89)). Treated as starting points, not rigid molds ([CLAUDE.md, Creative Philosophy section](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/CLAUDE.md)).
-
-### Postgres schema (`schema.sql`)
-Defines `leads`, `outreach`, `customers`, `sites`, `staging_sites`, `spend`, `suppression_list`, `runs` ([README.md:18-27](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/README.md#L18-L27)). Reset via `npm run db:reset` ([package.json:7](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/package.json#L7)).
+- **Operator runbook (`CLAUDE.md`)**: defines the run procedure, the outreach gate, compliance rules, and escalation policy ([CLAUDE.md:L21-L74](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/CLAUDE.md#L21-L74), [CLAUDE.md:L174-L183](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/CLAUDE.md#L174-L183)).
+- **Run ledger (`scripts/run.mjs`)**: `start` inserts a `runs` row and writes `data/state.json` ([run.mjs:L48-L62](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/run.mjs#L48-L62)). `end` counts scout, outreach, and build_site actions ([run.mjs:L69-L85](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/run.mjs#L69-L85)). `notify` writes a NanoClaw IPC file ([run.mjs:L24-L34](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/run.mjs#L24-L34)).
+- **Database helper (`scripts/db.mjs`)**: a shared pg pool. It loads `.env`, then Solo Vault secrets ([db.mjs:L79-L81](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/db.mjs#L79-L81)), and throws if `DATABASE_URL` is unset ([db.mjs:L83-L85](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/db.mjs#L83-L85)). The `secrets.mjs` loader is not in the snapshot.
+- **Payment API (`api/server.mjs`)**: defines `POST /payment/verify-code`, `POST /payment/create-checkout`, `POST /webhook/stripe`, and `GET /health` ([api/server.mjs:L8-L11](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L8-L11)). The port defaults to 3051 ([api/server.mjs:L41](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L41)). The listen call is beyond the excerpt.
+- **Static server (`scripts/serve.mjs`)**: maps a host's subdomain to `sites/{slug}` ([serve.mjs:L34-L50](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/serve.mjs#L34-L50)). It binds 127.0.0.1 on port 3050 by default ([serve.mjs:L15](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/serve.mjs#L15), [serve.mjs:L129](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/serve.mjs#L129)).
+- **Site templates**: `build-site.mjs` names `general`, `restaurant`, and `services` ([build-site.mjs:L144](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/build-site.mjs#L144)). The README lists `starter` and `starter-blue` instead ([README.md:L47](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/README.md#L47)). The current template set is unknown.
+- **Email worker (`workers/email-receiver`)**: POSTs a JSON payload with an `X-Webhook-Secret` header to `WEBHOOK_URL` ([index.js:L42-L50](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/workers/email-receiver/src/index.js#L42-L50)). The configured URL is `webhook.creamcityweb.com/email/inbound` ([wrangler.toml:L6](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/workers/email-receiver/wrangler.toml#L6)). It rethrows failures so Cloudflare can retry ([index.js:L54-L66](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/workers/email-receiver/src/index.js#L54-L66)).
+- **Inbound bridge**: the tools reference describes Worker to webhook to openclaw-bridge ([tools.md:L37-L40](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L37-L40)). The bridge source is not in the snapshot, so the receiving side is unverified.
+- **Schema (`schema.sql`)**: defines twelve tables, from `leads` to `payment_codes` ([schema.sql:L5](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/schema.sql#L5), [schema.sql:L187](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/schema.sql#L187)). The README's core-table list is shorter ([README.md:L18-L27](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/README.md#L18-L27)).

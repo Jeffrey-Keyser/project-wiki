@@ -1,53 +1,44 @@
 ---
-title: Operations
-description: Deploying, running, and observing Switchboard — Lambda + RDS + CloudFront with hybrid Redis caching.
+title: "Operations"
+description: "Start, build, test, health, and observability commands for Switchboard, with documented versus verified runtime notes."
 ---
 
 # Operations
 
-## Runtime topology
+Switchboard is a long-running Node/Express service, not a library. The current deployment document describes a self-hosted systemd unit behind a Cloudflare Tunnel ([DEPLOYMENT_BEELINK.md:L3-L6](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/DEPLOYMENT_BEELINK.md#L3-L6)). That is documented. The excerpts do not prove it is currently running.
 
-Switchboard runs as a single AWS Lambda fronted by API Gateway, with the React admin served from S3 via CloudFront. PostgreSQL on RDS holds persistent state; Upstash Redis is the L2 cache and pub/sub for SSE ([README.md:155-188](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L155-L188)).
+## Commands
 
-- **Lambda handler:** `server/lambda.ts` → `handler` from `server/app.ts` (cached app instance across warm invocations) ([server/app.ts:223-237](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L223-L237)).
-- **Local port:** `PORT` env var (defaults via `server/config/env.ts`); README uses `:3001` for server and `:3000` for client ([README.md:457-459](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L457-L459)).
-- **No systemd** — there is no long-running VM; serverless only.
+| Task | Command | Source |
+|------|---------|--------|
+| Dev server | `npm run dev` (ts-node `bin/www.ts`) | [server/package.json:L7](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/package.json#L7) |
+| Build | `npm run build` (tsc) | [server/package.json:L8](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/package.json#L8) |
+| Start | `npm start` (`node ./dist/bin/www.js`) | [server/package.json:L6](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/package.json#L6) |
+| Lint | `npm run lint` | [server/package.json:L10](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/package.json#L10) |
+| Test | `npm test` / `npm run test:coverage` | [server/package.json:L11-L13](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/package.json#L11-L13) |
+| DB deploy | `cd server/db && ./deploy.sh` | [deploy.sh:L3-L6](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/db/deploy.sh#L3-L6) |
 
-## Start commands
+## Deploy and runtime
 
-| Task | Command |
-|------|---------|
-| Local dev server | `cd server && npm run dev` ([server/package.json:7](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/package.json#L7)) |
-| Local dev client | `cd client && npm run dev` ([README.md:451-454](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L451-L454)) |
-| Production server (in container) | `node ./dist/bin/www.js` ([server/package.json:6](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/package.json#L6)) |
-| Build server | `npm run build` (tsc) ([server/package.json:8](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/package.json#L8)) |
-| DB migrations | `cd server/db && ./deploy.sh` ([CLAUDE.md:81-91](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L81-L91)) |
+- **Port.** `bin/www.ts` listens on `config.PORT` ([www.ts:L17](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/bin/www.ts#L17)). The documented value is `3053`, bound to localhost, with a note to keep it in sync with `server/.env` ([DEPLOYMENT_BEELINK.md:L14-L27](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/DEPLOYMENT_BEELINK.md#L14-L27)). The default in `config/env.ts` is not in the excerpts, so it is unknown.
+- **Process.** The unit is `switchboard-server`, managed with `systemctl --user` ([DEPLOYMENT_BEELINK.md:L57-L58](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/DEPLOYMENT_BEELINK.md#L57-L58)).
+- **Public URL.** Documented as `switchboard.jeffreykeyser.net` ([DEPLOYMENT_BEELINK.md:L19](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/DEPLOYMENT_BEELINK.md#L19)).
+- **Cache.** Documented default is in-memory (`CACHE_STRATEGY=memory`) ([DEPLOYMENT_BEELINK.md:L22](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/DEPLOYMENT_BEELINK.md#L22)).
+- **Docs versus verified.** The Lambda deploy steps in the older README and CLAUDE guide are not current. Check the Beelink document and the workflow comment before relying on either ([ci-cd-pipeline.yml:L215-L222](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/.github/workflows/ci-cd-pipeline.yml#L215-L222)).
 
-## Deploy
+## Health
 
-- **Infra:** `cd terraform && terraform plan && terraform apply` after populating `terraform.tfvars` from `terraform.tfvars.example` ([CLAUDE.md:127-140](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L127-L140), [README.md:511-537](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L511-L537)).
-- **App deploy:** push to `main` triggers `.github/workflows/ci-cd-pipeline.yml`, which builds the Docker image, updates Lambda, syncs the client to S3, and invalidates CloudFront ([README.md:540-552](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L540-L552), [.github/workflows/ci-cd-pipeline.yml](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/.github/workflows/ci-cd-pipeline.yml)).
-- **Terraform CI:** `gh workflow run terraform_deploy.yml --field auto-apply=true` ([README.md:548-552](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L548-L552)).
-- **Pre-deploy gates:** `./scripts/pre-deployment-check.sh`, then production readiness checklist ([README.md:498-509](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L498-L509)).
-- **Post-deploy:** `./scripts/validate-deployment.sh` and `./scripts/smoke-tests.sh` with `ADMIN_JWT` set ([README.md:554-565](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L554-L565)).
-
-## Health & probes
-
-- `GET /health` — registered by `express-server-factory` with a `createDatabaseHealthCheck(pool)` probe ([server/app.ts:91-152](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L91-L152)).
-- `GET /ping` — returns `pong` ([server/routes/index.ts:22-24](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/routes/index.ts#L22-L24)).
-- `GET /api/v1/diagnostics/detailed` — extended diagnostics, public route ([server/routes/diagnostics.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/routes/diagnostics.ts), [server/app.ts:56-65](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L56-L65)).
-- `GET /api/v1/cache/health` and `/stats` — Redis + memory cache visibility ([server/routes/cache.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/routes/cache.ts), [server/routes/versions/v1/index.ts:55-56](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/routes/versions/v1/index.ts#L55-L56)).
+- `GET /health` is enabled by the app's health check config, with a database check ([app.ts:L160-L168](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/app.ts#L160-L168)). The documented response shape is in [MONITORING.md](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/MONITORING.md#L14-L34).
+- `GET /ping` returns `pong` ([routes/index.ts:L22-L24](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/routes/index.ts#L22-L24)).
+- `GET /api/v1/cache/health` reports cache health and strategy ([routes/cache.ts:L54-L70](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/routes/cache.ts#L54-L70)).
+- `GET /api/v1/diagnostics/detailed` calls `getDetailedDiagnostics` ([routes/diagnostics.ts:L106-L109](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/routes/diagnostics.ts#L106-L109)).
 
 ## Observability
 
-- **Logs:** Winston in app + console.log lines bootstrap config at cold start ([server/app.ts:24-32](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L24-L32), [server/package.json:50](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/package.json#L50)). Lambda forwards to CloudWatch Logs.
-- **Metrics:** `@aws-sdk/client-cloudwatch` powers a `middleware/metrics.ts` emitter ([server/middleware/metrics.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/middleware/metrics.ts), [server/package.json:25](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/package.json#L25)).
-- **Targets:** p95 < 100ms, p99 < 200ms, cache hit rate > 80%, error rate < 0.5% ([README.md:393-401](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L393-L401)).
-- **Dashboards/alerts:** see `docs/MONITORING.md` and `docs/ALERTS.md` for CloudWatch dashboard and alarm definitions ([docs/MONITORING.md](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/docs/MONITORING.md), [docs/ALERTS.md](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/docs/ALERTS.md)).
+- **Logs.** The code mostly uses `console.log` and `console.error` ([DAL base query logging](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/dal/BaseDal.ts#L21-L32)). The app logs its config at startup ([app.ts:L29-L37](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/app.ts#L29-L37)).
+- **Metrics.** CloudWatch metrics are gated by environment ([metrics.ts:L36](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/middleware/metrics.ts#L36)). Dashboards and alarms are documented in [ALERTS.md](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/ALERTS.md#L5-L7), not verified.
+- **Realtime.** SSE polls every 2 seconds and sends a heartbeat every 30 seconds ([realtime.ts:L141](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/routes/realtime.ts#L141), [realtime.ts:L177-L183](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/routes/realtime.ts#L177-L183)).
 
-## On-call notes
+## Testing
 
-- **Cold start config dump** is logged at every Lambda init — grep for `=== SERVER CONFIGURATION ===` to confirm which env hit ([server/app.ts:25-32](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L25-L32)).
-- **Pay auth failures** throw with `Pay authentication setup failed:` and prevent boot — usually `PAY_SERVICE_URL` misconfig ([server/app.ts:81-88](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L81-L88)).
-- **SSE timeouts:** Lambda caps HTTP at 30s; heartbeats every 30s, client uses exponential backoff up to 5 reconnects. Long-term, consider API Gateway WebSocket ([CLAUDE.md:305-318](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L305-L318)).
-- **Rollback:** see `docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md` ([README.md:573-578](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L573-L578)).
+Backend CI runs `npm run test:coverage` in `server/` on pull requests ([ci-cd-pipeline.yml:L146-L151](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/.github/workflows/ci-cd-pipeline.yml#L146-L151)).

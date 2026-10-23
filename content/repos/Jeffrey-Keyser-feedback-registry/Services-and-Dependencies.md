@@ -1,42 +1,33 @@
 ---
-title: Services and Dependencies
-description: Inbound consumers (apps + widgets) and outbound integrations (Pay, GitHub, Postgres, Struct, SMTP, AMQP) for feedback-registry.
+title: "Services and Dependencies"
+description: "Outbound dependencies of Feedback Registry and its confirmed versus unknown or expected callers, with source citations."
 ---
 
 # Services and Dependencies
 
-Feedback Registry is a hub: it pulls user identity from Pay, classification from Struct, persists in Postgres, pushes issues to GitHub, emails users via SMTP, and fans events out to per-app + global webhook subscribers ([README.md:117-148](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L117-L148)).
+Feedback Registry depends on identity, storage, GitHub, optional classification and messaging services. Some of these are configured by environment variables with defaults, so a default value is not proof that the service is running.
 
 ## Depends on
 
-### Shared `@jeffrey-keyser/*` packages
-
-- `@jeffrey-keyser/express-server-factory` — Express bootstrap, health checks, graceful shutdown ([server/app.ts:1-5](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/app.ts#L1-L5)).
-- `@jeffrey-keyser/pay-auth-integration` — JWT validation + user resolution against the Pay service ([server/app.ts:32-34](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/app.ts#L32-L34)).
-- `@jeffrey-keyser/database-base-config` — Postgres pool + migrations + session table support ([README.md:101-110](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L101-L110)).
-- `@jeffrey-keyser/api-errors` — standardized error responses + correlation IDs ([server/app.ts:6](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/app.ts#L6)).
-- `@jeffrey-keyser/express-middleware-suite` — logging, tracing, validation ([server/package.json:19-23](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/package.json#L19-L23)).
-- `@jeffrey-keyser/github-error-issues` — middleware that auto-files GitHub issues for uncaught server errors ([server/app.ts:7](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/app.ts#L7)).
-- `@jeffrey-keyser/message-contracts` — typed event names + payloads (e.g., `feedback.triaged`) ([server/services/FeedbackService.ts:57](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/services/FeedbackService.ts#L57)).
-- `@jeffrey-keyser/pay-api-types` — shared Pay user/session types ([server/package.json:24-25](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/package.json#L24-L25)).
-
-### External services
-
-- **Pay service** (`PAY_SERVICE_URL`, default `https://pay.jeffreykeyser.net`) — identity provider for both end-user JWTs and admin auth ([server/app.ts:27](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/app.ts#L27), [CLAUDE.md:223-229](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/CLAUDE.md#L223-L229)).
-- **PostgreSQL** with `feedback` schema (`apps`, `submissions`, `comments`, `notifications`) ([README.md:344-446](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L344-L446)).
-- **GitHub REST API** — `GitHubService` creates issues in `feedback.apps.github_repo` and consumes `issues.closed` / `issue_comment.created` webhooks at `/api/v1/webhooks/github` ([README.md:335-342](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L335-L342)).
-- **Struct service** — internal AI classifier at port 3032, used by `AutoTriageService` for schema-conformant labeling. When `STRUCT_URL` is unset, falls back to keyword triage ([CLAUDE.md:174-179](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/CLAUDE.md#L174-L179)).
-- **SMTP** via `nodemailer` — outbound user notifications driven by `feedback.notifications` rows ([server/package.json:30](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/package.json#L30), [README.md:430-446](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L430-L446)).
-- **AMQP broker** via `amqplib` — async event publishing for downstream consumers using `message-contracts` schemas ([server/package.json:18-19](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/package.json#L18-L19)).
-
-### Direct npm runtime deps worth noting
-
-`express@5`, `express-session`, `express-validator`, `express-rate-limit`, `jsonwebtoken`, `swagger-jsdoc` + `swagger-ui-express`, `pg`, `uuid`, `bcrypt` ([server/package.json:18-46](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/package.json#L18-L46)).
+- **Pay service** for JWT validation, defaulting to `https://pay.jeffreykeyser.net` ([server/app.ts:L34](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/app.ts#L34), [server/app.ts:L47](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/app.ts#L47)).
+- **PostgreSQL** through a `pg` pool. The root manifest declares `pg` ([package.json:L8](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/package.json#L8)). The server manifest declares `@jeffrey-keyser/database-base-config` ([server/package.json:L22](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/package.json#L22)). Pool limits are fixed in config ([server/config/env.ts:L102-L105](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L102-L105)).
+- **GitHub REST API** at `api.github.com` for issue creation. Creation requires `GITHUB_TOKEN` ([server/services/GitHubService.ts:L15](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/services/GitHubService.ts#L15), [server/services/GitHubService.ts:L27-L29](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/services/GitHubService.ts#L27-L29)).
+- **Jev endpoint** (`FEEDBACK_JEV_ENDPOINT`), defaulting to a loopback URL. Classification reports `not_configured` without a key file ([server/config/env.ts:L131](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L131), [server/services/JevTriageClassifier.ts:L195](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/services/JevTriageClassifier.ts#L195)).
+- **Struct service** (`STRUCT_URL`), defaulting to a localhost URL. CLAUDE.md says it is internal or local only; production status is unknown ([server/config/env.ts:L130](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L130), [CLAUDE.md:L238](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/CLAUDE.md#L238)).
+- **SMTP** for email, optional. Missing `SMTP_HOST` causes email to be skipped ([server/config/env.ts:L137-L141](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L137-L141), [server/services/FeedbackService.ts:L163](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/services/FeedbackService.ts#L163)).
+- **RabbitMQ** via `RABBITMQ_URL`, optional. The cron consumer binds `feedback.#` on the `cron.jobs` exchange ([server/infrastructure/messaging/RabbitMQConsumer.ts:L18-L19](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/infrastructure/messaging/RabbitMQConsumer.ts#L18-L19)).
+- **Analytics Pulse** via `ANALYTICS_PULSE_URL`, optional ([server/config/env.ts:L144](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L144), [server/services/FeedbackService.ts:L233-L241](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/services/FeedbackService.ts#L233-L241)).
 
 ## Consumed by
 
-- **Every ecosystem frontend** via `@jeffrey-keyser/feedback-widget` (peer React 18+, exported ESM+CJS). Widgets POST to `/api/v1/feedback` from Travel Map, Workout, Pay Portal, Pantry, Solo Vault, etc. ([packages/feedback-widget/package.json:1-30](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/packages/feedback-widget/package.json#L1-L30), [README.md:118-127](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L118-L127)).
-- **Admin SPA** (`client/` in this repo) — internal dashboard for triage, comments, resolution ([client/package.json:1-5](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/client/package.json#L1-L5)).
-- **Per-app webhook subscribers** — each registered app receives `feedback.triaged` / `feedback.resolved` callbacks via `WebhookDispatchService` ([server/services/FeedbackService.ts:463-516](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/services/FeedbackService.ts#L463-L516)).
-- **Global subscribers** — `GlobalWebhookService` fires `feedback.created` / `feedback.resolved` for ecosystem-wide listeners (e.g., dashboards, analytics) ([server/services/GlobalWebhookService.ts:19](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/services/GlobalWebhookService.ts#L19)).
-- **`github-error-issues`** consumes failures via shared middleware in this repo and tracks issues in the same GitHub repos that Feedback Registry targets ([server/app.ts:7](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/app.ts#L7), [README.md:8-14](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L8-L14)).
+**Confirmed by source in this repo:**
+
+- The `client/` admin SPA, which imports Pay auth helpers ([client/package.json:L9](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/client/package.json#L9)) and defaults its Pay URL to the API base ([client/src/config/auth.ts:L19-L22](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/client/src/config/auth.ts#L19-L22)).
+- The widget package, which exports `FeedbackWidget` ([packages/feedback-widget/src/index.ts:L1](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/packages/feedback-widget/src/index.ts#L1)). Its consumers are not listed in these sources.
+- GitHub webhook deliveries to `/api/v1/webhooks/github`. Signatures are checked when a secret is set ([server/routes/webhooks.ts:L126-L140](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/routes/webhooks.ts#L126-L140)). Whether a GitHub repository is configured to send them is unknown.
+
+**Expected or unknown (not confirmed by source):**
+
+- Per-app webhook receivers. Each receives a callback only when its app config sets `webhookUrl` ([server/services/WebhookDispatchService.ts:L22-L23](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/services/WebhookDispatchService.ts#L22-L23)). Receivers are unknown.
+- The global webhook receiver, configured by `FEEDBACK_WEBHOOK_URL` ([server/services/GlobalWebhookService.ts:L23](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/services/GlobalWebhookService.ts#L23)). Its owner is unknown.
+- The pilot apps named in the runtime-incidents guide (Pantry and Ping). The guide describes them as pilot deployments, and the verification notes say no live rollout was performed ([docs/runtime-incidents.md:L97-L100](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/docs/runtime-incidents.md#L97-L100), [docs/runtime-incidents.md:L184-L189](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/docs/runtime-incidents.md#L184-L189)).

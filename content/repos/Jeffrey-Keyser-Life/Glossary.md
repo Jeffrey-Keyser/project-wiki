@@ -1,62 +1,82 @@
 ---
-title: Glossary
-description: Repo-specific terms used in the Life codebase — voice pipeline stages, data shapes, and infra names.
+title: "Glossary"
+description: "Project-specific Life terms with source citations: voice pipeline, time tags, addenda, share tokens, synopses, and infrastructure names."
 ---
 
 # Glossary
 
 ### Voice entry pipeline
 
-The five-stage flow that takes a recording from microphone to saved journal entry: **record → transcribe → structure → resolve ambiguities → save**. Implemented across `server/services/voiceEntry.ts` and `server/routes/voiceEntry.ts` ([CLAUDE.md:101-105](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L101-L105)).
+The flow from recording to saved entry: record, transcribe, structure, resolve ambiguities, save. Server handlers are in the voice route file ([server/routes/voiceEntry.ts:82-87](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/voiceEntry.ts#L82-L87), [server/routes/voiceEntry.ts:310-317](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/voiceEntry.ts#L310-L317)).
 
-### Structure (verb)
+### Structure
 
-The AI step that takes a raw Whisper transcript and produces a punctuated rewrite, a generated title, and fuzzy-matched `@mention` and `#tag` candidates. Runs through GPT-4o-mini behind the AI Proxy ([README.md:21](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L21), [CLAUDE.md:103](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L103)).
+The step that turns a transcript into a title, content, matched people and tags, and ambiguity records. Unmatched IDs are dropped against the journal's known people and tags ([server/services/voiceEntry.ts:271-286](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/voiceEntry.ts#L271-L286)).
 
-### Ambiguity resolution
+### Ambiguity
 
-When the AI is uncertain which existing person or tag a token maps to, the user confirms via chips on the same screen — still without typing. The frontend surface is the `AmbiguityResolver` ([README.md:22](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L22), [CLAUDE.md:104](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L104)).
+A person or tag match the AI is unsure about. Each carries candidates and a question for the user ([server/services/voiceEntry.ts:169-174](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/voiceEntry.ts#L169-L174)).
 
-### Edges
+### Edge
 
-Bidirectional links between two journal entries that share at least one person or tag. Recalculated automatically when an entry changes; the table is `journal_entry_edge` ([CLAUDE.md:107-109](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L107-L109), [CLAUDE.md:139](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L139)).
+A link between two entries that share people, tags, or time tags. Edges are recalculated on save and store shared ID arrays ([server/types/index.ts:54-63](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/types/index.ts#L54-L63), [docs/time-tags-era-cloud-design.md:13](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/time-tags-era-cloud-design.md#L13)).
 
-### `@mention` / `#tag`
+### Time tag
 
-In-entry markup. `@mention` resolves to a row in `persons` via `journal_entry_person`; `#tag` resolves to a row in `tag` via `journal_entry_tag` ([CLAUDE.md:130-137](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L130-L137)).
+A named life period, such as an era, with optional start and end dates and a parent. Time tags are distinct from ordinary tags ([server/types/index.ts:81-90](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/types/index.ts#L81-L90)).
 
-### `life` schema
+### Life root
 
-The Postgres schema that holds the local user registry — `life.users` rows with `pay_uuid` and `email`, plus the atomic upsert `life.get_or_create_user(pay_uuid, email)` used by auto-provisioning ([CLAUDE.md:122-124](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L122-L124)).
+The reserved structural time tag named `Life`. Structuring filters it out so the AI never suggests it ([server/types/index.ts:92-93](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/types/index.ts#L92-L93), [server/services/voiceEntry.ts:238-240](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/voiceEntry.ts#L238-L240)).
 
-### `public` schema
+### Addendum
 
-The application schema: `journal`, `user_journal`, `journal_entry`, `persons`, `tag`, `journal_entry_edge`, `journal_entry_image`, and the join tables that wire entries to people and tags ([CLAUDE.md:126-140](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L126-L140)).
+A child entry linked to a parent through `parent_entry_id`. Parents load their addenda, and the service accepts new ones ([server/services/entries.service.ts:43-49](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/entries.service.ts#L43-L49), [server/services/entries.service.ts:96-106](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/entries.service.ts#L96-L106)).
 
-### API response envelope
+### Synopsis
 
-The `{ success: true, data: T }` wrapper applied to all server responses via `server/utils/response.ts` and unwrapped globally by the RTK Query `baseQuery` in `client/src/reducers/journal.api.ts` ([CLAUDE.md:143-144](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L143-L144)).
-
-### Pay auth integration
-
-The SSO library (`@jeffrey-keyser/pay-auth-integration`) and the Express middleware (`payAuthMiddleware.ts`) that validate Pay-issued tokens, map a `pay_uuid` to a local Life user, and create a default journal for new users on first login ([CLAUDE.md:147-150](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L147-L150)).
-
-### AI Proxy
-
-An external Jeffrey-Keyser service that fronts Whisper and GPT-4o-mini. Life sends all AI calls through it via `server/services/aiProxy.ts`; configured by `AI_PROXY_URL` and `AI_PROXY_API_KEY` ([README.md:84-85](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L84-L85), [CLAUDE.md:163-167](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L163-L167)).
-
-### beelink
-
-The self-hosted mini-PC that runs both systemd units, the Postgres container, and is fronted by Cloudflare Tunnel — the only production host for Life ([CLAUDE.md:56-61](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L56-L61)).
-
-### `beelink-deploy`
-
-The webhook listener at `https://deploy.jeffreykeyser.net/webhook` that validates the GitHub signature and runs `./deploy.sh` on the host when `master` advances ([CLAUDE.md:79-83](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L79-L83)).
-
-### Correlation ID
-
-The per-request UUID added by `server/middleware/correlationId.ts` and included in every Winston log line. Mounted first in `server/app.ts` so it is set before any other middleware can log ([server/app.ts:56-57](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L56-L57)).
+A generated summary of a person or tag, built from up to 50 recent entries and saved with a sentiment ([server/services/personSynopsis.service.ts:26](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/personSynopsis.service.ts#L26), [server/services/personSynopsis.service.ts:7](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/personSynopsis.service.ts#L7)).
 
 ### Synopsis embedding
 
-A vector representation of a person or tag synopsis, generated locally by `@xenova/transformers`, prepared at deploy time via `scripts/prepare-models.ts` and backfilled by `scripts/backfill-embeddings.ts` ([deploy.sh:13-15](https://github.com/Jeffrey-Keyser/Life/blob/master/deploy.sh#L13-L15), [deploy.sh:29-31](https://github.com/Jeffrey-Keyser/Life/blob/master/deploy.sh#L29-L31)).
+A 384-dimension vector of a synopsis, generated by a local model ([server/embed/index.ts:4-5](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/embed/index.ts#L4-L5)).
+
+### Share token
+
+A 64-character hex credential created for a journal. Only its holder can call the public query endpoint ([server/services/share.service.ts:36-38](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/share.service.ts#L36-L38), [server/routes/public.routes.ts:14-18](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/public.routes.ts#L14-L18)).
+
+### Struct service
+
+The analysis backend called through `STRUCT_URL` for structuring, synopses, edge explanations, and insights ([server/config/env.ts:133-134](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/env.ts#L133-L134)).
+
+### AI Proxy
+
+The intermediary for all Whisper and chat calls, configured by `AI_PROXY_URL` and `AI_PROXY_API_KEY` ([server/services/aiProxy.ts:119](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/aiProxy.ts#L119), [server/config/env.ts:224-225](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/env.ts#L224-L225)).
+
+### Pay auth
+
+The SSO integration. Requests are checked against the Pay service, and the Pay user ID maps to a local user ([server/routes/journals/index.ts:16](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/journals/index.ts#L16), [server/services/userResolution.ts:36-48](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/userResolution.ts#L36-L48)).
+
+### Response envelope
+
+Successful responses are wrapped by `ok()` from `server/utils/response.ts` ([server/routes/index.ts:2](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/index.ts#L2), [server/routes/index.ts:29](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/index.ts#L29)).
+
+### Shared AI key
+
+`AI_PROXY_API_KEY` may be read from a host secrets file when unset in the environment. Other keys in that file are ignored ([server/config/env.ts:84-88](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/env.ts#L84-L88), [docs/DEPLOYMENT.md:45](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L45)).
+
+### Entry-data export
+
+The JSON and CSV export of current entry text, dates, parent IDs, and people and tag labels. It is not a full backup ([docs/journal-export.md:3-15](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/journal-export.md#L3-L15)).
+
+### Spreadsheet literal-text convention
+
+In CSV exports, cells starting with `=`, `+`, `-`, `@`, or similar get one extra leading apostrophe. Readers must remove one ([docs/journal-export.md:52-59](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/journal-export.md#L52-L59)).
+
+### Correlation ID
+
+A per-request ID attached before other middleware so downstream logs can be joined ([server/app.ts:56-57](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/app.ts#L56-L57)).
+
+### Life schema and public schema
+
+`life` maps Pay users to local users. `public` holds journal data such as entries, persons, and tags ([CLAUDE.md:131-136](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L131-L136)).

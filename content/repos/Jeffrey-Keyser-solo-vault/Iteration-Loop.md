@@ -1,45 +1,56 @@
 ---
-title: Iteration Loop
-description: How a change moves from idea to merged, deployed, and published in Solo Vault.
+title: "Iteration Loop"
+description: "Contributor workflow for Solo Vault, grounded in the package scripts, database scripts, and GitHub Actions workflows."
 ---
 
 # Iteration Loop
 
-Solo Vault has a single trunk (`main`) and a CI/CD pipeline that gates merges with tests and ships both the server and CLI on push ([.github/workflows/ci-cd-pipeline.yml:1-151](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/.github/workflows/ci-cd-pipeline.yml#L1-L151)).
+Solo Vault uses `main` as its deploy branch. Pull requests run CI jobs, and pushes to `main` deploy the server and publish the CLI ([.github/workflows/ci-cd-pipeline.yml:L3-L7](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/.github/workflows/ci-cd-pipeline.yml#L3-L7)).
 
 ```mermaid
 sequenceDiagram
-  participant Dev as Developer
-  participant Local as Local dev (npm run dev)
-  participant DB as PostgreSQL (vault schema)
-  participant PR as GitHub PR
-  participant CI as CI/CD Pipeline
-  participant Lambda as AWS Lambda
-  participant GHP as GitHub Packages (CLI)
-
-  Dev->>Local: npm run dev (server)<br/>npm link (cli)
-  Local->>DB: server/db/deploy.sh runs schema + migrations
-  Dev->>Dev: edit route + DAL + CLI command + migration
-  Dev->>PR: push branch, open PR to main
-  PR->>CI: test-backend + test-cli jobs (on pull_request)
-  CI-->>PR: pass/fail
-  Dev->>PR: merge to main
-  PR->>CI: deploy-backend + publish-cli (on push to main)
-  CI->>Lambda: docker build → ECR push → Lambda update
-  CI->>GHP: npm publish @jeffrey-keyser/solo-vault-cli
+  participant Dev as "Developer"
+  participant DB as "PostgreSQL vault schema"
+  participant Local as "Local dev server"
+  participant PR as "GitHub pull request"
+  participant CI as "CI/CD workflow"
+  participant Lambda as "Lambda via composite action"
+  participant GHP as "GitHub Packages"
+  Dev->>DB: "Run server db deploy.sh"
+  Dev->>Local: "npm run dev"
+  Dev->>PR: "Open PR to main"
+  PR->>CI: "test-backend and test-cli jobs"
+  CI-->>PR: "Job results"
+  PR->>CI: "Merge push to main"
+  CI->>Lambda: "deploy-backend builds image and deploys"
+  CI->>GHP: "publish-cli runs npm publish"
 ```
 
-## Step-by-step
+## Local loop
 
-1. **Local environment.** Copy `server/.env.example` to `.env`, run `server/db/deploy.sh` to apply schema + migrations, then `npm run dev` from the repo root (which delegates to `server`) ([package.json:7](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/package.json#L7), [CLAUDE.md:25-49](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/CLAUDE.md#L25-L49)). On startup, `assertSchemaReady` validates the schema matches expectations before listening ([server/app.ts:28-38](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/app.ts#L28-L38)).
-2. **Make the change.** A new feature typically lands in three places: a route (`server/routes/*`), its DAL (`server/dal/*`), and the corresponding CLI command (`cli/src/commands/*`). Schema changes get a new numbered SQL file under `server/db/migrations/` (next number after `009_…`) ([server/db/migrations](https://github.com/Jeffrey-Keyser/solo-vault/tree/main/server/db/migrations)).
-3. **Tests.** Co-located `*.test.ts` files cover each route, DAL, middleware, and service module — run with `npm test` from `server/` (Jest) ([server/package.json:13-15](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/package.json#L13-L15)). CLI has its own Jest suite in `cli/tests/` ([cli/package.json:11-12](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/cli/package.json#L11-L12)).
-4. **Open PR.** CI runs `test-backend` and `test-cli` jobs (PR-only). Both use the shared `jeffrey-keyser/github-actions` composite action `node-build` with `npm ci` ([.github/workflows/ci-cd-pipeline.yml:10-71](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/.github/workflows/ci-cd-pipeline.yml#L10-L71)).
-5. **Merge to `main`.** Two deploy jobs fire on push: `deploy-backend` builds `Dockerfile_Server`, pushes to ECR, updates the Lambda; `publish-cli` runs `npm publish` to GitHub Packages ([.github/workflows/ci-cd-pipeline.yml:73-153](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/.github/workflows/ci-cd-pipeline.yml#L73-L153)).
-6. **Verify deploy.** Hit `https://vault.jeffreykeyser.net/health` (returns the configured `healthCheck` with the DB probe) ([server/app.ts:82-90](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/app.ts#L82-L90)).
+1. **Install and configure.** Run `npm install` in `server/` and copy `.env.example` to `.env` ([CLAUDE.md:L33-L35](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/CLAUDE.md#L33-L35)). Required variables include `VAULT_ENCRYPTION_KEY` and `CORS_ALLOWED_ORIGINS` outside test mode ([server/config/env.ts:L117-L138](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/config/env.ts#L117-L138)).
+2. **Apply the database.** Run `./deploy.sh` from `server/db/`. It applies migrations, schema, stored procedures, session tables, and seeders in development ([server/db/deploy.sh:L35-L67](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/db/deploy.sh#L35-L67)).
+3. **Start the server.** Run `npm run dev` from the repo root, which delegates to `server` ([package.json:L7](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/package.json#L7), [server/package.json:L8](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/package.json#L8)).
+4. **Test the CLI locally.** Run `npm run build` and `npm link` in `cli/` ([cli/package.json:L10](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/package.json#L10), [CLAUDE.md:L44-L48](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/CLAUDE.md#L44-L48)).
 
-## Conventions worth knowing
+## Change checklist
 
-- **Migrations are forward-only**, numbered sequentially, applied by `server/db/deploy.sh`; the file `server/db/schema-check.ts` enforces the resulting shape at cold start ([server/db/schema-check.ts](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/db/schema-check.ts), [server/app.ts:28-38](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/app.ts#L28-L38)).
-- **No staging environment** — `main` deploys straight to production Lambda. Treat PR review + tests as the gate.
-- **CLI version bumps** must be committed in `cli/package.json` before merge; `publish-cli` will fail if the version already exists in the registry ([cli/package.json:3](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/cli/package.json#L3)).
+- **Schema changes** need a SQL file and an update to `EXPECTED_COLUMNS`. The schema-check file says to keep them in sync ([server/db/schema-check.ts:L3-L6](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/db/schema-check.ts#L3-L6)). Deploy renders `{{SCHEMA}}` and applies files in filename order ([server/db/deploy.sh:L16-L19](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/db/deploy.sh#L16-L19)).
+- **CLI commands** are registered in `cli/src/index.ts` ([cli/src/index.ts:L36-L43](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/index.ts#L36-L43)).
+- **Lint** runs `eslint . --ext .ts` in `server/` ([server/package.json:L11](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/package.json#L11)). The excerpts do not show lint in CI.
+
+## Tests
+
+- **Server** tests run with `npm test` (Jest) ([server/package.json:L12](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/package.json#L12)). The Jest setup file `tests/setup.ts` is not in the excerpts ([server/jest.config.js:L20](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/jest.config.js#L20)).
+- **CLI** tests use Jest with roots at `tests` ([cli/package.json:L12](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/package.json#L12), [cli/jest.config.js:L4](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/jest.config.js#L4)).
+
+## CI gates
+
+- **test-backend** runs on pull requests only. It uses the external `node-build` composite action with Node 20 and `npm ci` ([.github/workflows/ci-cd-pipeline.yml:L11-L40](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/.github/workflows/ci-cd-pipeline.yml#L11-L40)). The workflow excerpt does not show a test command, so whether tests run depends on that action.
+- **test-cli** runs on pull requests and executes `npm run build` ([.github/workflows/ci-cd-pipeline.yml:L43-L71](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/.github/workflows/ci-cd-pipeline.yml#L43-L71)). It does not run the Jest suite in the excerpt.
+
+## Release path
+
+- **deploy-backend** runs only on pushes to `main`. It builds `Dockerfile_Server` and deploys through the `ecr-lambda-deploy` composite action ([.github/workflows/ci-cd-pipeline.yml:L73-L119](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/.github/workflows/ci-cd-pipeline.yml#L73-L119)).
+- **publish-cli** runs on pushes to `main`. It builds and runs `npm publish` to GitHub Packages ([.github/workflows/ci-cd-pipeline.yml:L121-L151](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/.github/workflows/ci-cd-pipeline.yml#L121-L151)). The version comes from `cli/package.json` ([cli/package.json:L3](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/package.json#L3)). The workflow does not bump it.
+- **Infrastructure** is changed by manual workflows: `terraform_bootstrap.yml` (plan, apply, or destroy) and `terraform_deploy.yml` ([.github/workflows/terraform_bootstrap.yml:L3-L5](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/.github/workflows/terraform_bootstrap.yml#L3-L5), [.github/workflows/terraform_deploy.yml:L3-L4](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/.github/workflows/terraform_deploy.yml#L3-L4)).

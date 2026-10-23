@@ -1,35 +1,53 @@
 ---
-title: dev-inbox — Home
-description: Manager/worker agent orchestration system that decomposes a natural-language task into parallel AI workers, reviews them, and merges to main.
+title: "dev-inbox — Home"
+description: "Multi-provider agent orchestration that turns a software request into isolated, verified, reviewed, and recoverable delivery."
 ---
 
 # dev-inbox
 
-`dev-inbox` is a manager/worker orchestration pipeline that takes a natural-language software task, breaks it into parallel subtasks, delegates each to an AI agent running in an isolated git worktree, reviews the results, and merges approved changes back to `main` ([README.md:10-19](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L10-L19)).
+dev-inbox is a multi-provider agent orchestration system for reviewed, recoverable software delivery ([README.md:L3](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L3)). It turns a software request into isolated implementation work, verification, review, and a controlled landing decision. It can do this for one interactive request, a dependency-ordered multi-slice plan, or preapproved work admitted through a durable unattended queue ([README.md:L8-L11](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L8-L11)).
 
 ## At a glance
 
-- **Type**: bash-first orchestration engine with a Go state-machine binary (`bin/plan-managerd`) and a small Node heartbeat publisher ([README.md:230-235](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L230-L235)).
-- **Entry points**: `/orchestrate` Claude slash command and `scripts/manager-standalone.sh "<prompt>"` for CLI/webhook callers ([README.md:71-94](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L71-L94)).
-- **Core roles**: Manager, Planner, Scout, Worker, Reviewer, Revision, Observer — each is an Agent CLI session, most run inside a tmux pane and a per-task git worktree ([README.md:47-57](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L47-L57)).
-- **State model**: filesystem-based, event-sourced. `results/<runId>/dispatch-events.jsonl` is the source of truth; every other file is a projection ([README.md:60-67](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L60-L67), [CLAUDE.md:9-12](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L9-L12)).
-- **Concurrency**: a global semaphore caps the system at 12 concurrent agent CLI processes across workers, reviewers, scouts, prospectors, and observer ([README.md:222-228](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L222-L228)).
-- **Stack**: bash, tmux, jq, git, Node ≥ 18, RabbitMQ, multi-provider AI CLIs (Claude / Codex / Gemini / Kimi / Copilot) ([README.md:229-235](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L229-L235)).
+- **Version and license:** 2.0.0, MIT, private npm package ([package.json:L2-L5](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/package.json#L2-L5)).
+- **Operating modes:**
+  - standalone runs through `scripts/manager-standalone.sh` or `/orchestrate`;
+  - the plan manager handles multi-slice plans;
+  - the `bin/dev-inbox-queued` work queue, which is shadow-only by default;
+  - the read-only `/prospector` for analysis ([README.md:L42-L47](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L42-L47)).
+- **Providers:** Claude, Codex, Copilot, Gemini, Kimi, and OpenCode ([README.md:L21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L21)).
+- **Runtime split:** the Go `plan-managerd` owns projection, state transitions, provider selection, failure classification, supervision, and recovery. Bash stays at the agent, tmux, git, and operator edges ([README.md:L170-L172](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L170-L172)).
+- **State:** filesystem-based. `results/<runId>/dispatch-events.jsonl` is canonical for run state transitions, and role writers own the artifact bodies ([CLAUDE.md:L13-L14](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/CLAUDE.md#L13-L14)).
+- **Host requirements:** Linux, macOS, or WSL2 with bash, git, tmux, jq, uuidgen, Node.js 18+, Go, and at least one authenticated agent CLI ([README.md:L53-L54](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L53-L54)).
 
 ## Who uses it
 
-- A single human operator triggers a run via `/orchestrate` or `scripts/manager-standalone.sh`, optionally with `--auto-approve`, `--auto-revise`, `--observe`, `--enrich`, or `--create-pr` ([README.md:79-94](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L79-L94)).
-- Agency HQ consumes run artifacts via a watcher contract that reads canonical `results/<runId>/startup.json`, `plan.json`, `failed.json`, and `summary.json` paths ([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md) — "Watcher contract (Agency HQ)" section).
-- Downstream tooling (Image Studio, prompt-registry, RabbitMQ heartbeat consumers) is wired in via the spawn scripts and `scripts/publish-artifacts.sh` ([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md) — `publish-artifacts.sh` row in Key Paths table).
+- **An operator** starts runs from the CLI or from Claude Code's `/orchestrate`. The operator approves or edits the plan unless `--auto-approve` is passed ([README.md:L91-L126](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L91-L126)).
+- **The plan manager** dispatches each plan slice as its own sub-orchestration run ([docs/plan-manager-quickstart.md:L3-L8](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/plan-manager-quickstart.md#L3-L8)).
+- **The work queue** wraps branch-ready standalone runs with durable admission. It is not an auto-merge service ([README.md:L201-L218](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L201-L218)).
+- **Agency HQ** is named in source comments as a watcher of startup and failure markers. It is optional for a portable install, and this snapshot does not establish how it is deployed ([scripts/manager-standalone.sh:L61-L66](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/scripts/manager-standalone.sh#L61-L66), [README.md:L85-L86](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L85-L86)).
 
-## How work moves through it
+## Main flow
 
-A run flows through a fixed lifecycle: gather context → plan → approve → optional scout enrichment → spawn workers in parallel worktrees → block on tmux signals → spawn reviewers → optional revision loop → observer report → human accept/reject → merge to `main` and clean up worktrees ([README.md:164-178](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L164-L178)). Each step appends events to `dispatch-events.jsonl`, which the Go plan-manager projects into the per-task `result.json`, `review.json`, and `verify.json` files that Agency HQ reads ([CLAUDE.md:9-12](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L9-L12)).
+A standalone run moves through eight steps ([README.md:L123-L137](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L123-L137)):
+
+1. **Plan:** a planner produces the tasks.
+2. **Approve:** the operator accepts or edits the plan.
+3. **Enrich (optional):** scouts gather read-only context.
+4. **Implement:** workers run in separate tmux panes and git worktrees.
+5. **Verify:** the declared commands run and produce a receipt.
+6. **Review:** reviewers inspect identity-bound evidence.
+7. **Revise:** a bounded revision follows `request-changes`.
+8. **Complete:** the work lands as a merge, a PR/MR, or a branch-ready handoff.
+
+An observer can monitor the run and report process findings. It does not take part in implementation or review decisions ([README.md:L139-L140](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L139-L140)).
+
+Operator gates stay in front of destructive, ambiguous, or production-sensitive actions ([README.md:L22](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L22)). Queue preapproval authorizes execution only; it does not authorize a merge or a production deployment ([README.md:L313](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L313)).
 
 ## Wiki pages
 
-- [Architecture](./architecture/) — modules, roles, and the Go/bash split.
-- [Iteration Loop](./iteration-loop/) — how a change moves from prompt to merged commit inside this repo.
-- [Services and Dependencies](./services-and-dependencies/) — inbound and outbound integrations.
-- [Operations](./operations/) — install, run, systemd units, observability.
-- [Glossary](./glossary/) — repo-specific terms.
+- [Architecture](../architecture/): components, the Go/Bash split, and state contracts.
+- [Iteration Loop](../iteration-loop/): the contributor test and CI workflow.
+- [Services and Dependencies](../services-and-dependencies/): what dev-inbox depends on and who consumes it.
+- [Operations](../operations/): start, install, health, and observability.
+- [Glossary](../glossary/): project-specific terms.

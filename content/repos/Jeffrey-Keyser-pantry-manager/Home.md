@@ -1,32 +1,37 @@
 ---
-title: Pantry Manager
-description: Standalone inventory service for products, pantry stock, and purchase history in the Jeffrey-Keyser ecosystem.
+title: "Pantry Manager"
+description: "Overview of the Pantry Manager inventory service: what it owns, who calls it, how requests flow, and where to read next."
 ---
 
 # Pantry Manager
 
-Express 5 + PostgreSQL service that owns the inventory domain — products, pantry items, purchase history, receipt parsing, and reorder nudges. Backbone for the Pantry Intelligence roadmap (low-stock alerts, reorder suggestions, expiry tracking) and feeds Agency HQ's morning briefing ([README.md:3-10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L3-L10)).
+Pantry Manager is a standalone inventory management service for the Jeffrey-Keyser ecosystem. It tracks products, pantry stock levels, and purchase history with a data model that is independent of Ping's transaction layer ([README.md:L3](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L3)). The README states its goals as owning the inventory domain, backing a Pantry Intelligence roadmap, feeding cross-domain insights, and providing a line-item capture foundation ([README.md:L7-L10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L7-L10)).
 
 ## At a glance
 
-- **Stack** — Express 5, TypeScript, PostgreSQL 17 (`pantry_manager` DB, `pantry` schema), port 3052 ([README.md:13-17](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L13-L17))
-- **Auth** — pay-auth-integration user resolution + project-wide `X-API-Key` middleware ([src/app.ts:27-48](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/app.ts#L27-L48), [src/middleware/api-key-auth.ts:6-20](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/middleware/api-key-auth.ts#L6-L20))
-- **Resources** — products, pantry-items, receipts (Taggun OCR), nudges, admin ([src/routes/versions/v1/index.ts:11-15](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/routes/versions/v1/index.ts#L11-L15))
-- **Client** — React 19 + Redux Toolkit + Vite SPA under `client/` ([client/package.json:11-18](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/client/package.json#L11-L18))
-- **Deploy** — user systemd unit `pantry-manager.service`, served at `https://pantry-manager.jeffreykeyser.net` ([pantry-manager.service:1-23](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/pantry-manager.service#L1-L23), [README.md:49-58](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L49-L58))
+- **Package** — `pantry-manager` 0.1.0, marked private, a Node service rather than a published library ([package.json:L2-L4](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L2-L4)).
+- **Stack** — Express 5 and TypeScript; PostgreSQL 17 with a `pantry` schema as documented in the README ([README.md:L14-L15](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L14-L15)).
+- **Port** — 3052 by default in config ([src/config/env.ts:L24](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/config/env.ts#L24)).
+- **Auth** — Pay-auth user resolution plus an API key check for non-public paths ([src/app.ts:L27-L48](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/app.ts#L27-L48), [src/middleware/api-key-auth.ts:L4-L20](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/middleware/api-key-auth.ts#L4-L20)).
+- **Resources** — products, pantry-items, receipts, nudges, admin, and authority, mounted under the v1 router ([src/routes/versions/v1/index.ts:L12-L17](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/routes/versions/v1/index.ts#L12-L17)).
+- **Client** — a React SPA in `client/` that lists pantry items ([client/src/pages/DashboardPage.tsx:L6](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/client/src/pages/DashboardPage.tsx#L6)).
 
 ## Who uses it
 
-Cross-domain consumer: Agency HQ morning briefing pulls stock data. Future: meal planning, grocery list gen, line-item extraction from Ping transactions ([README.md:5-10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L5-L10)).
+- **Confirmed in source:** the bundled SPA calls `/api/v1/pantry-items` through RTK Query ([client/src/store/api/pantryItems.ts:L23](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/client/src/store/api/pantryItems.ts#L23), [client/src/store/api/pantryItems.ts:L35](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/client/src/store/api/pantryItems.ts#L35)).
+- **Documented only:** the README says Agency HQ's morning briefing is already wired to stock data ([README.md:L9](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L9)). No consumer code is in the excerpts, so this is unverified here.
+- **Roadmap:** meal planning and grocery list generation are future integrations ([README.md:L9](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L9)).
 
-## How work moves through it
+## Main flow
 
-Schema-first: migrations in `migrations/` define `pantry.*` tables → DAL functions in `src/dal/` wrap pool queries → versioned routers under `src/routes/versions/v1/` mount per resource → `src/app.ts` composes middleware via `express-server-factory`. Build with `tsc`, restart user systemd unit ([README.md:38-56](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L38-L56)).
+A request enters the Express app, passes API key checks and user resolution, then reaches a versioned router. Routers call DAL functions that issue `pg` pool queries ([src/app.ts:L86-L104](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/app.ts#L86-L104), [src/db/connection.ts:L4](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/db/connection.ts#L4)).
 
-## Wiki pages
+Writes to products and pantry items require receipt lineage. Without it, the API returns a 422 with code `receipt-required` ([src/dal/inventoryLineage.ts:L1-L2](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/inventoryLineage.ts#L1-L2), [src/routes/versions/v1/pantry-items.ts:L31-L34](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/routes/versions/v1/pantry-items.ts#L31-L34)). This is a notable departure from the README's plain CRUD description ([README.md:L19-L36](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L19-L36)).
 
-- [Architecture](./architecture/)
-- [Iteration Loop](./iteration-loop/)
-- [Services and Dependencies](./services-and-dependencies/)
-- [Operations](./operations/)
-- [Glossary](./glossary/)
+## Explore
+
+- [Architecture](../architecture/) — components, contracts, and request layers.
+- [Iteration Loop](../iteration-loop/) — how contributors change and ship code.
+- [Services and Dependencies](../services-and-dependencies/) — outbound integrations and known callers.
+- [Operations](../operations/) — commands, deployment, health, and logs.
+- [Glossary](../glossary/) — project-specific terms.

@@ -1,42 +1,44 @@
 ---
-title: beelink-deploy
-description: Self-hosted webhook deploy service on the Beelink — fans GitHub push and PR events out to per-repo deploy scripts and a RabbitMQ package bus.
+title: "beelink-deploy"
+description: "Overview of beelink-deploy, the self-hosted webhook deploy service on the Beelink that runs per-repo deploy scripts and publishes merge and push events to RabbitMQ."
 ---
 
 # beelink-deploy
 
-Single-host deploy controller. Runs as a systemd service on the Beelink, listens for GitHub webhooks, and either (a) executes a per-repo `deploy.sh` against the target service or (b) re-publishes merge events onto a RabbitMQ topic exchange for downstream consumers like `openclaw-bridge` and the wiki pipeline ([README.md:1-9](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L1-L9), [src/server.ts:115-216](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L115-L216)).
+beelink-deploy is a self-hosted webhook deploy service for the Beelink. It receives GitHub push events and runs deploy scripts for configured services ([README.md:L3](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L3)). It also publishes merged-PR and default-branch push events to RabbitMQ exchanges for downstream consumers ([src/server.ts:L183-L204](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L183-L204), [src/rabbit.ts:L10-L11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L10-L11)).
+
+Its files live under `DATA_DIR`, including `status.json` and protected attempt logs ([src/status.ts:L6](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/status.ts#L6), [src/deployment-logs.ts:L78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deployment-logs.ts#L78)).
 
 ## At a glance
 
-- Node.js + Express, TypeScript, ESM ([package.json:1-15](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/package.json#L1-L15))
-- Two dependencies: `express`, `amqplib` ([package.json:17-20](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/package.json#L17-L20))
-- Listens on `127.0.0.1:9000` by default; fronted by Cloudflare Tunnel ([src/config.ts:57-64](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/config.ts#L57-L64), [README.md:61-69](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L61-L69))
-- Two repo classes: **service repos** (`config/repos.json`, deploy on push) and **package repos** (`config/packages.json`, re-publish on PR merge) ([src/server.ts:131-216](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L131-L216))
-- HMAC-SHA256 webhook signature check ([src/github.ts:6-28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/github.ts#L6-L28))
-- Post-deploy health poll + Telegram notification ([src/server.ts:19-58](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L19-L58), [src/healthCheck.ts:11-37](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/healthCheck.ts#L11-L37))
-- Status persisted to `data/status.json` and served at `/api/status` ([src/status.ts:6-7](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/status.ts#L6-L7), [src/server.ts:91-94](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L91-L94))
-- Hot reload of repo config on `SIGHUP`/`SIGUSR2`; graceful drain on `SIGTERM`/`SIGINT` (240s) ([src/index.ts:6-55](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/index.ts#L6-L55))
+- TypeScript ESM service built with `tsc`; runtime dependencies are `express` and `amqplib` ([package.json:L5-L19](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/package.json#L5-L19)).
+- Binds `127.0.0.1:9000` by default ([config/config.json:L2-L3](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/config/config.json#L2-L3), [src/config.ts:L60-L61](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/config.ts#L60-L61)).
+- Two repo classes: service repos in `config/repos.json` deploy on push; package repos in `config/packages.json` publish on merged PRs ([src/server.ts:L277-L280](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L277-L280), [src/server.ts:L207-L211](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L207-L211)).
+- Webhook HMAC check runs when `GITHUB_WEBHOOK_SECRET` is set ([src/server.ts:L156-L161](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L156-L161), [src/github.ts:L6-L28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/github.ts#L6-L28)).
+- Deploys serialize per repository; duplicate revisions are deduplicated ([README.md:L108-L112](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L108-L112)).
+- Only `GET /health`, `POST /webhook` and `POST /deploy/:owner/:repo` bypass the Pay admin gate ([src/server.ts:L65-L70](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L65-L70), [src/server.ts:L96-L109](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L96-L109)).
+- Repo config hot-reloads on SIGHUP or SIGUSR2 ([src/index.ts:L24-L38](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L24-L38)).
+- Shutdown waits up to 240 seconds for in-flight deploys ([src/index.ts:L7](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L7), [src/index.ts:L44-L56](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L44-L56)).
 
 ## Who uses it
 
-- **Jeff (operator).** Configures repos in `config/*.json`, triggers manual deploys via `POST /deploy/:owner/:repo` with `X-Deploy-Key` ([src/server.ts:273-308](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L273-L308)).
-- **GitHub.** Pushes `push` and `pull_request` webhooks at `https://deploy.jeffrey-keyser.com/webhook` ([README.md:71-78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L71-L78)).
-- **Downstream consumers on RabbitMQ.** `packages.events` topic feeds `openclaw-bridge`; `wiki.events` topic feeds the central wiki pipeline ([src/rabbit.ts:10-11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L10-L11), [src/rabbit.ts:108-180](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L108-L180)).
+- **Operator.** Edits `config/*.json`, reads protected logs and can trigger manual deploys ([README.md:L31-L42](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L31-L42), [README.md:L101-L106](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L101-L106)).
+- **GitHub.** Documented webhook setup sends `push` events to `/webhook` on `deploy.jeffreykeyser.net` ([README.md:L71-L78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L71-L78)). Live delivery configuration is not in the snapshot.
+- **RabbitMQ consumers.** Consumer code is not in the snapshot. `openclaw-bridge` and a wiki pipeline are named only in comments ([src/rabbit.ts:L4](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L4), [src/server.ts:L180-L182](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L180-L182)). See [Services & Dependencies](../services-and-dependencies/).
+- **Assistants.** A host assistant already authorized for the shared Pay account can read protected logs through a script ([scripts/read-deployment-log.mjs:L1-L3](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/scripts/read-deployment-log.mjs#L1-L3), [docs/deployment-logs.md:L108-L124](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/docs/deployment-logs.md#L108-L124)).
 
-## How work moves through it
+## Main flow
 
-1. GitHub fires webhook → Express receives at `/webhook` with raw body cached for HMAC ([src/server.ts:75-129](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L75-L129)).
-2. Signature validated; event dispatched by `X-GitHub-Event` header ([src/server.ts:115-198](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L115-L198)).
-3. `push` → if it targets the repo's default branch, publish `wiki.update` (carrying the changed files) before any deploy gate; skipped for package repos and the wiki content repo, opt-out with `[skip wiki]` ([src/wiki-push.ts:18-53](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/wiki-push.ts#L18-L53), [src/server.ts:247-255](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L247-L255)).
-4. `push` to a service repo → run `deploy.sh` if present, else `git pull && npm ci --production && systemctl restart <service>` ([src/deploy.ts:141-160](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L141-L160)).
-5. `pull_request` merged → publish to `wiki.events` for **all** repos (wiki updater self-filters un-onboarded repos); if the repo is also a package repo, publish to `packages.events` ([src/server.ts:147-210](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L147-L210)).
-6. After deploy: store last 20 log entries in memory, write status JSON, poll `healthUrl`, notify Telegram ([src/deploy.ts:21-78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L21-L78), [src/server.ts:240-269](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L240-L269)).
+1. GitHub posts an event to `/webhook`, and the signature is checked ([README.md:L8](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L8)).
+2. A default-branch push publishes a `wiki.update` event before any deploy gate ([src/server.ts:L266-L274](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L266-L274)).
+3. A service push is matched by repo and branch, skipped on `[skip deploy]`, or scheduled ([src/server.ts:L283-L304](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L283-L304)).
+4. The runner executes `deploy.sh` or the default sequence ([src/deploy.ts:L272-L303](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L272-L303)).
+5. The result is stored, status is recorded, health is polled and Telegram is notified when configured ([src/server.ts:L333-L352](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L333-L352)).
 
 ## Wiki pages
 
-- [Architecture](./architecture/) — modules, exchanges, signal handlers
-- [Iteration Loop](./iteration-loop/) — how a change to this repo ships to itself
-- [Services & Dependencies](./services-and-dependencies/) — inbound webhooks, outbound exchanges, target services
-- [Operations](./operations/) — systemd unit, ports, logs, health probe
-- [Glossary](./glossary/) — repo-specific terms
+- [Architecture](../architecture/): components, routes and storage contracts.
+- [Iteration Loop](../iteration-loop/): how a change to this repo ships to itself.
+- [Services & Dependencies](../services-and-dependencies/): confirmed and unknown callers.
+- [Operations](../operations/): commands, environment, health and logs.
+- [Glossary](../glossary/): project-specific terms.

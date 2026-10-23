@@ -1,186 +1,67 @@
 ---
-title: dev-inbox — Operations
-description: Start runs, inspect them in tmux and results/, recover leaked state, and find logs.
+title: "Operations"
+description: "Start, install, health, and observability commands for dev-inbox, with documented versus verified runtime clearly separated."
 ---
 
-This is the runbook for `dev-inbox`. Every command here is the one
-documented in the dev-inbox source — see the `file:line` citations if
-behavior diverges from what you observe.
+# Operations
 
-## Start a run
+dev-inbox is not a library. It is a set of CLI entry points plus optional systemd user services. Every command below comes from repository docs or source. **None of it was verified against a running host for this wiki.**
 
-### From inside an Agent CLI session
+## Start
 
-Use the `/orchestrate` slash command. The full spec lives at
-[`.claude/commands/orchestrate.md`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/.claude/commands/orchestrate.md)
-([CLAUDE.md:17](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L17)).
-The slash command is the Manager brain; the user prompt becomes the
-run's seed task.
+- **Check the host first** with `scripts/install-check.sh` ([README.md:L56-L58](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L56-L58)).
+- **Configure** by copying `.env.example` to `.env` and running `chmod 600` on it ([README.md:L68-L72](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L68-L72)).
+- **Standalone run:** `scripts/manager-standalone.sh "<task>"`.
+  - Flags: `--auto-approve`, `--enrich`, `--create-pr`, `--branch-only`, `--no-auto-revise`, and `--observe`/`--no-observe` ([scripts/manager-standalone.sh:L290-L302](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/scripts/manager-standalone.sh#L290-L302)).
+  - `--retry-failed <runId>` re-runs only the tasks that did not land ([CLAUDE.md:L53](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/CLAUDE.md#L53)).
+- **Plans:** `scripts/plan-manager.sh start|status|pause|abort|resume` ([README.md:L181-L185](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L181-L185)).
+  - Never edit `state.json`, `slices.json`, or `events.jsonl` by hand ([docs/plan-manager-operations.md:L16-L18](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/plan-manager-operations.md#L16-L18)).
+- **Queue:** build it with `make build-dev-inbox-queued`, then use `health`, `report`, `attention list`, or `job inspect` ([README.md:L207-L213](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L207-L213)).
+  - The daemon tick defaults to 60s and can be overridden with `DEV_INBOX_QUEUE_TICK_INTERVAL_SECONDS` ([cmd/dev-inbox-queued/main.go:L262-L270](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/dev-inbox-queued/main.go#L262-L270)).
 
-### From a shell / webhook
+## Deploy and update
 
-```bash
-scripts/manager-standalone.sh "<prompt>" [--auto-approve] [--auto-revise] [--verbose]
-```
+- **Release-tarball installs:**
+  - `scripts/install-check.sh update <tag>` stages and probes a release before atomically switching `.portable/active`.
+  - `scripts/install-check.sh rollback` restores the previous release ([docs/PORTABLE-INSTALL.md:L113-L116](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/PORTABLE-INSTALL.md#L113-L116), [docs/PORTABLE-INSTALL.md:L184-L187](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/PORTABLE-INSTALL.md#L184-L187)).
+  - `results/`, `plans/`, `data/`, `queue/`, and `.env` survive updates ([docs/PORTABLE-INSTALL.md:L131-L137](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/PORTABLE-INSTALL.md#L131-L137)).
+- **Owner-invoked promotion:** `runtime-release build|promote|rollback` ([cmd/runtime-release/main.go:L28-L30](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/runtime-release/main.go#L28-L30)).
+  - Its default health gate is `http://127.0.0.1:3099/health`. That is a flag default, not a confirmed live port ([cmd/runtime-release/main.go:L47](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/runtime-release/main.go#L47)).
+- **systemd units:** install with `bash scripts/install-systemd-units.sh`.
+  - The installer enables every timer and starts the supervise daemon ([systemd/README.md:L54-L61](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L54-L61)).
+  - Installing and enabling units is an operator action; workers never do it ([systemd/README.md:L24-L28](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L24-L28)).
 
-This is the standalone entrypoint used for webhook starts and
-scripted invocations. It initializes `results/<runId>/`, writes the
-run-level `README.md`, and atomically writes the canonical
-`startup.json` (and `failed.json` on failure) for Agency HQ
-([CLAUDE.md:35](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L35),
-[README.md:14-19](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/README.md#L14-L19)).
+## Units of note
 
-Useful manager flags:
+All of these are documented, not verified as running.
 
-- `--auto-approve` — skip the human plan-approval gate.
-- `--auto-revise` — auto-spawn revision workers on reviewer feedback.
-- `--observe` / `--no-observe` — toggle the Observer side-channel
-  agent (default: enabled —
-  [CLAUDE.md:11](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L11)).
-- `--enrich` — opt into per-task Scout enrichment passes.
+- **`dev-inbox-plan-supervise.service`:** always on. It handles recovery and auto-heal and emits a `plan.supervise.tick` every 60s by default ([systemd/README.md:L9](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L9)).
+  - The standalone watchdog timer has been retired and folded into supervise ([systemd/README.md:L42-L48](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L42-L48)).
+- **Heartbeat monitor:** checks the supervise heartbeat every 2 minutes ([systemd/README.md:L10](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L10)).
+- **Cleanup timers:**
+  - zombie session cleanup runs hourly with a 24h age floor ([systemd/README.md:L13](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L13));
+  - maintenance cleanup runs daily ([systemd/README.md:L11-L12](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L11-L12));
+  - dispatch-events TTL cleanup runs daily with a 30-day default ([systemd/README.md:L14-L15](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L14-L15)).
+- **Publishers and triage:**
+  - runstream publisher ([systemd/README.md:L19](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L19));
+  - issue publisher ([systemd/README.md:L20](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L20));
+  - issue triage, which defaults to `off` ([systemd/README.md:L21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L21)).
+- **Disabled by default:** the Tier 4 durability sweep and the triage analyzer timers ([systemd/README.md:L33-L38](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L33-L38)).
 
-## Inspect a running run
+## Health checks
 
-### Find the tmux session
+- **Supervisor:**
+  - `systemctl --user status dev-inbox-plan-supervise` and follow its `journalctl` log;
+  - `bin/plan-managerd supervise --once` runs a single pass without systemd ([systemd/README.md:L100-L111](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L100-L111)).
+- **Latest tick diagnostic:** a `jq` filter over `results/supervise-events.jsonl` ([systemd/README.md:L150-L153](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L150-L153)).
+- **Timers and runstream:** `systemctl --user list-timers '*dev-inbox*'` and `runstream-publisher.js health|backlog` ([systemd/README.md:L158-L173](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L158-L173)).
+- **Issue publisher:** `issue-publisher status` reports outbox counts ([cmd/issue-publisher/main.go:L257-L276](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/issue-publisher/main.go#L257-L276)).
 
-Sessions are named `dev-inbox-<run-token>` by
-[`tmux_session_name_for_run`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/spawn-common.sh#L293-L296)
-in `scripts/lib/spawn-common.sh`.
+## Observability
 
-```bash
-tmux ls                            # list all dev-inbox sessions
-tmux attach -t dev-inbox-<runId>   # detach with Ctrl-b d
-```
-
-Each role window is named for its component (e.g. `worker-<taskId>`,
-`reviewer-<taskId>`) — see
-[`ensure_tmux_session`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/spawn-common.sh#L311-L350).
-
-### Inspect the on-disk run
-
-Everything lands under `results/<runId>/`
-([CLAUDE.md:11](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L11)):
-
-| Path | What it is |
-|------|------------|
-| `results/<runId>/startup.json` | Liveness marker — proves the run started ([CLAUDE.md:35](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L35)) |
-| `results/<runId>/failed.json` | Liveness marker — written on failure ([CLAUDE.md:35](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L35)) |
-| `results/<runId>/plan.json` | Canonical task plan ([CLAUDE.md:21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L21)) |
-| `results/<runId>/dispatch-events.jsonl` | Source of truth for run state ([CLAUDE.md:13](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L13)) |
-| `results/<runId>/tasks/<taskId>/result.json` | Per-slice worker result ([CLAUDE.md:27](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L27)) |
-| `results/<runId>/tasks/<taskId>/review.json` | Reviewer verdict ([CLAUDE.md:33](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L33)) |
-| `results/<runId>/tasks/<taskId>/scout.md` | Optional Scout enrichment |
-| `results/<runId>/tasks/<taskId>/revision-<attempt>.md` | Per-revision feedback |
-| `results/<runId>/observer.json` | Observer meta-analysis ([CLAUDE.md:11](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L11)) |
-
-To follow live activity, tail the event log:
-
-```bash
-tail -F results/<runId>/dispatch-events.jsonl | jq .
-```
-
-## Recover leaked state
-
-```bash
-scripts/recover-orphans.sh             # dry-run report
-scripts/recover-orphans.sh --fix       # actually fix
-scripts/recover-orphans.sh --max-age 4 # only consider runs younger than 4h
-```
-
-From the script header
-([recover-orphans.sh:1-13](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/recover-orphans.sh#L1-L13)),
-it handles three failure modes:
-
-1. **Completed workers that never got reviewed** — spawns the missing
-   Reviewer.
-2. **Stale tmux sessions where all tasks are fully resolved** — kills
-   the session.
-3. **Leaked concurrency slots from dead processes** — removes stale
-   slot files from `results/.slots/`.
-
-A complementary backfill scanner,
-[`scripts/mark-orphaned-runs-failed.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/mark-orphaned-runs-failed.sh),
-walks every `startup.json` and writes a matching `failed.json` for
-runs that never produced a plan
-([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)).
-
-Operator-targeted recovery is also possible per slice:
-
-```bash
-scripts/plan-manager-tools/retry-reviewer.sh <planId> <sliceId> <runId>
-```
-
-Re-spawns only the Reviewer for an existing slice, preserving Worker
-artifacts and worktree state
-([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)).
-
-## Override a stalled slice merge
-
-When an operator takes over a slice whose merge has stalled, use
-[`scripts/plan-manager-tools/override-merge-slice.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/plan-manager-tools/override-merge-slice.sh).
-The override is recorded in the plan journal (`plans/<planId>/events.jsonl`)
-as a `plan.slice.override_merged` event. The event names the slice, the
-run, the `mergedSha`, the branch, a `reason`, and an `origin`. Use
-`origin` `operator` for a human decision. Records with any other origin
-are not treated as operator takeovers.
-
-The directive-reading v3 measurement
-(`orchmeasure directive-reading --reading-version v3 --plans-dir DIR`)
-joins these events to admitted runs only when both the plan id and the
-run id match. It reads the journals without appending to or repairing
-them. See
-[docs/directive-reading-v3.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/docs/directive-reading-v3.md).
-
-## Clean up legacy zombie sessions
-
-Abandoned `dev-inbox-*` tmux sessions from earlier runs are reaped by
-`scripts/cleanup-zombie-sessions.sh`. It runs hourly from
-`dev-inbox-zombie-cleanup.timer` (with `--force`) and as a pass inside
-`scripts/maintenance-cleanup.sh`. Without `--force` it is a dry run that
-reports `WOULD-KILL` and kills nothing.
-
-```bash
-scripts/cleanup-zombie-sessions.sh                # dry run
-scripts/cleanup-zombie-sessions.sh --force        # kill eligible sessions
-scripts/cleanup-zombie-sessions.sh --max-age 48   # only sessions older than 48h
-```
-
-A session is preserved when it has attached clients, is younger than the
-max age, has a viewer or handoff window, has a live worker-like workload
-or descendant process in a pane, belongs to a correlated active run, or
-has an incomplete or contradictory observation. Each kill is recorded in
-the cleanup provenance file with actor `legacy-session-cleanup`. Passes
-are serialized by `results/.legacy-session-cleanup.lock`.
-
-## Where logs land
-
-| Source | Where to read |
-|--------|---------------|
-| `dispatch-events.jsonl` | `tail -F results/<runId>/dispatch-events.jsonl` |
-| Manager stderr (standalone) | `/tmp/dev-inbox-manager-stderr-<runId-short>.txt` ([manager-standalone.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/manager-standalone.sh)) |
-| Planner stderr | `results/<runId>/planner.stderr` |
-| Zombie cleanup timer | `journalctl --user -u dev-inbox-zombie-cleanup.service` ([systemd/README.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/systemd/README.md)) |
-| Bake telemetry retention | `journalctl --user -u dev-inbox-bake-telemetry.service` ([CLAUDE.md:69](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L69)) |
-| Plan watchdog | `journalctl --user -u dev-inbox-plan-watchdog.service` |
-| Heartbeat publisher | optional file at `$HEARTBEAT_LOG_FILE` ([heartbeat-publisher.js:23](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/heartbeat-publisher.js#L23)) |
-
-## Common knobs
-
-The most impactful environment variables for an operator:
-
-- `DEV_INBOX_MAX_SLOTS` (default `12`) — global concurrency cap
-  ([acquire-slot.sh:22](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/acquire-slot.sh#L22)).
-- `DEV_INBOX_SLOT_TIMEOUT_SECONDS` — slot-acquire timeout.
-- `PROGRESS_POLL_DISABLED`, `PROGRESS_POLL_INTERVAL`,
-  `PROGRESS_POLL_MAX_SECONDS` — Worker progress polling
-  ([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)).
-- `RABBITMQ_URL` — heartbeat publisher URL
-  ([heartbeat-publisher.js:46](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/heartbeat-publisher.js#L46)).
-- `PLAN_MANAGER_BACKEND=bash` — force the bash projector during the
-  bake period
-  ([CLAUDE.md:11](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L11)).
-- `DEV_INBOX_LEGACY_CLEANUP_OBS_TIMEOUT`, `DEV_INBOX_LEGACY_CLEANUP_KILL_TIMEOUT`,
-  `DEV_INBOX_LEGACY_CLEANUP_LOCK_WAIT` — timeouts and lock wait for the
-  legacy zombie-session cleanup.
-
-A fuller list is in the [Glossary](../glossary/).
+- **Per-run timeline:** `results/<runId>/dispatch-events.jsonl`.
+  - Routing events can be filtered with `jq` on `inference_*` ([docs/inference-layer.md:L21-L26](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/inference-layer.md#L21-L26)).
+- **Plans:** `plans/<planId>/events.jsonl` and each slice's `dispatch.log` ([docs/plan-manager-quickstart.md:L67-L72](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/plan-manager-quickstart.md#L67-L72)).
+- **Manager stderr:** mirrored to `/tmp/dev-inbox-manager-stderr-<short>.txt` ([scripts/manager-standalone.sh:L152-L155](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/scripts/manager-standalone.sh#L152-L155)).
+- **Missing worktrees:** results carry cleanup provenance that explains them ([docs/cleanup-provenance.md:L3-L8](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/cleanup-provenance.md#L3-L8)).
+- **Not established by this snapshot:** listening ports, metrics endpoints, and which units actually run on any host.

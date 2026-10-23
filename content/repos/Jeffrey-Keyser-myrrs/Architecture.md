@@ -1,42 +1,40 @@
 ---
-title: Architecture
-description: Internal layout of the Myrrs client, API, services, and database.
+title: "Myrrs Architecture"
+description: "Components, contracts, and request path for the Myrrs client, Express API, domain logic, and PostgreSQL schema."
 ---
 
 # Architecture
 
-Two-workspace monorepo: a React/Vite SPA talks to an Express API that owns a PostgreSQL schema ([CLAUDE.md:54-60](https://github.com/Jeffrey-Keyser/myrrs/blob/main/CLAUDE.md#L54-L60)).
+Myrrs is a two-workspace monorepo. A React SPA in `src/client` calls an Express API in `src/server`, which reads and writes a PostgreSQL schema and uses the domain-core package for rule evaluation ([package.json:L4-L7](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/package.json#L4-L7), [src/server/package.json:L18](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/package.json#L18)).
 
 ```mermaid
 flowchart LR
-  Browser[React SPA<br/>Vite :3036] -->|HTTPS + cookies| API[Express API :3035]
-  API -->|pg pool| DB[(PostgreSQL<br/>schema: myrrs)]
-  API -->|proxy| PayAuth[PayAuth<br/>pay.jeffreykeyser.net]
-  subgraph API_internals[API internals]
-    Routes[routes/*] --> Services[services/*]
-    Services --> DAL[dal/*]
-    Services --> RuleEngine[domain-core RuleEngine]
-    DAL --> DB
-  end
-  API --- Routes
+  SPA["React SPA in src client"] -->|"HTTP with cookies"| API["Express app in src server app.ts"]
+  API --> MW["Middleware chain before routers"]
+  MW --> PAYAUTH["PayAuth routes and middleware"]
+  MW --> RESOLVE["resolveUserData and UserResolutionService"]
+  API --> ROUTERS["Routers under api paths"]
+  ROUTERS --> DOMAIN["domain-core RuleEngine and TrackingService"]
+  ROUTERS --> DAL["DAL repositories on pg pool"]
+  ROUTERS --> PAYAPI["PayAuth users API proxy"]
+  RESOLVE --> DAL
+  DAL --> DB["PostgreSQL schema myrrs"]
 ```
 
-## Role contracts
+## Components and contracts
 
-**SPA entry.** `src/client/src/main.tsx` mounts `<App/>`; routing, layout, and Redux store live under `src/client/src/app` and `src/client/src/reducers` ([src/client/src/main.tsx](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/src/main.tsx#L1), [src/client/src/reducers](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/src/reducers)).
+**Client entry.** Two entry files exist, `src/client/src/main.tsx` and `src/client/src/index.tsx`, and both call `createRoot` ([src/client/src/main.tsx:L16-L22](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/src/main.tsx#L16-L22), [src/client/src/index.tsx:L8-L17](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/src/index.tsx#L8-L17)). Which one Vite loads is unknown because `index.html` is not in the excerpts. The app wraps Redux, PayAuth, and routing ([src/client/src/App.tsx:L92-L114](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/src/App.tsx#L92-L114)).
 
-**API composition root.** `src/server/app.ts` builds the Express app via `@jeffrey-keyser/express-server-factory`, registers PayAuth, CORS, security headers, sessions on `connect-pg-simple`, and mounts routers ([src/server/app.ts:64-133](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L64-L133)).
+**API composition root.** `src/server/app.ts` calls `createExpressApp` with CORS, a database-backed session store, PayAuth, and two custom middleware that run before the routers ([src/server/app.ts:L64-L68](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/app.ts#L64-L68), [L119-L121](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/app.ts#L119-L121)). CORS allows `localhost:3002` and `https://` forms of `ORIGIN_BASE_URL` ([src/server/app.ts:L53-L62](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/app.ts#L53-L62)).
 
-**Routers.** Feature routers live in `src/server/routes/`: `routines`, `schedule`, `rules`, `ruleConfigurations`, `analytics`, `profile`, plus `auth` mounted from PayAuth ([src/server/app.ts:14-20](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L14-L20), [src/server/app.ts:123-132](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L123-L132)).
+**Routers.** Mounted paths are `/`, `/auth`, `/api/profile`, `/api/routines`, `/api/schedule`, `/api/rules`, `/api/user-rule-configurations`, and `/api/analytics` ([src/server/app.ts:L123-L132](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/app.ts#L123-L132)).
 
-**Services.** Domain-core services are called directly from route handlers; the local `services/routines/index.ts` is intentionally empty after refactor ([src/server/services/routines/index.ts:1-3](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/services/routines/index.ts#L1-L3)). Local services that remain: `UserResolutionService` (auto-provision on first request) and `users/preferences` ([src/server/services/UserResolutionService.ts](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/services/UserResolutionService.ts), [src/server/services/users/preferences.ts](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/services/users/preferences.ts)).
+**Known path issue.** The rule configuration router defines its own `/user-rule-configurations` prefixes ([src/server/routes/ruleConfigurations.ts:L31](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/routes/ruleConfigurations.ts#L31), [L76](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/routes/ruleConfigurations.ts#L76)) under a mount that already ends in that segment ([src/server/app.ts:L130](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/app.ts#L130)). As written, the effective path appears doubled. Verify before relying on it.
 
-**Repositories (DAL).** Repository pattern wraps the `pg` pool. Concrete repos: `RoutineRepository`, `TaskRepository`, `PreferencesRepository`, `RuleConfigurationRepository`, `UserSchedulingPreferencesRepository`, `UsersDal`, all extending `BaseRepository` ([src/server/dal](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/dal), [src/server/dal/BaseRepository.ts](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/dal/BaseRepository.ts)).
+**Domain logic.** Routes import domain-core services and rules directly. The routines router registers `TemporalRule`, `MaxDailyLimitsRule`, and `FrequencyRule` ([src/server/routes/routines.ts:L4-L15](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/routes/routines.ts#L4-L15), [L43-L46](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/routes/routines.ts#L43-L46)). The local `services/routines` folder no longer holds wrappers ([src/server/services/routines/index.ts:L1-L3](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/services/routines/index.ts#L1-L3)). The module design note describes a planned `RoutineScheduler` class ([scheduler_service_module.md:L14](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/services/routines/scheduler_service_module.md#L14)); treat it as design intent, not current code.
 
-**Rule engine.** Sourced from `@jeffrey-keyser/myrrs-domain-core` — extensible `Rule` interface with `RuleEngine` orchestrating hard/soft constraints; route handlers call into it directly ([src/server/package.json:18](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/package.json#L18), [CLAUDE.md:96-103](https://github.com/Jeffrey-Keyser/myrrs/blob/main/CLAUDE.md#L96-L103)).
+**Data access.** Repositories extend `BaseRepository`, which holds the shared `pg` pool ([src/server/dal/BaseRepository.ts:L9-L16](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/dal/BaseRepository.ts#L9-L16)). The DAL index exports `RoutineRepository`, `TaskRepository`, and `PreferencesRepository` ([src/server/dal/index.ts:L2-L7](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/dal/index.ts#L2-L7)). `UsersDal` calls the database functions `get_or_create_user` and `provision_myrrs_user` ([src/server/dal/UsersDal.ts:L38](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/dal/UsersDal.ts#L38), [L67](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/dal/UsersDal.ts#L67)).
 
-**Auth middleware.** `setupPayAuth` from `@jeffrey-keyser/pay-auth-integration` registers `/auth/*` routes and a middleware that runs ahead of business routes; `resolveUserData` then hydrates `req` with local user record ([src/server/app.ts:38-51](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L38-L51), [src/server/app.ts:119-121](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L119-L121)).
+**Schema contract.** The deploy script expects six tables ([src/server/db/deploy_complete_schema.sh:L122-L129](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/db/deploy_complete_schema.sh#L122-L129)). The SQL files themselves are not in the excerpts.
 
-**Database bootstrap.** `db/init.ts` is invoked on app load via `app.ts`; deployable schema and migrations live in `src/server/db/` ([src/server/app.ts:23-31](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L23-L31), [src/server/db](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/db)).
-
-**Client state.** RTK Query slices map 1:1 onto API surfaces: `routinesApi`, `scheduleApi`, `rulesApi`, `analyticsApi`, `preferencesApi`, `profileApi`, plus a `uiSlice` for ephemeral UI state ([src/client/src/reducers](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/src/reducers)).
+**Client sections.** The configuration page switches among routines, scheduling, rules, and profile sections ([src/client/src/pages/ConfigurationPage.tsx:L38-L47](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/src/pages/ConfigurationPage.tsx#L38-L47)). The profile section is a placeholder ([src/client/src/components/config/ProfileSettings.tsx:L23-L24](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/src/components/config/ProfileSettings.tsx#L23-L24)).

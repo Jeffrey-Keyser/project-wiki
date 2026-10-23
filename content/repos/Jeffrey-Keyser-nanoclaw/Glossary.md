@@ -1,36 +1,51 @@
 ---
-title: Glossary
-description: NanoClaw-specific terms with one-paragraph definitions and source-file citations.
+title: "Glossary"
+description: "NanoClaw-specific terms with source citations."
 ---
 
 # Glossary
 
-**Agency HQ.** External orchestration service that owns dispatch slots, worktrees, stall detection, and recovery flows. NanoClaw is the worker side: it asks for tasks, reports outcomes, and writes back `dispatch_blocked_until` via `PUT /api/v1/tasks/:id` after repeated dispatch failures ([README.md:76](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L76), [CLAUDE.md:113-129](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L113-L129)).
+**Agent event.** A tracked unit of agent work with statuses such as running, completed and failed. It is stored in SQLite and pruned after 7 days ([src/db/index.ts:L49-L62](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/db/index.ts#L49-L62), [src/lifecycle.ts:L185](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/lifecycle.ts#L185)). Agent events can be submitted through `/api/v1/agent-events` ([README.md:L157-L161](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L157-L161)).
 
-**Channel.** A self-registering inbound/outbound surface that talks to the user. Channels live in `src/channels/` and register themselves at startup via the registry. Telegram is the only channel in core; others arrive via skills or forks ([CLAUDE.md:16](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L16), [README.md:72-86](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L72-L86)).
+**Agent runner.** The host process that handles one invocation per run. It reads JSON on stdin and writes its result to stdout between `---NANOCLAW_OUTPUT_START---` and `---NANOCLAW_OUTPUT_END---` markers. Provider selection is delegated to a `RunnerBackend` ([container/agent-runner/src/index.ts:L1-L6](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/agent-runner/src/index.ts#L1-L6), [container/agent-runner/src/index.ts:L33-L34](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/agent-runner/src/index.ts#L33-L34)).
 
-**Credential proxy.** Host-side process that holds the real Anthropic credentials and exposes a local API for the agent so secrets never enter the agent's environment. Bind port defaults to `3001` (`CREDENTIAL_PROXY_PORT`) ([README.md:79](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L79), [src/config.ts:47-50](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L47-L50)).
+**Agency HQ.** An external service that owns task dispatch. NanoClaw's polling dispatcher is a legacy compatibility mode ([src/agency-hq-dispatcher.ts:L45-L51](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/agency-hq-dispatcher.ts#L45-L51)).
 
-**Dispatch pool.** The slot-lifecycle manager that owns concurrent worker slots, startup recovery, and drain behavior. Implemented in `src/dispatch-pool.ts`. Parallel mode (4 slots) is gated by a metrics check, with `DISPATCH_PARALLEL` as the override switch ([CLAUDE.md:23](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L23), [CLAUDE.md:94-110](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L94-L110)).
+**Capture execution.** An agent run against a diagnostic copy of a group, with no extra mounts. Its output is captured rather than sent to the channel ([src/message-dispatcher.ts:L55-L98](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/message-dispatcher.ts#L55-L98)).
 
-**`dispatch_blocked_until`.** Timestamp set on a task by NanoClaw after 3 consecutive dispatch failures, blocking retry for 24 hours. Clearing it requires direct SQL against Agency HQ's Postgres `tasks` table — restarting NanoClaw only resets the in-memory retry counter ([CLAUDE.md:113-129](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L113-L129)).
+**Channel.** A messaging adapter that implements `ownsJid`, `sendMessage` and related methods, and registers itself when imported ([docs/channel-development.md:L7-L12](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/channel-development.md#L7-L12)). Telegram is the only channel in core ([src/channels/index.ts:L10-L11](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/channels/index.ts#L10-L11)).
 
-**Group.** A scoped conversational context with its own files, sessions, mounts, and `CLAUDE.md` / `CLAUDE.local.md` instruction files under `groups/{name}/`. `CLAUDE.local.md` is the editable source of truth; `CLAUDE.md` may be rewritten at container spawn into a composed wrapper ([README.md:74](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L74), [CLAUDE.md:55-58](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L55-L58)).
+**CLAUDE.local.md.** The editable per-group memory and persona file. `groups/{name}/CLAUDE.md` is a generated wrapper around it ([CLAUDE.md:L30-L31](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/CLAUDE.md#L30-L31)).
 
-**Group queue.** Per-group FIFO of pending work, instantiated once in `lifecycle.ts` as `new GroupQueue()` and consumed by the dispatch pool ([src/lifecycle.ts:80](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L80)).
+**Credential proxy.** A local HTTP proxy that holds the real credentials. Agent sessions are given only a placeholder auth value ([docs/SECURITY.md:L73-L79](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SECURITY.md#L73-L79)).
 
-**IPC watcher.** Filesystem-based IPC mechanism that watches a directory for task / message / feedback files and routes them to handlers in `src/ipc/`. Started by `lifecycle.ts` and polled at `IPC_POLL_INTERVAL` (1s) ([CLAUDE.md:18](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L18), [src/config.ts:55-56](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L55-L56)).
+**Dispatch slot.** A worker slot used by legacy parallel dispatch. Each slot moves through the states acquiring → executing → releasing → free. Slots are stored in SQLite by default, or in Agency HQ's PostgreSQL when `DISPATCH_SLOTS_PG=true` ([src/dispatch-pool.ts:L4-L25](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/dispatch-pool.ts#L4-L25)). There are four slots ([src/dispatch-pool-constants.ts:L2](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/dispatch-pool-constants.ts#L2)).
 
-**Main channel / main group.** The user's self-chat that acts as the admin surface — group registration, cross-group task visibility, narrow admin actions, remote control — gated separately from non-admin groups ([README.md:74](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L74)).
+**`dispatch_blocked_until`.** A penalty timestamp the legacy loop sets on a task after three failed dispatch attempts ([src/dispatch-loop.ts:L34-L42](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/dispatch-loop.ts#L34-L42)). Clearing it requires SQL in Agency HQ ([CLAUDE.md:L131-L140](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/CLAUDE.md#L131-L140)).
 
-**Mount allowlist.** JSON allowlist file at `~/.config/nanoclaw/mount-allowlist.json`, stored *outside* the project root specifically so it is never mounted into the agent. Validates what host paths agents may see ([src/config.ts:22-28](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L22-L28)).
+**`DISPATCH_PARALLEL`.** Controls parallel dispatch ([CLAUDE.md:L121-L127](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/CLAUDE.md#L121-L127)):
+- `true` force-enables it.
+- `false` is a kill switch.
+- Leaving it unset lets the metrics gate decide.
 
-**Runtime adapter.** Abstraction in `src/runtime-adapter.ts` describing the agent runtime contract (`RuntimeKind`, `RuntimeDescriptor`, `AgentRuntimeAdapter`). The only shipping implementation is `TmuxRuntimeAdapter` (`kind: 'tmux-host'`) with `preferredTarget: 'micro-vm'` noting the next architectural step ([src/runtime-adapter.ts:5-40](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/runtime-adapter.ts#L5-L40)).
+**GroupQueue.** The queue that orders per-group work, instantiated once in lifecycle ([src/lifecycle.ts:L84](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/lifecycle.ts#L84)).
 
-**Sender allowlist.** JSON allowlist at `~/.config/nanoclaw/sender-allowlist.json` controlling which message senders are accepted; loaded by `src/sender-allowlist.ts` and used by the router ([src/config.ts:29-34](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L29-L34), [src/lifecycle.ts:42-46](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L42-L46)).
+**IPC.** JSON request files placed in `data/ipc/{group}/messages|tasks/` and processed by `src/ipc.ts` ([docs/IPC.md:L5](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/IPC.md#L5)).
 
-**Skill.** A markdown file under `.claude/skills/` that teaches Claude Code how to transform a NanoClaw installation. Skill PRs must not modify source files — they are *instructions*, not pre-built code ([CONTRIBUTING.md:9-15](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CONTRIBUTING.md#L9-L15)).
+**Main group.** The trusted admin group. Only the main group can register groups or target other groups' chats and tasks ([docs/SECURITY.md:L56-L67](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SECURITY.md#L56-L67)).
 
-**Solo Vault.** Encrypted secrets backend at `https://api.vault.jeffreykeyser.net`. When `SOLO_VAULT_TOKEN` is set, secrets are fetched from `/v1/secrets/:project/:env/:key`; otherwise NanoClaw falls back to `.env` ([src/config.ts:72-80](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L72-L80)).
+**Metrics gate.** Agency HQ's `/notifications/metrics/gate` check. It must pass before parallel dispatch is enabled automatically ([src/agency-hq-dispatcher.ts:L249-L293](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/agency-hq-dispatcher.ts#L249-L293)).
 
-**Trigger pattern.** Regex built from `ASSISTANT_NAME` (default `Andy`) that decides whether an inbound message wakes the agent — `^@Andy\b` case-insensitive by default ([src/config.ts:11-15](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L11-L15), [src/config.ts:67-70](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L67-L70)).
+**Mount allowlist.** The file `~/.config/nanoclaw/mount-allowlist.json`. It is stored outside the project and is never mounted into agent sessions ([src/config.ts:L22-L28](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L22-L28)). It contains `allowedRoots` and `blockedPatterns` ([config-examples/mount-allowlist.json:L1-L25](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/config-examples/mount-allowlist.json#L1-L25)).
+
+**Runtime adapter.** The interface that sits between orchestration and execution. Its only implementation is `TmuxRuntimeAdapter`, with kind `tmux-host` ([src/runtime-adapter.ts:L22-L42](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/runtime-adapter.ts#L22-L42)).
+
+**Sender allowlist.** The file `~/.config/nanoclaw/sender-allowlist.json`, which controls who can trigger the agent ([src/config.ts:L29-L34](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L29-L34), [src/message-dispatcher.ts:L166-L174](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/message-dispatcher.ts#L166-L174)).
+
+**Service guard.** A PreToolUse hook that blocks agents from running `systemctl` against nanoclaw ([container/hooks/service-guard.sh:L1-L8](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/hooks/service-guard.sh#L1-L8)).
+
+**Skill.** A markdown file in `.claude/skills/` that teaches Claude Code how to transform a NanoClaw installation ([CONTRIBUTING.md:L11](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/CONTRIBUTING.md#L11)).
+
+**Trigger pattern.** The regular expression `^@<ASSISTANT_NAME>\b`, matched case-insensitively. `ASSISTANT_NAME` defaults to `Andy` ([src/config.ts:L11-L12](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L11-L12), [src/config.ts:L67-L70](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L67-L70)).
+
+**Worker slot JID.** The internal chat identifier `internal:dev-inbox:N` assigned to a dispatch slot ([src/dispatch-slot-backends.ts:L17-L19](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/dispatch-slot-backends.ts#L17-L19)).

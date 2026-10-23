@@ -1,48 +1,50 @@
 ---
-title: Logos — Glossary
-description: Repo-specific terms — page, page_section, proposal, source, theme, struct call, native-CLI dispatch, RRF.
+title: "Logos — Glossary"
+description: "Project-specific terms: contexts, pages, proposals, project documents, corpus fingerprints, retrieval and bus vocabulary."
 ---
 
 # Glossary
 
-### Hub
-The collection of themed `page` rows in the `logos` schema — the "living" output of the system. Distinct from the archive of raw `source` rows ([README.md:5](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L5)).
+**Hub.** The living set of themed pages that Logos distills from ingested sources. Agents query it for cited answers ([README.md:L5](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/README.md#L5)).
 
-### Page
-A themed entry in the hub. Not a single markdown blob — a `page` row plus an ordered list of `page_section` rows, with markdown rendered from the structured form on read. Keyed by `slug`, versioned via `page.version` ([README.md:122-132](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L122-L132)).
+**Context.** An isolation boundary that scopes sources, ingest jobs, pages and feeds. Slugs must match `[a-z0-9][a-z0-9-]{0,63}` ([src/routes/v1/contexts.ts:L15-L18](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/contexts.ts#L15-L18)). A context named `project-<project>-<goal>` holds the requirements for one durable reconciliation goal ([docs/project-documents.md:L21-L33](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/docs/project-documents.md#L21-L33)).
 
-### page_section
-An ordered, typed unit of page content. `kind ∈ {overview, key_insight, open_question, see_also, citation_note}`. Diff-style proposals operate on these semantic units rather than fighting freeform-text diffs ([README.md:128-130](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L128-L130)).
+**Default context.** The seeded `default` slug ([src/config/context.ts:L5](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/config/context.ts#L5)). Ingests and queries that omit a context use it, and it cannot be renamed ([src/routes/v1/contexts.ts:L84-L86](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/contexts.ts#L84-L86)).
 
-### Source
-A single ingested URL row in `logos.source`. Unique on `url`; holds `raw_text`, `extraction_method`, `content_hash`. Sources are chunked into `source_chunk` rows for citation grounding ([README.md:138](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L138)).
+**Source.** One ingested URL per context. It records the `extraction_method` used: `readability`, `pdf` or `agent:<provider>` ([src/worker/ingest.ts:L301-L336](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/worker/ingest.ts#L301-L336)).
 
-### Theme
-A tag namespace row in `logos.theme`. Has a slug, name, description, and a `vector(384)` embedding so the worker can pick candidate pages by theme similarity at proposal time ([README.md:140](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L140), [README.md:192](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L192)).
+**ingest_job.** The worker's queue row. Its statuses are `queued`, `fetching`, `extracting`, `propose_pending`, `done` and `failed` ([src/db/repos/ingest-job.ts:L3-L9](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/db/repos/ingest-job.ts#L3-L9)).
 
-### Proposal
-A pending change to a page — every mutation to the hub goes through this gate. State machine: `pending → approved | rejected | commented → superseded`. `commented` re-runs through Struct with the `logos/proposal-revise` prompt ([README.md:254-266](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L254-L266), [src/proposals/revise.ts](https://github.com/Jeffrey-Keyser/logos/blob/main/src/proposals/revise.ts)).
+**Already-known.** The short-circuit result when a URL already exists in the target context and `force` is not set ([src/ingest/service.ts:L104-L116](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/ingest/service.ts#L104-L116)).
 
-### Struct call
-A `POST http://localhost:3032/api/v1/run` to `Jeffrey-Keyser/struct` with `{prompt, input, schema}`. Struct loops Claude CLI internally on parse/validation failure and returns a typed object. Used for proposal generation, proposal revision, and answer synthesis ([README.md:226-248](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L226-L248), [src/llm/struct.ts](https://github.com/Jeffrey-Keyser/logos/blob/main/src/llm/struct.ts)).
+**Page and page_section.** A page is a row plus ordered, typed sections. Section kinds are `overview`, `key_insight`, `open_question`, `see_also` and `citation_note`. Markdown is rendered from the sections on read ([README.md:L139-L149](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/README.md#L139-L149), [src/pages/render.ts:L7-L13](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/pages/render.ts#L7-L13)).
 
-### Native CLI dispatch
-The non-Struct LLM path — `src/agents/native-cli.ts` shells out to whichever installed CLI agent (`claude`, `gh copilot`, `gemini`) is available, acquires a concurrency slot via lockfile, pipes a prompt in, returns stdout. Primary use is extraction fallback when Readability returns < 500 chars ([README.md:88-89](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L88-L89), [README.md:175-177](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L175-L177)).
+**Proposal.** A pending change to the hub. Statuses are `pending`, `approved`, `rejected`, `commented` and `superseded`. Kinds include `create_page` and `update_page` ([src/db/repos/proposal.ts:L3-L15](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/db/repos/proposal.ts#L3-L15)). Only `pending` and `commented` proposals can be approved or rejected ([src/routes/v1/proposals.ts:L117-L121](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/proposals.ts#L117-L121)).
 
-### extraction_method
-A `source` column recording which extractor produced `raw_text`: `readability`, `agent:claude`, `agent:copilot`, `agent:gemini`. Lets ops audit fallback rate per provider ([README.md:177](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L177)).
+**Revise / superseded.** A comment triggers a synchronous Struct call using the `logos/proposal-revise` prompt. The call produces a new pending proposal, and the old one becomes `superseded` ([src/proposals/revise.ts:L13](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/revise.ts#L13), [src/proposals/revise.ts:L131-L142](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/revise.ts#L131-L142)).
 
-### page_chunk / source_chunk
-Embedding-row tables. `page_chunk` powers query-time retrieval; `source_chunk` powers article-level citation grounding. Both use `vector(384)` with an HNSW cosine index ([README.md:139-144](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L139-L144), [README.md:151-154](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L151-L154)).
+**Theme, canonical and alias.** Themes are free-form labels invented by the LLM and linked to pages ([src/proposals/apply.ts:L314-L332](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/apply.ts#L314-L332)). Merging two themes makes the loser an alias of the winner, which becomes canonical ([src/routes/v1/themes.ts:L137-L166](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/themes.ts#L137-L166)).
 
-### RRF (Reciprocal Rank Fusion)
-The fusion step in `/v1/query`: take top-20 chunks by HNSW cosine and top-20 by tsvector rank, combine with RRF (k=60), dedup by page. Handles the "embedding misses the proper noun" failure mode without learned reranking ([README.md:101](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L101), [README.md:328-329](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L328-L329)).
+**Struct call.** A schema-validated JSON request to Struct's `/api/v1/run` endpoint. The input is embedded in the prompt ([src/llm/struct.ts:L60-L70](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/llm/struct.ts#L60-L70)).
 
-### ingest_job
-The queue table the in-process worker polls with `SELECT ... FOR UPDATE SKIP LOCKED`. Status enum: `queued | fetching | extracting | proposing | done | failed`. Idempotent on `source.url` — a second ingest of a known URL returns the existing job unless `?force=true` ([README.md:146](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L146), [README.md:163-166](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L163-L166), [README.md:218](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L218)).
+**Native agent dispatch.** A free-form CLI call to Codex, Copilot or Gemini. It acquires a lockfile slot first. A `pin` value deterministically picks the first provider to try ([src/agents/native-cli.ts:L110-L120](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/agents/native-cli.ts#L110-L120)).
 
-### logos.events
-The RabbitMQ topic exchange Logos publishes to and consumes from. Routing keys are namespaced under `logos.*` and payloads are typed via `@jeffrey-keyser/message-contracts` ([README.md:360-376](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L360-L376), [package.json:22](https://github.com/Jeffrey-Keyser/logos/blob/main/package.json#L22)).
+**RRF.** Reciprocal Rank Fusion of the semantic and lexical result lists, with k=60 and 20 candidates per list ([src/query/retrieve.ts:L68-L70](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/retrieve.ts#L68-L70)).
 
-### Phase PRD
-A self-contained, agent-executable spec under `prds/phase-*.md`. Each phase is meant to be handed off as a single file to one worker; the README §16 ledger tracks which phases are ✅ Done ([README.md:469-470](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L469-L470), [prds/](https://github.com/Jeffrey-Keyser/logos/blob/main/prds)).
+**Semantic distance gate.** The 0.5 cosine-distance ceiling that drops off-topic vector hits before fusion ([src/query/retrieve.ts:L111-L116](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/retrieve.ts#L111-L116)).
+
+**Empty-hub.** The query outcome when nothing is retrieved. The answer is "Logos has nothing indexed on this topic yet." ([src/query/run.ts:L66](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/run.ts#L66)).
+
+**Degraded answer.** The retrieval-only response returned when synthesis fails ([src/query/run.ts:L68-L78](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/run.ts#L68-L78)).
+
+**Project document.** A stable-ID document whose revisions are immutable. Kinds are `markdown`, `text` or `url`, and documents can be reversibly deactivated ([src/db/repos/project-document.ts:L3-L17](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/db/repos/project-document.ts#L3-L17)).
+
+**Corpus snapshot / fingerprint.** A snapshot is the complete set of active documents in a context. The fingerprint is a `sha256:` hash over the sorted document IDs, content hashes and titles ([src/project-documents/service.ts:L49-L54](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/project-documents/service.ts#L49-L54)).
+
+**logos.context.changed.** An event emitted only when a context's fingerprint actually changes ([src/project-documents/service.ts:L100-L123](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/project-documents/service.ts#L100-L123)).
+
+**logos.events.** The topic exchange Logos publishes to. It is asserted on every connect ([src/bus/rabbit.ts:L60-L65](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bus/rabbit.ts#L60-L65)).
+
+**Digest.** A daily summary of pending proposals, published as `logos.digest.ready` ([src/cron/digest.ts:L64-L69](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/cron/digest.ts#L64-L69)).
+
+**embedding_version.** A per-chunk version number compared against `CURRENT_EMBEDDING_VERSION` to find rows that need re-embedding ([src/embed/constants.ts:L1-L6](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/embed/constants.ts#L1-L6)).

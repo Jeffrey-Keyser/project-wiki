@@ -1,43 +1,45 @@
 ---
-title: Operations
-description: Deploy, runtime, observability, and on-call notes for the Agency HQ service.
+title: "Operations"
+description: "Start, deploy, test, health and observability for the Agency HQ service, with documented versus verified runtime."
 ---
 
 # Operations
 
-Agency HQ is a deployable Express service, not a library — it ships as a systemd user unit that runs `dist/bin/www.js` on port 3040 ([agency-hq.service:9-19](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/agency-hq.service#L9-L19)).
+Agency HQ is a deployable service, not a library: `npm start` runs `node dist/bin/www.js` ([package.json:L11](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L11)). This page reports what the source and docs say; it did not verify the running host.
 
-## Start / restart
+## Start
 
-- **Dev:** `npm run dev` runs `ts-node src/bin/www.ts` ([package.json:7](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/package.json#L7)).
-- **Build:** `npm run build` compiles TypeScript via `tsc` ([package.json:8](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/package.json#L8)).
-- **Prod restart:** `npm run build && systemctl --user restart agency-hq` ([README.md:92-97](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/README.md#L92-L97)).
-- **Hot reload via NanoClaw:** `npm run build:deploy` drops an IPC reload file into `/home/jkeyser/nanoclaw/data/ipc/ops/tasks/` ([package.json:10](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/package.json#L10)).
+- **Dev:** `npm run dev` runs `ts-node src/bin/www.ts` ([package.json:L7](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L7)).
+- **Compiled:** `npm run build` then `npm start` ([package.json:L8-L11](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L8-L11)).
+- **Startup order:** deployment-runtime attestation, API key, Feedback Registry token, JWT signing key, schema validation, a non-fatal `dispatch_config` allowlist scan, then listen and mark ready ([src/bin/www.ts:L101-L177](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L101-L177)). Any fatal step exits with code 1; `EACCES`/`EADDRINUSE` on the port also exit ([src/bin/www.ts:L287-L302](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L287-L302)).
 
-## Systemd unit
+## systemd unit (documented)
 
-- File: `agency-hq.service` (symlinked into `~/.config/systemd/user/`) ([CLAUDE.md:172-173](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L172-L173)).
-- `ExecStartPre` runs `npm run migrate` before each start so the schema is always up to date ([agency-hq.service:8](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/agency-hq.service#L8)).
-- `Restart=always`, capped at 5 failures per 60 seconds ([agency-hq.service:12-15](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/agency-hq.service#L12-L15)).
-- Environment overrides come from `~/.config/agency-hq/env` ([agency-hq.service:20](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/agency-hq.service#L20)).
+- Runs `/usr/bin/node .../releases/agency-hq/current/dist/bin/www.js` from that release directory ([agency-hq.service:L9-L10](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/agency-hq.service#L9-L10)).
+- `Restart=always`, `RestartSec=5`, start limit 5 per 60 s, 15 s stop timeout ([agency-hq.service:L5-L14](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/agency-hq.service#L5-L14)).
+- `NODE_ENV=production`, `PORT=3040`, optional env files `~/agency-hq/.env` and `~/.config/agency-hq/env` ([agency-hq.service:L17-L20](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/agency-hq.service#L17-L20)).
+- The unit has no migration pre-step; run migrations explicitly, or startup fails schema validation ([src/bin/www.ts:L133-L138](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L133-L138)).
 
-## Health & observability
+## Deploy
 
-- **HTTP health probe:** `GET /health` returns service + database + result-watcher status ([src/app.ts:72-89](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/app.ts#L72-L89)).
-- **Correlation IDs:** every request gets a `traceId` injected by the `correlationId` middleware and echoed on errors ([src/app.ts:110-133](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/app.ts#L110-L133)).
-- **Realtime streams:** `/dashboard` SSE, `/api/v1/dispatch-events`, and `/api/v1/meetings/:id/transcript/stream` are exempted from rate limiting so dashboards stay subscribed ([src/app.ts:55-65](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/app.ts#L55-L65)).
-- **Critical alerts:** unrecoverable dispatch failures fire Telegram alerts through `services/critical-alerts.ts` instead of writing notifications ([src/services/iteration-engine.ts:29](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/services/iteration-engine.ts#L29), [src/execution/dispatcher.ts:9](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/execution/dispatcher.ts#L9)).
-- **Logs:** `journalctl --user -u agency-hq` (systemd user journal); HTTP logging skips `/health` and `/dashboard` to keep the journal readable ([src/app.ts:42](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/app.ts#L42)).
+Documented: `npm run build` then `systemctl --user restart agency-hq`, with the service file symlinked into `~/.config/systemd/user/` ([CLAUDE.md:L148-L155](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/CLAUDE.md#L148-L155)). Because the unit runs from `releases/.../current`, the step that populates that directory is not shown in these excerpts. Rollout notes describe "immutable deployment" that drains work and reopens admission ([docs/model-consumers.md:L87](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/model-consumers.md#L87)). `npm run build:deploy` writes a NanoClaw reload request ([package.json:L10](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L10)).
 
-## Data lifecycle
+## Shutdown
 
-- **Migrations:** `npm run migrate` / `npm run migrate:down` / `npm run migrate:create -- <name>`; always use `migrate:create` to avoid timestamp ordering bugs ([package.json:15-18](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/package.json#L15-L18), [CLAUDE.md:33-37](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L33-L37)).
-- **Backups:** nightly gzipped `pg_dump` at 02:00 UTC into `/home/jkeyser/backups/agency-hq/`, 30-day retention; restore via `scripts/restore-agency-hq.sh` ([README.md:99-104](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/README.md#L99-L104)).
-- **Smoke gate:** `scripts/smoke-test-gate.sh` is the pre-sprint gate check invoked by `/api/v1/smoke-test` ([CLAUDE.md:53](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L53)).
+SIGTERM/SIGINT stop listeners, interval services, the projection worker and RabbitMQ, then close the server and stop the deployment runtime; a 10 s timer forces exit ([src/bin/www.ts:L241-L285](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L241-L285)). In-flight meeting and admission records are intentionally left intact for recovery ([src/bin/www.ts:L247-L249](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L247-L249)).
 
-## On-call quick checks
+## Test and migrate
 
-1. `curl -s localhost:3040/health | jq` — database + result-watcher status.
-2. `systemctl --user status agency-hq` — process and recent restart history.
-3. `journalctl --user -u agency-hq -n 200` — recent logs.
-4. Telegram CEO thread — critical alerts land here ([src/execution/dispatcher.ts:8-9](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/execution/dispatcher.ts#L8-L9)).
+- `npm test`, `npm run typecheck`, `npm run lint`, Postgres-backed suites with `AGENCY_HQ_REQUIRE_TEST_DATABASE=1` ([package.json:L9-L15](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L9-L15)).
+- `npm run migrate`, `migrate:down`, `migrate:create -- <name>` ([CLAUDE.md:L68-L70](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/CLAUDE.md#L68-L70)).
+
+## Health and observability
+
+- `GET /health` reports `database` and `resultWatcher` checks ([src/app.ts:L71-L88](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/app.ts#L71-L88)); `/health` stays open through the external access gate ([CLAUDE.md:L94](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/CLAUDE.md#L94)). A separate `/api/v1/health` router is mounted; its payload is not in these excerpts ([src/routes/versions/v1/index.ts:L62](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/routes/versions/v1/index.ts#L62)).
+- Logging uses pino ([package.json:L43](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L43)); request logs skip `/health` and `/dashboard` ([src/app.ts:L42-L45](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/app.ts#L42-L45)). Errors are logged with the request trace id ([src/app.ts:L96-L106](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/app.ts#L96-L106)). Where logs end up on the host is not documented in these sources.
+- Startup logs the attention shadow gate `AHQ_GATE_W2A_NTF_SHADOW` ([src/bin/www.ts:L159-L168](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L159-L168)) and warns about invalid dispatch config rows ([src/bin/www.ts:L143-L156](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L143-L156)).
+- Model status endpoints separate configuration from invocation evidence; process-local evidence becomes unknown after restart ([docs/model-consumers.md:L34](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/model-consumers.md#L34)).
+
+## Backups (documented)
+
+Nightly cron at 02:00 UTC writes gzipped SQL dumps of `agency_hq` to `/home/jkeyser/backups/agency-hq/`, kept 30 days; see BACKUP.md ([README.md:L115-L120](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/README.md#L115-L120)).

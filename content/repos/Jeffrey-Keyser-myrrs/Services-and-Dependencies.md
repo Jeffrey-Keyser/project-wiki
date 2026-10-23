@@ -1,40 +1,41 @@
 ---
-title: Services & Dependencies
-description: What Myrrs depends on and what depends on Myrrs.
+title: "Myrrs Services and Dependencies"
+description: "What Myrrs depends on, and which callers are confirmed in source versus expected or unknown."
 ---
 
 # Services & Dependencies
 
 ## Depends on
 
-**Runtime libraries (server).**
-- `@jeffrey-keyser/express-server-factory` — builds the Express app (CORS, sessions, health, swagger) ([src/server/app.ts:4](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L4))
-- `@jeffrey-keyser/pay-auth-integration` — PayAuth client routes + middleware ([src/server/app.ts:6](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L6))
-- `@jeffrey-keyser/myrrs-domain-core` — `Rule`, `RuleEngine`, scheduling primitives ([src/server/package.json:18](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/package.json#L18))
-- `@jeffrey-keyser/database-base-config` — shared Postgres config conventions ([src/server/package.json:16](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/package.json#L16))
-- `@jeffrey-keyser/pay-api-types` — typed PayAuth API contracts ([src/server/package.json:19](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/package.json#L19))
-- `express`, `express-session`, `connect-pg-simple`, `pg`, `jsonwebtoken`, `express-validator`, `date-fns`, `uuid` ([src/server/package.json:21-37](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/package.json#L21-L37))
+**Server libraries.** The server depends on the Express app factory, the PayAuth integration, domain-core, the database base config, and PayAuth API types ([src/server/package.json:L16-L20](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/package.json#L16-L20)). It also declares session, Postgres, and parsing packages ([src/server/package.json:L22](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/package.json#L22), [L30](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/package.json#L30), [L36](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/package.json#L36)).
 
-**Runtime libraries (client).**
-- React 19, React Router 7, Redux Toolkit / RTK Query, react-hook-form + zod, styled-components, react-i18next, react-select, `@jeffrey-keyser/pay-auth-integration` ([src/client/package.json:5-30](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/package.json#L5-L30))
-
-**External services.**
-- **PayAuth** at `https://pay.jeffreykeyser.net` — identity / session provider; URL falls back to that constant if `PAY_SERVICE_URL` is unset ([src/server/app.ts:39](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L39))
-- **PostgreSQL** — shared `jkeyser` DB, schema `myrrs`, peer auth as user `jkeyser` ([CLAUDE.md:174-181](https://github.com/Jeffrey-Keyser/myrrs/blob/main/CLAUDE.md#L174-L181))
+**Client libraries.** React 19, Redux Toolkit, react-redux, React Router, and the PayAuth client package ([src/client/package.json:L5-L27](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/package.json#L5-L27)).
 
 **Cross-repo wiki:**
-- PayAuth integration → [pay-auth-integration wiki](https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay-auth-integration/)
-- Domain core → [myrrs-domain-core wiki](https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-myrrs-domain-core/)
-- Express factory → [express-server-factory wiki](https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-express-server-factory/)
+- PayAuth integration: [pay-auth-integration wiki](/repos/jeffrey-keyser-pay-auth-integration/home/)
+- Domain core: [myrrs-domain-core source](https://github.com/Jeffrey-Keyser/myrrs-domain-core)
+- Express factory: [express-server-factory source](https://github.com/Jeffrey-Keyser/express-server-factory)
+
+**External: PayAuth.** The base URL comes from `PAY_SERVICE_URL`, defaulting to `https://pay.jeffreykeyser.net` ([src/server/app.ts:L38-L40](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/app.ts#L38-L40)). The profile router proxies reads and updates to the PayAuth users API ([src/server/routes/profile.ts:L11](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/routes/profile.ts#L11), [L27-L28](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/routes/profile.ts#L27-L28), [L106](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/routes/profile.ts#L106)).
+
+**External: PostgreSQL.** The pool is built from `validateConfig` and `createPool` in the database base config ([src/server/db/config.ts:L1-L10](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/db/config.ts#L1-L10)). Host and database values are not hard-coded. CLAUDE.md documents the shared `jkeyser` database and `myrrs` schema ([CLAUDE.md:L259-L263](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/CLAUDE.md#L259-L263)). The DB deploy script defaults to `myrrs_db` ([src/server/db/deploy_complete_schema.sh:L17-L19](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/db/deploy_complete_schema.sh#L17-L19)). These values disagree, so check the live environment.
 
 ## Consumed by
 
-- **Browser users** — the SPA at `:3036` is the sole first-class consumer of the API ([myrrs-frontend.service:8](https://github.com/Jeffrey-Keyser/myrrs/blob/main/myrrs-frontend.service#L8)).
-- **No cron / no scheduled remote agents in-repo.** No `crontab`, no cron-scheduling code, no background workers shipped with the service unit ([myrrs-api.service:1-15](https://github.com/Jeffrey-Keyser/myrrs/blob/main/myrrs-api.service#L1-L15)).
-- **No public SDK published from this repo.** The repo is `"private": true` ([package.json:3](https://github.com/Jeffrey-Keyser/myrrs/blob/main/package.json#L3), [src/server/package.json:4](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/package.json#L4), [src/client/package.json:4](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/client/package.json#L4)).
+**Confirmed in this repo.**
+- The React SPA sends requests to a base URL from `VITE_API_BASE_URL`, defaulting to `http://localhost:3000` ([src/client/src/config/auth.ts:L6-L8](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/src/config/auth.ts#L6-L8)). Auth paths are appended to it ([L10-L21](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/src/config/auth.ts#L10-L21)).
+- Client components import RTK Query hooks from `routinesApi`, `rulesApi`, and `preferencesApi` ([src/client/src/components/config/RoutineForm.tsx:L2-L8](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/src/components/config/RoutineForm.tsx#L2-L8)). Those slice files are not in the excerpts.
+
+**Expected but not confirmed.**
+- Browsers reaching the static frontend on port 3036 ([myrrs-frontend.service:L8](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/myrrs-frontend.service#L8)). The unit exists, but nothing shows it is running.
+- The production API URL. CLAUDE.md says `.env.production` sets it ([CLAUDE.md:L290](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/CLAUDE.md#L290)), but that file is not in the excerpts.
+- Other applications reading the `myrrs` schema: unknown.
+- Scheduled or background callers: no job code appears in the excerpts. That is not proof none exists, since the excerpts are partial.
+
+**Not published.** The root and both workspace packages are marked private ([package.json:L3](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/package.json#L3), [src/server/package.json:L4](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/package.json#L4), [src/client/package.json:L4](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/client/package.json#L4)), so no SDK is published from this repo.
 
 ## Inbound surfaces
 
-Public-ish routes (no PayAuth gate): `/health`, `/auth/login`, `/auth/logout`, `/auth/register`, `/auth/guest`, `/auth/validate-password`, `/auth/forgot-password`, `/auth/reset-password` ([src/server/app.ts:41-50](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L41-L50)).
+Public routes skip the PayAuth gate: `/health`, `/auth/login`, `/auth/logout`, `/auth/register`, `/auth/guest`, `/auth/validate-password`, `/auth/forgot-password`, and `/auth/reset-password` ([src/server/app.ts:L41-L50](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/app.ts#L41-L50)). `/ping` is also defined ([src/server/routes/index.ts:L12-L14](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/routes/index.ts#L12-L14)).
 
-Authenticated REST surfaces: `/api/profile`, `/api/routines`, `/api/schedule`, `/api/rules`, `/api/user-rule-configurations`, `/api/analytics` ([src/server/app.ts:126-131](https://github.com/Jeffrey-Keyser/myrrs/blob/main/src/server/app.ts#L126-L131)).
+Authenticated REST surfaces are `/api/profile`, `/api/routines`, `/api/schedule`, `/api/rules`, `/api/user-rule-configurations`, and `/api/analytics` ([src/server/app.ts:L126-L131](https://github.com/Jeffrey-Keyser/myrrs/blob/39ea32f15f79b94f655af227ef5b7db26d828205/src/server/app.ts#L126-L131)). The rule configuration path has the issue noted on the [Architecture](../architecture/) page.

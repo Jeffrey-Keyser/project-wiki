@@ -1,70 +1,84 @@
 ---
-title: Logos — Architecture
-description: Internal module layout — HTTP, worker, embed, bus, Struct/CLI agent integrations, Postgres with pgvector.
+title: "Logos — Architecture"
+description: "Single Node process combining an Express API, an in-process ingest worker, a RabbitMQ consumer and publisher, local embeddings and Postgres with pgvector."
 ---
 
 # Architecture
 
-Logos is a single Node process: Express HTTP server, an in-process worker polling `ingest_job`, a RabbitMQ consumer/publisher, an ONNX embedding runtime, and Postgres ([src/bin/www.ts:10-44](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L10-L44)).
+Logos boots as one Node process. Startup runs in this order ([src/bin/www.ts:L10-L43](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/www.ts#L10-L43)):
+
+1. Warm up the embedding model.
+2. Start the HTTP listener.
+3. Connect the RabbitMQ client and attach the consumer.
+4. Start the ingest worker with concurrency 2.
 
 ```mermaid
 flowchart TB
-  CLI[bin/logos CLI] --> HTTP
-  Agents[Agent callers] --> HTTP
-  MQin[(RabbitMQ<br/>logos.ingest.requested)] --> Consumer
-  Consumer --> HTTP
-
-  subgraph LogosProcess[Logos Node process]
-    HTTP[Express app<br/>routes/v1/*]
-    Worker[Ingest worker loop]
-    Embed[Embedding runtime<br/>bge-small-en-v1.5]
-    Bus[RabbitMQ client]
-  end
-
-  HTTP -->|enqueue| Jobs[(ingest_jobs)]
-  Worker -->|SELECT FOR UPDATE SKIP LOCKED| Jobs
-  Worker --> Fetch[ingest/fetch.ts]
-  Worker --> Extract[ingest/extract.ts<br/>Readability + jsdom]
-  Worker --> NativeCLI[agents/native-cli.ts<br/>Claude/Copilot/Gemini]
-  Worker --> Struct[llm/struct.ts → struct service]
-  Worker --> Embed
-  Worker --> DB[(Postgres 17 + pgvector)]
-  HTTP --> DB
-  HTTP --> Embed
-  HTTP --> Struct
-  Worker --> Bus
-  Bus --> MQout[(logos.events exchange)]
-  Consumer --- Bus
+  CLI["logos CLI"] --> API
+  Browser["Proposal review HTML"] --> API
+  MQ["RabbitMQ logos.events"] --> Consumer["LogosConsumer"]
+  Consumer --> Svc["enqueueIngest / commentOnProposal / cron jobs"]
+  API["Express /v1 routes"] --> Svc
+  Svc --> DB["Postgres + pgvector"]
+  Worker["Ingest worker loop"] --> DB
+  Worker --> Fetch["fetch + Readability / pdf-parse"]
+  Worker --> Native["Native CLI dispatch"]
+  Worker --> Struct["Struct service"]
+  Worker --> Embed["Local bge-small embeddings"]
+  API --> Query["retrieve / expand / synthesize"]
+  Query --> DB
+  Query --> Struct
+  Struct --> Prompts["prompt-registry"]
+  Worker --> Pub["RabbitClient publisher"]
+  API --> Pub
+  Pub --> MQ
 ```
 
-## Role contracts
+## Components and contracts
 
-### HTTP surface (`src/routes/v1/*`)
-The single Express app mounts a versioned `/v1` router that aggregates one file per resource — status, ingest, proposals, pages, query, feeds, themes ([src/routes/v1/index.ts:1-20](https://github.com/Jeffrey-Keyser/logos/blob/main/src/routes/v1/index.ts#L1-L20)). Bearer auth is applied at mount time; framework auth and framework healthcheck are disabled in favor of the custom `/health` ([src/app.ts:42-53](https://github.com/Jeffrey-Keyser/logos/blob/main/src/app.ts#L42-L53)).
+### HTTP surface
 
-### Ingest worker (`src/worker/ingest.ts`, `src/ingest/service.ts`)
-Started after the HTTP listener is up, concurrency 2, retry with exponential backoff up to 5 attempts ([README.md:220-223](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L220-L223), [src/bin/www.ts:42](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L42)). It owns the fetch → extract → chunk → embed → propose pipeline assembled from `src/ingest/*` and `src/embed/*`.
+- **Mounts.** `/` serves the health routes. `/v1` is guarded by bearer auth. `/proposals` is an HTML router with query-token auth ([src/app.ts:L49-L54](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/app.ts#L49-L54)).
+- **Routers.** `/v1` aggregates status, ingest, proposals, pages, query, feeds, themes, contexts and project-documents ([src/routes/v1/index.ts:L14-L22](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/index.ts#L14-L22)).
+- **Browser approvals.** The HTML router does not write proposals directly. It calls back into `/v1` over HTTP using the service token ([src/routes/proposals-html.ts:L53-L74](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/proposals-html.ts#L53-L74)).
 
-### Extraction (`src/ingest/extract.ts`, `src/ingest/extract-pdf.ts`)
-Primary path is `@mozilla/readability` + `jsdom`; PDF is `pdf-parse`; on short/failed extraction the worker falls back to a native CLI agent invocation using the `logos/extract-fallback` prompt body ([README.md:171-179](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L171-L179), [package.json:23-33](https://github.com/Jeffrey-Keyser/logos/blob/main/package.json#L23-L33)).
+### Ingest service and worker
 
-### Native CLI agent dispatcher (`src/agents/native-cli.ts`)
-Multi-provider ladder over Claude CLI, GitHub Copilot CLI, and Gemini CLI with concurrency-slot lockfiles. Used wherever a schema-free LLM hop is acceptable, primarily extraction fallback ([README.md:88-89](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L88-L89), [README.md:449-451](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L449-L451)).
+- **One entry point.** `enqueueIngest` is shared by the HTTP route and the bus consumer ([src/ingest/service.ts:L69-L74](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/ingest/service.ts#L69-L74)).
+- **Polling.** The worker polls every second and claims jobs with `FOR UPDATE SKIP LOCKED` ([src/worker/ingest.ts:L34-L36](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/worker/ingest.ts#L34-L36), [src/db/repos/ingest-job.ts:L52-L78](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/db/repos/ingest-job.ts#L52-L78)).
+- **Retries.** Failed jobs retry up to 5 attempts with exponential backoff.
+- **Extraction order:**
+  - PDFs go to `pdf-parse`.
+  - Other HTML goes to Readability.
+  - If Readability yields fewer than 500 characters, the worker dispatches the `logos/extract-fallback` prompt to a native agent ([src/worker/ingest.ts:L301-L322](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/worker/ingest.ts#L301-L322)).
+- **Candidate pages.** Candidate recall is scoped to the ingest's context ([src/hub/themes.ts:L29-L52](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/hub/themes.ts#L29-L52)).
 
-### Structured LLM ops (`src/llm/struct.ts`, `src/llm/schemas/*`)
-Thin client for `Jeffrey-Keyser/struct` at `http://localhost:3032/api/v1/run`. Every JSON-shaped op — page proposal, proposal revision, answer synthesis — passes a JSON Schema and gets back a validated object ([README.md:88](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L88), [README.md:226-248](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L226-L248)).
+### LLM integrations
 
-### Embedding runtime (`src/embed/index.ts`, `src/embed/chunk.ts`)
-`@xenova/transformers` loads `bge-small-en-v1.5` ONNX once at boot; `warmup()` is called before listening so `/health` reflects readiness ([src/bin/www.ts:12-14](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L12-L14), [README.md:90](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L90)). Vector column is `vector(384)` ([README.md:107](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L107)).
+- **Struct.** `structRun` POSTs `{prompt, schema}` to `/api/v1/run`, with one retry on 5xx or timeout. The input is serialized into the prompt ([src/llm/struct.ts:L45-L70](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/llm/struct.ts#L45-L70)).
+- **Struct async.** `structRunAsync` polls a Struct job. Streaming queries use it to send progress heartbeats ([src/llm/struct.ts:L215-L222](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/llm/struct.ts#L215-L222)).
+- **Native CLI dispatch.** It tries Codex, Copilot and Gemini in order. Each provider has two lockfile slots, and the call falls through to the next provider on failure ([src/agents/native-cli.ts:L181-L226](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/agents/native-cli.ts#L181-L226)).
 
-### Proposal engine (`src/proposals/*`)
-`service.ts` writes pending proposals, `diff.ts` renders before/after diffs, `revise.ts` triggers Struct-driven re-generation on `commented`, `apply.ts` mutates `page` + `page_section` and re-embeds `page_chunk` on approve ([README.md:251-280](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L251-L280)).
+### Proposals
 
-### Query pipeline (`src/query/*`)
-`retrieve.ts` runs hybrid HNSW + tsvector with RRF fusion, `expand.ts` pulls full sections + cited source chunks, `synthesize.ts` calls Struct with `logos/answer-synthesize` and the constrained-IDs schema, `run.ts` is the top-level orchestrator ([README.md:327-336](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L327-L336)).
+- **Apply.** `applyProposal` writes page, sections, themes and re-embedded chunks in one transaction. Only `create_page` and `update_page` are supported ([src/proposals/apply.ts:L71-L102](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/apply.ts#L71-L102)).
+- **Known limitation.** New pages still land in the `default` context ([src/proposals/apply.ts:L141-L154](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/apply.ts#L141-L154)).
+- **Revise.** A revision creates a new pending proposal and supersedes the original ([src/proposals/revise.ts:L33-L44](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/revise.ts#L33-L44)).
 
-### Bus (`src/bus/*`)
-`rabbit.ts` is the connection client with reconnect; `consumer.ts` is the `LogosConsumer` that translates `logos.ingest.requested` into in-process ingest. Publishing failures never crash the process — HTTP stays up with the bus down ([src/bin/www.ts:26-40](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L26-L40)).
+### Query
 
-### Database (`src/db/`, `migrations/`)
-Pool from `@jeffrey-keyser/database-base-config`; migrations via `node-pg-migrate`. Schema `logos`; tables `source`, `source_chunk`, `theme`, `page`, `page_section`, `page_chunk`, `proposal`, `ingest_job` ([README.md:86](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L86), [README.md:135-147](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L135-L147)).
+- **Retrieval.** Semantic and lexical legs run concurrently, with optional context filters ([src/query/retrieve.ts:L106-L116](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/retrieve.ts#L106-L116)).
+- **Distance gate.** Semantic hits farther than cosine distance 0.5 are dropped before fusion.
+- **Failure modes.** An empty hub short-circuits with a fixed message. If synthesis fails, the API returns retrieval results only ([src/query/run.ts:L141-L204](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/run.ts#L141-L204)).
+- **Streaming.** A client that sends `Accept: text/event-stream` gets Server-Sent Events: `progress`, then `result` or `error` ([src/routes/v1/query.ts:L105-L113](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/query.ts#L105-L113)).
+
+### Project documents
+
+- **Revisions.** Documents keep immutable revisions.
+- **Snapshots.** A snapshot returns the complete active corpus plus a fingerprint built from sorted IDs, content hashes and titles ([src/project-documents/service.ts:L45-L98](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/project-documents/service.ts#L45-L98)).
+- **URL sources.** Ingested URL sources are also synced into the document corpus ([src/worker/ingest.ts:L338-L347](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/worker/ingest.ts#L338-L347)).
+
+### Bus
+
+- **Publisher.** `RabbitClient` asserts the exchange and publishes best-effort. It reconnects with backoff capped at 60s ([src/bus/rabbit.ts:L60-L70](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bus/rabbit.ts#L60-L70)).
+- **Consumer.** It binds five routing keys and nacks without requeue on domain errors ([src/bus/consumer.ts:L51-L68](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bus/consumer.ts#L51-L68)).

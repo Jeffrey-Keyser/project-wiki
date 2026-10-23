@@ -1,45 +1,41 @@
 ---
-title: Architecture
-description: Internal layout of the Insta Travel Map monorepo — React/Vite client, Express/Node server, shared Pay-auth integration.
+title: "Architecture"
+description: "Components and contracts of the Insta Travel Map monorepo: React/Vite client, Express/TypeScript server, Pay-auth integration, and PostgreSQL."
 ---
 
 # Architecture
 
-Two top-level workspaces: `client/` (React + Vite) and `server/` (Express + TypeScript). Server initialization is async — Solo Vault secrets load before config validation and DB pool creation ([server/app.ts:17-58](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L17-L58)).
+The repo has two workspaces: `client/` (Vite React SPA) and `server/` (Express with TypeScript) ([README.md:L6-L12](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/README.md#L6-L12), [CLAUDE.md:L88-L99](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/CLAUDE.md#L88-L99)). Server startup is ordered so vault secrets load before config validation and pool creation ([server/bin/www.ts:L26-L31](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/bin/www.ts#L26-L31), [server/app.ts:L17-L27](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L17-L27)).
 
 ```mermaid
 flowchart LR
-  Browser --> CF[CloudFront/S3<br/>React bundle]
-  CF -. fetch .-> Tunnel[Cloudflare Tunnel]
-  Tunnel --> Express[Express server<br/>systemd on Beelink]
-  Express --> Routes[Versioned routes<br/>/api/v1/*]
-  Routes --> Services[Services<br/>TravelRequest, Notify]
-  Services --> DAL[DAL<br/>BaseDal + pg]
-  DAL --> PG[(PostgreSQL<br/>Beelink)]
-  Express -. proxy auth .-> Pay[pay.jeffreykeyser.net]
-  Express -. error issues .-> GH[github-error-issues]
-  Services -. AI calls .-> AIProxy[ai-proxy-api.jeffreykeyser.net]
+  A["Browser React client"] --> B["Static host S3 and CloudFront"]
+  A --> C["Cloudflare Tunnel ingress"]
+  C --> D["Express server on Beelink"]
+  D --> E["API v1 router"]
+  E --> F["Route modules and services"]
+  F --> G["PostgreSQL pool"]
+  D --> H["Pay service"]
+  F --> H
+  D --> I["GitHub error issues"]
 ```
 
-## Role contracts
+The topology is documented in the README. The diagram shows how the source wires the parts, not confirmed production state.
 
-### Server bootstrap
-`server/bin/www.ts` is the dev entrypoint. Loads dotenv → Solo Vault secrets → `initConfig()` → `initializeApp()` → `expressApp.listen(PORT)` ([server/bin/www.ts:19-53](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/bin/www.ts#L19-L53)). Production runs `dist/bin/www.js` under the `insta-travel-map` systemd unit ([README.md:55-72](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L55-L72)).
+## Server contracts
 
-### App factory
-`server/app.ts` builds a `ServerConfigV2` and hands it to `createServerlessApp` from `@jeffrey-keyser/express-server-factory` ([server/app.ts:1-4](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L1-L4), [server/app.ts:139-402](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L139-L402)). Factory wires CORS, session, rate-limiting, structured logging, Swagger, health checks, and the error handler that fires GitHub issues ([server/app.ts:155-344](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L155-L344)).
+**Bootstrap.** The dev entrypoint `server/bin/www.ts` loads dotenv, fetches vault secrets, validates config, initializes the app, and listens on `config.PORT` ([server/bin/www.ts:L19-L53](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/bin/www.ts#L19-L53)). The production start script runs `node ./dist/bin/www.js` ([server/package.json:L6](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L6)).
 
-### Routing
-Top-level routers: `/` (index), `/api/v1` (versioned v1 router), `/auth` (Pay-auth routes) ([server/app.ts:288-292](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L288-L292)). Versioning middleware negotiates header, redirects legacy `/v1/*` → `/api/v1/*`, and validates supported versions ([server/app.ts:346-355](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L346-L355)). Domain route files live in `server/routes/` — `travel-requests.ts`, `access-requests.ts`, `acl.ts`, `flights.ts`, `payment.ts`, `auth.ts` ([server/routes](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/routes)).
+**App factory.** `server/app.ts` builds a `ServerConfigV2` for `createServerlessApp` ([server/app.ts:L139-L146](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L139-L146)). The config enables request IDs, rate limiting, JSON logs in production, a CORS allow-list, and database-backed sessions ([server/app.ts:L149-L153](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L149-L153), [server/app.ts:L156-L164](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L156-L164), [server/app.ts:L180-L209](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L180-L209), [server/app.ts:L216-L236](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L216-L236)).
 
-### Auth
-`setupPayAuth` from `@jeffrey-keyser/pay-auth-integration/server` returns `{ middleware, routes }`; absence of either is a fatal startup error ([server/app.ts:90-136](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L90-L136)). Public-route list combines `DEFAULT_PUBLIC_ROUTES` with app-specific bypasses for access-requests, swagger, ping ([server/app.ts:98-112](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L98-L112)).
+**Routing.** Top-level mounts are `/`, `/api/v1`, and `/auth` ([server/app.ts:L288-L292](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L288-L292)). The v1 router mounts auth, travel requests, access requests, ACL, flights, admin travel requests, and the payment proxy ([server/routes/versions/v1/index.ts:L50-L74](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/versions/v1/index.ts#L50-L74)). Versioning middleware negotiates the header, redirects legacy `/v1/*` paths, and rejects unsupported versions ([server/middleware/versioning.ts:L26-L46](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/middleware/versioning.ts#L26-L46), [server/middleware/versioning.ts:L58-L80](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/middleware/versioning.ts#L58-L80)).
 
-### DAL + DB
-`server/dal/` holds the BaseDal pattern (extend, use `withTransaction`, parameterized queries) ([CLAUDE.md:175-180](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/CLAUDE.md#L175-L180)). Connection pool comes from `@jeffrey-keyser/database-base-config` via `server/db/connection.ts`, loaded lazily after vault secrets resolve ([server/app.ts:55-58](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L55-L58)). Health probe in `server/dal/diagnostics.ts` is wired into the `/health` check ([server/app.ts:244-252](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L244-L252)).
+**Auth.** `setupPayAuth` must return both middleware and routes, or startup throws ([server/app.ts:L121-L136](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L121-L136)). Route handlers use `requireAuth` from the Pay server export ([server/routes/travel-requests.ts:L8](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/travel-requests.ts#L8)).
 
-### Services
-`server/services/TravelRequestService.ts` and `NotifyService.ts` encapsulate domain operations called by routes ([server/services](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/services)).
+**Services and data.** `TravelRequestService` and `NotifyService` sit under `server/services/`. The DB pool is created lazily behind a proxy ([server/db/connection.ts:L10-L29](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/db/connection.ts#L10-L29)). The health check delegates to `dal/diagnostics` ([server/app.ts:L244-L252](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L244-L252), [server/dal/diagnostics.ts:L31-L37](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/dal/diagnostics.ts#L31-L37)). CLAUDE.md describes a `BaseDal` pattern, but no `BaseDal` class appears in the provided excerpts, so its status is unknown ([CLAUDE.md:L204-L208](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/CLAUDE.md#L204-L208)).
 
-### Client
-Vite-based React 19 SPA with Redux Toolkit + RTK Query, react-leaflet for maps, react-i18next for translations, Stripe Elements for payments ([client/package.json:5-42](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/client/package.json#L5-L42)). Container/presentational split: smart containers in `client/src/containers/`, dumb components in `client/src/components/`; Redux API slices in `client/src/reducers/` ([CLAUDE.md:35-43](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/CLAUDE.md#L35-L43), [CLAUDE.md:189-194](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/CLAUDE.md#L189-L194)).
+**Configuration.** `server/config/env.ts` validates environment values and exposes a config object that `initConfig()` fills in ([server/config/env.ts:L142-L144](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/env.ts#L142-L144), [server/config/env.ts:L175-L178](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/env.ts#L175-L178)). The vault loader requires `JWT_SECRET`, `SESSION_SECRET`, and `DATABASE_PASSWORD` ([server/config/vault.ts:L26](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/vault.ts#L26)).
+
+## Client contracts
+
+Routes are declared in `App.tsx`, with payment, map, no-access, admin, and error pages ([client/src/App.tsx:L31-L72](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/src/App.tsx#L31-L72)). Containers are lazy-loaded ([client/src/App.tsx:L12-L17](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/src/App.tsx#L12-L17)). The Redux store combines the RTK Query APIs ([client/src/app/store.ts:L12-L20](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/src/app/store.ts#L12-L20)). The Pay provider wraps the whole app ([client/src/index.tsx:L24](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/src/index.tsx#L24)).

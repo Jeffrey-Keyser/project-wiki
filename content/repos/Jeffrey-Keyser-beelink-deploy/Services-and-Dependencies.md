@@ -1,44 +1,40 @@
 ---
-title: Services & Dependencies
-description: What beelink-deploy depends on (GitHub, RabbitMQ, systemd, Telegram, Cloudflare Tunnel) and what depends on its outputs (per-repo services, openclaw-bridge, wiki pipeline).
+title: "Services & Dependencies"
+description: "What beelink-deploy depends on, including GitHub, RabbitMQ, Pay, Telegram, systemd and git, and which callers are confirmed in source versus expected or unknown."
 ---
 
 # Services & Dependencies
 
 ## Depends on
 
-### Runtime
-- **Node.js + systemd.** Service unit is `Type=simple`, `User=jkeyser`, restarts always with 10 s backoff ([beelink-deploy.service:1-16](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/beelink-deploy.service#L1-L16)).
-- **`express` ^4.18.2.** HTTP server and routing ([package.json:18](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/package.json#L18)).
-- **`amqplib` ^0.10.9.** RabbitMQ client; durable topic exchanges, exponential reconnect ([package.json:18](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/package.json#L18), [src/rabbit.ts:8-86](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L8-L86)).
-- **TypeScript / tsx.** `tsc` for prod build, `tsx watch` for dev, `tsx --test` for the test suite ([package.json:7-13](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/package.json#L7-L13)).
+**Runtime packages.** `express` serves HTTP and `amqplib` publishes to RabbitMQ ([package.json:L18-L19](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/package.json#L18-L19)).
 
-### Inbound
-- **GitHub webhooks.** `push` (service deploys and default-branch wiki updates) and `pull_request` (package repos). HMAC-SHA256 signature header `X-Hub-Signature-256` ([src/github.ts:6-28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/github.ts#L6-L28), [src/server.ts:115-198](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L115-L198)).
-- **Operator HTTP.** Manual deploy via `POST /deploy/:owner/:repo` with `X-Deploy-Key` ([src/server.ts:273-308](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L273-L308)).
-- **Pay admin sessions.** The dashboard, `/api/status`, `/repos` and deploy logs require a current Pay admin session or bearer token. Browsers are redirected to `/logs/login`, which returns to the dashboard ([src/server.ts:95-108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L108), [src/log-pages.ts:10-22](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/log-pages.ts#L10-L22)).
-- **Cloudflare Tunnel.** Routes `deploy.jeffrey-keyser.com` → `http://localhost:9000` ([README.md:61-69](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L61-L69)).
+**Host tools.** Deploys run `bash deploy.sh` ([src/deploy.ts:L280](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L280)), `git` for checkout and worktrees ([src/deploy.ts:L293](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L293)), `npm ci` ([src/deploy.ts:L297](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L297)) and `sudo systemctl restart` ([src/deploy.ts:L299-L302](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L299-L302)). The unit runs as `User=jkeyser` ([beelink-deploy.service:L7](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/beelink-deploy.service#L7)).
 
-### Outbound
-- **RabbitMQ.** Connection URL via `RABBITMQ_URL` (required) ([src/config.ts:52-55](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/config.ts#L52-L55)). Publishes to two durable topic exchanges:
-  - `packages.events` with routing key `package.push.<owner>.<repo>` — consumed by `openclaw-bridge` ([src/rabbit.ts:10](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L10), [src/rabbit.ts:108-128](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L108-L128)).
-  - `wiki.events` with routing key `wiki.update.<owner>.<repo>` — consumed by the wiki pipeline. Publishes for **all** merged PRs (not just package repos) and for every default-branch push, which carries a `changedFiles` list; the wiki updater self-filters un-onboarded repos ([src/rabbit.ts:11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L11), [src/rabbit.ts:154-180](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L154-L180), [src/server.ts:147-173](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L147-L173), [src/wiki-push.ts:18-53](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/wiki-push.ts#L18-L53)).
-- **Telegram Bot API.** `sendMessage` for deploy/health outcomes; silently no-ops without `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` ([src/notify.ts:6-25](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/notify.ts#L6-L25)).
-- **Optional failure webhook.** Posts truncated deploy failure payload to `DEPLOY_WEBHOOK_URL` ([src/deploy.ts:90-119](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L90-L119)).
-- **Local target services.** `git pull` + `sudo systemctl restart <service>` against checkouts on disk; one row per repo in `config/repos.json` ([src/deploy.ts:154-159](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L154-L159)).
+**RabbitMQ.** Required through `RABBITMQ_URL` ([src/config.ts:L54-L57](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/config.ts#L54-L57)). Connection is attempted only when packages are configured ([src/index.ts:L16-L17](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L16-L17)).
 
-### Target services (consumed by)
-Service repos that beelink-deploy is wired to deploy ([config/repos.json:1-126](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/config/repos.json#L1-L126)) — selected entries:
-- `flights-api`, `prompt-registry`, `apps`, `ai-proxy`, `insta-travel-map`, `pantry`, `dota-draft`, `solo-vault`, `analytics-pulse`, `pay`, `ping`
-- With post-deploy health URLs: `image-studio` (`:3030/api/v1/diagnostics/deploy`), `beelink-deploy` itself (`:9000/health`), `openclaw-bridge` (`:3099/health`), `agency-hq` (`:3040/health`), `myrrs-api` (`:3035/health`), `business-hq` (`:3041/health`), `nof1-api` (`:3060/health`), `qa-patrol` (`:3042/health`), `logos` (`:3070/health`) ([config/repos.json:57-126](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/config/repos.json#L57-L126)).
+**Pay.** Access checks call `/api/v1/auth/me` on `PAY_SERVICE_URL`, which defaults to `127.0.0.1:3017` ([src/log-access.ts:L26](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/log-access.ts#L26), [src/log-access.ts:L58](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/log-access.ts#L58)). The live value is unknown.
 
-### Package repos (consumed by openclaw-bridge / wiki pipeline)
-PR-merge sources, re-emitted to RabbitMQ rather than deployed locally ([config/packages.json:1-47](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/config/packages.json#L1-L47)):
-- `@jeffrey-keyser/message-contracts`, `@jeffrey-keyser/pay-auth-integration`, `@jeffrey-keyser/pay-domain-core`, `@jeffrey-keyser/pay-api-types`, `@jeffrey-keyser/api-errors`, `@jeffrey-keyser/database-base-config`, `@jeffrey-keyser/personal-ui-kit`, `@jeffrey-keyser/event-bus`, `@jeffrey-keyser/myrrs-domain-core`.
+**GitHub.** Webhook signatures are checked with HMAC ([src/github.ts:L6-L28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/github.ts#L6-L28)).
+
+**Telegram.** Messages go to `api.telegram.org` when both credentials are set ([src/notify.ts:L5-L9](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/notify.ts#L5-L9)).
+
+**Cloudflare Tunnel.** The documented ingress maps `deploy.jeffreykeyser.net` to `localhost:9000` ([README.md:L61-L69](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L61-L69)). The tunnel config itself is not in the snapshot.
+
+**Deploy targets (configured, not verified running).** `config/repos.json` lists service entries and health URLs ([config/repos.json:L2-L141](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/config/repos.json#L2-L141)). Listing a target does not confirm it is deployed or healthy.
 
 ## Consumed by
 
-- **`openclaw-bridge`.** Subscribes to `packages.events` to bump the package version downstream ([src/rabbit.ts:1-11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L1-L11)).
-- **Central wiki pipeline.** Subscribes to `wiki.events`. Receives events for **all** merged PRs and default-branch pushes; self-filters un-onboarded repos (unknown-repo, not-allowlisted, no-existing-pages). Best-effort — failure is logged but does not fail the request ([src/server.ts:147-173](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L147-L173), [src/server.ts:247-255](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L247-L255)).
-- **Status page / dashboards.** Read `GET /api/status` and `GET /deploy/:owner/:repo/logs`. Both require a Pay admin session; `/health` is the only anonymous read ([src/server.ts:95-108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L108), [src/server.ts:137-141](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L137-L141)).
-- **Telegram chat.** Receives per-deploy outcome notices ([src/server.ts:39-57](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L39-L57)).
+**Confirmed in source.**
+
+- **GitHub** posts to `/webhook` ([src/server.ts:L147](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L147)). Whether a given repo's webhook is configured is unknown.
+- **Operators and CLI clients** call `/api/status`, `/repos` and the logs routes with a Pay admin token ([README.md:L120-L124](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L120-L124)).
+- **Assistant script.** `scripts/read-deployment-log.mjs` reads protected logs ([scripts/read-deployment-log.mjs:L37-L40](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/scripts/read-deployment-log.mjs#L37-L40)). Authorization is a documented owner decision ([docs/deployment-logs.md:L118-L124](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/docs/deployment-logs.md#L118-L124)).
+
+**Expected or unknown.** No consumer code is in the snapshot.
+
+- **`openclaw-bridge`** is named as the `packages.events` consumer in a comment ([src/rabbit.ts:L4](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L4)). It is expected, not confirmed.
+- **A wiki pipeline** is described as the `wiki.events` consumer ([src/server.ts:L180-L182](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L180-L182)). Its name and deployment are unknown.
+- **"Milo"** is named in a comment on package publishing ([src/server.ts:L221](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L221)). Its role is unknown.
+- **Failure webhook receiver.** Set by `DEPLOY_WEBHOOK_URL` ([src/deploy.ts:L195-L196](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L195-L196)). The receiver is unknown.
+- **Telegram chat** receives outcome notices only if credentials are set ([src/notify.ts:L5-L7](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/notify.ts#L5-L7)).

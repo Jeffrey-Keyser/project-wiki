@@ -1,39 +1,51 @@
 ---
-title: Glossary
-description: Cream City Web vocabulary — run, lead status values, mockup vs. staging, suppression list, NanoClaw IPC, and other repo-specific terms.
+title: "Glossary"
+description: "Project-specific Cream City Web terms such as run, lead status, mockup, staging, suppression list, approval flow, payment code, and Solo Vault, each with source citations."
 ---
 
 # Glossary
 
 ### Run
-One Claude Code session triggered by RabbitMQ or ad-hoc invocation. Recorded as a row in the `runs` table by `node scripts/run.mjs start` and closed by `run.mjs end` ([scripts/run.mjs:48-60](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/scripts/run.mjs#L48-L60), [CLAUDE.md:22-69](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/CLAUDE.md#L22-L69)).
+One operator session, recorded by `run.mjs start` and closed by `run.mjs end` ([run.mjs:L48-L62](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/run.mjs#L48-L62), [CLAUDE.md:L15-L19](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/CLAUDE.md#L15-L19)).
 
 ### Lead status
-Pipeline state for a `leads` row. Canonical flow: `new → qualified → mockup_built → mockup_ready → outreach_sent → responded → interested → converted`, with off-ramps `not_interested → dead` ([README.md:31-34](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/README.md#L31-L34)).
+The `leads.status` field. The README flow is `new` through `converted` ([README.md:L32](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/README.md#L32)). The schema comment lists different values and omits `mockup_built` and `mockup_ready` ([schema.sql:L25](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/schema.sql#L25)). Stale-lead queries use `scouted` and `ready` ([lead-queries.mjs:L13](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/lead-queries.mjs#L13)). The source disagrees, so treat the set as unresolved.
 
 ### Mockup
-A speculative site built for a prospect *before* outreach, rendered into `sites/{slug}/` by `node scripts/build-site.mjs <template> <data.json> sites/{slug}` ([tools.md:85-89](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L85-L89)). Screenshots saved as `mockup-{slug}.png` at the project root ([README.md:79-81](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/README.md#L79-L81)).
+A prospect site built before outreach, in `sites/{slug}/` ([tools.md:L52](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L52), [tools.md:L85-L89](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L85-L89)). Screenshots are saved as `mockup-{slug}.png` ([README.md:L81](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/README.md#L81)).
 
 ### Staging
-Customer-facing preview workflow for *already-deployed* sites — tracked in `staging_sites`, served at `staging.creamcityweb.com/{slug}.html`. New mockups do NOT go in `sites/staging/` ([tools.md:48-52](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L48-L52), [README.md:73-77](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/README.md#L73-L77)).
+A preview copy of a site for customer review. Staging is for iterating on existing sites, not for first mockups ([tools.md:L198](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L198)). Quick staging URLs use `staging.creamcityweb.com/{slug}.html` ([README.md:L76](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/README.md#L76)). Full staging uses `staging-{slug}-{hash}` ([staging.mjs:L55-L60](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/staging.mjs#L55-L60)).
 
 ### Suppression list
-Compliance opt-out table. Must be consulted before any send via `node scripts/scout.mjs check-suppressed <email>` ([tools.md:34-35](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L34-L35)).
+The `suppression_list` table of opt-outs and bounces ([schema.sql:L91-L99](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/schema.sql#L91-L99)). Email sends are blocked for listed addresses ([send-email.mjs:L200-L204](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/send-email.mjs#L200-L204)).
 
 ### Approval flow
-Mandatory human-in-the-loop gate. `scripts/send-email.mjs request-approval <lead_id> <template>` writes a NanoClaw IPC payload that reaches Jeffrey on Telegram with an `APPROVE-{lead_id}` reply code ([CLAUDE.md:162-170](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/CLAUDE.md#L162-L170)).
+Policy requiring Jeffrey's explicit approval before outreach ([CLAUDE.md:L176-L183](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/CLAUDE.md#L176-L183)). The separate `approval-flow.mjs` promotes staging to production ([approval-flow.mjs:L2-L14](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/approval-flow.mjs#L2-L14)).
 
 ### NanoClaw IPC
-File-drop interface at `/home/jkeyser/nanoclaw/data/ipc/schedule_task/`. JSON files in this directory are picked up and delivered as Telegram messages ([scripts/run.mjs:21-34](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/scripts/run.mjs#L21-L34)).
+A file-drop directory that delivers JSON to Telegram ([run.mjs:L21](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/run.mjs#L21), [run.mjs:L24-L34](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/run.mjs#L24-L34)).
 
-### Solo Vault
-Secret store layered on top of `.env` by `scripts/secrets.mjs#loadSecrets()` — called at API startup so vault values override file values ([api/server.mjs:22-39](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/api/server.mjs#L22-L39)).
+### Payment code
+A one-time `CCW-` code that starts a Stripe Checkout session ([schema.sql:L189](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/schema.sql#L189), [tools.md:L152-L160](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L152-L160)). Valid tiers are `basic`, `enhanced`, and `custom_domain` ([schema.sql:L192](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/schema.sql#L192)).
 
 ### Pay API
-External billing service at `pay-api.jeffreykeyser.net`. This repo calls it via bearer-token-authenticated `/api/v1/*` endpoints ([api/server.mjs:42-65](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/api/server.mjs#L42-L65)).
+The external billing service. This repo calls its `/api/v1` routes with a bearer token ([api/server.mjs:L43](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L43), [api/server.mjs:L59](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L59)).
+
+### Solo Vault
+A secret source that overrides `.env` values ([db.mjs:L79-L81](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/db.mjs#L79-L81)). Its implementation is not in the snapshot.
 
 ### Outreach block
-Active hold preventing any prospect-facing email until P.O. Box activation, mockup site polish, and a simulated end-to-end customer journey are all complete ([CLAUDE.md:104-128](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/CLAUDE.md#L104-L128)).
+An active hold on prospect email until the three prerequisites are confirmed ([CLAUDE.md:L110-L116](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/CLAUDE.md#L110-L116)).
 
 ### Template family
-One of three site starting points — `general`, `restaurant`, `services` — under `templates/`. Treated as semantic references, not rigid molds ([tools.md:85-89](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L85-L89)).
+One of the starting layouts for `build-site.mjs`: `general`, `restaurant`, or `services` ([build-site.mjs:L144](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/build-site.mjs#L144)). Templates are references, not rigid molds ([CLAUDE.md:L253-L255](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/CLAUDE.md#L253-L255)).
+
+### Slug
+A URL-safe name made by `slugify`, used for leads and site folders ([utils.mjs:L10-L15](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/lib/utils.mjs#L10-L15), [leads.mjs:L109](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/leads.mjs#L109)).
+
+### Email intent
+A classification of inbound email. Valid values include `feedback`, `approval`, `question`, and `spam` ([email-intent.mjs:L38-L48](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/email-intent.mjs#L38-L48)).
+
+### Email feedback system
+A customer-iteration design marked *Proposed* ([EMAIL_FEEDBACK_SYSTEM.md:L3](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/docs/EMAIL_FEEDBACK_SYSTEM.md#L3)). Its scripts are present, but their use in production is unknown.

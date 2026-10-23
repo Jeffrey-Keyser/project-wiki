@@ -1,72 +1,65 @@
 ---
-title: Architecture
-description: Module layout of beelink-deploy — Express server, deploy runner, GitHub parser, RabbitMQ publisher, status store, health probe, Telegram notifier.
+title: "Architecture"
+description: "Components and contracts of beelink-deploy: Express routes, config loading, deploy runner, RabbitMQ publisher, status and protected log stores, health probe and Telegram notifier."
 ---
 
 # Architecture
 
-Single Node.js process. One Express app, one optional RabbitMQ channel, an on-disk status file, an in-memory deploy-log ring buffer. No database, no queue worker — this process is purely a producer of side effects.
+beelink-deploy is one Node.js process. `src/index.ts` boots config, the deployment log store and optional RabbitMQ, then listens on the configured host and port ([src/index.ts:L9-L19](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L9-L19), [src/index.ts:L61-L63](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L61-L63)).
 
 ## Component diagram
 
 ```mermaid
 flowchart LR
-  GH[GitHub webhooks] -->|push / pull_request| Server
-  Op[Operator curl] -->|POST /deploy/:owner/:repo| Server
-
-  subgraph beelink-deploy process
-    Index[index.ts<br/>boot + signals]
-    Server[server.ts<br/>Express routes]
-    Config[config.ts<br/>repos.json / packages.json]
-    GHParse[github.ts<br/>signature + payload parse]
-    Deploy[deploy.ts<br/>spawn deploy.sh / default]
-    Status[status.ts<br/>data/status.json]
-    Health[healthCheck.ts<br/>poll healthUrl]
-    Notify[notify.ts<br/>Telegram]
-    Rabbit[rabbit.ts<br/>amqplib publisher]
-  end
-
-  Server --> GHParse
-  Server --> Deploy
-  Server --> Status
-  Server --> Health
-  Server --> Notify
-  Server --> Rabbit
-  Index --> Server
-  Index --> Config
-  Index --> Rabbit
-  Index --> Deploy
-
-  Deploy -->|spawn bash| Target[Target service<br/>git pull / systemctl restart]
-  Rabbit -->|packages.events| OB[openclaw-bridge]
-  Rabbit -->|wiki.events| Wiki[wiki pipeline]
-  Notify -->|HTTPS| TG[Telegram Bot API]
+  GH["GitHub webhooks"]
+  OP["Operator or CLI client"]
+  SRV["server.ts Express routes"]
+  GHP["github.ts signature and parsing"]
+  WP["wiki-push.ts event builder"]
+  SCH["deploy.ts scheduler and runner"]
+  DS["deploy.sh or default sequence"]
+  DLS["deployment-logs.ts attempt store"]
+  STS["status.ts status JSON"]
+  HC["healthCheck.ts healthUrl poll"]
+  NT["notify.ts Telegram"]
+  RB["rabbit.ts publisher"]
+  PE["packages.events exchange"]
+  WE["wiki.events exchange"]
+  PAY["Pay auth me check"]
+  GH -->|"push and pull_request"| SRV
+  OP -->|"manual deploy"| SRV
+  SRV --> PAY
+  SRV --> GHP
+  SRV --> WP
+  SRV --> SCH
+  SCH --> DS
+  SCH --> DLS
+  SCH --> STS
+  SRV --> HC
+  SRV --> NT
+  SRV --> RB
+  WP --> RB
+  RB --> PE
+  RB --> WE
 ```
 
-## Roles
+## Components
 
-**`src/index.ts` — boot + signals.** Loads config, optionally connects to RabbitMQ when at least one package is configured, mounts the Express app, wires `SIGHUP`/`SIGUSR2` to hot-reload repo config, and wires `SIGTERM`/`SIGINT` to drain in-flight deploys for up to 240 s before exit ([src/index.ts:6-55](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/index.ts#L6-L55)).
+- **Routes (`src/server.ts`).** Owns `/health`, `/api/status`, `/repos`, `/webhook`, `/deploy/:owner/:repo` and its logs route ([src/server.ts:L115-L144](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L115-L144)). A raw-body hook lets HMAC run on the exact bytes ([src/server.ts:L87-L92](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L87-L92)).
+- **Config (`src/config.ts`).** Reads `config.json`, `repos.json` and `packages.json` from `CONFIG_DIR` or `config/` ([src/config.ts:L29-L31](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/config.ts#L29-L31), [src/config.ts:L33-L52](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/config.ts#L33-L52)). It throws without `RABBITMQ_URL` ([src/config.ts:L54-L57](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/config.ts#L54-L57)).
+- **Deploy runner (`src/deploy.ts`).** A per-repo scheduler serializes runs and deduplicates revisions ([src/deploy.ts:L53-L58](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L53-L58), [src/deploy.ts:L87-L99](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L87-L99)). Immutable-worktree mode checks out a detached release ([src/deploy.ts:L245-L268](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L245-L268)).
+- **Deploy logs (`src/deployment-logs.ts`).** Persistent attempts under `DATA_DIR/deploy-logs` with bounded retention ([src/deployment-logs.ts:L21-L25](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deployment-logs.ts#L21-L25)).
+- **Diagnostics (`src/deploy-diagnostics.ts`).** Turns failures into phase and fixed codes; public summaries are capped at 200 characters ([src/deploy-diagnostics.ts:L103-L132](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy-diagnostics.ts#L103-L132), [src/deploy-diagnostics.ts:L135-L145](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy-diagnostics.ts#L135-L145)).
+- **Access (`src/log-access.ts`, `src/log-routes.ts`).** Verifies a supplied token against Pay `/api/v1/auth/me` and checks for the admin role ([src/log-access.ts:L55-L65](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/log-access.ts#L55-L65)).
+- **RabbitMQ (`src/rabbit.ts`).** Declares `packages.events` and `wiki.events` topic exchanges and reconnects with backoff capped at 60 s ([src/rabbit.ts:L10-L14](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L10-L14), [src/rabbit.ts:L111](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L111)).
+- **Status, health and notify.** `status.ts` writes per-repo records ([src/status.ts:L68-L111](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/status.ts#L68-L111)); `healthCheck.ts` polls every 2 s for up to 15 s ([src/healthCheck.ts:L1-L2](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/healthCheck.ts#L1-L2)); `notify.ts` no-ops without Telegram credentials ([src/notify.ts:L5-L7](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/notify.ts#L5-L7)).
 
-**`src/server.ts` — Express routes.** Owns `/health`, `/api/status`, `/repos`, `/webhook`, `/deploy/:owner/:repo`, `/deploy/:owner/:repo/logs`. A single gate mounted after the `/logs` router requires a current Pay admin for every route except `GET /health`, `POST /webhook` and `POST /deploy/:owner/:repo`; the last two carry their own credential (GitHub HMAC and `X-Deploy-Key`). `isPublicRoute` matches exactly and fails closed on near-misses ([src/server.ts:65-70](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L65-L70), [src/server.ts:95-108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L108)). Browser requests to `/` are redirected to `/logs/login?returnTo=%2F`; other unauthenticated requests get 401. Uses a raw-body verify hook so HMAC can be checked against bytes, not parsed JSON ([src/server.ts:76-80](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L76-L80)). Stores live config on `app.set('deployConfig', …)` so signal handlers and routes share a single mutable reference ([src/server.ts:72-73](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L72-L73), [src/index.ts:21-31](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/index.ts#L21-L31)).
+## Contracts
 
-**`src/config.ts` — config loader.** Reads three JSON files from `config/` (or `$CONFIG_DIR`): `config.json` for port/host, `repos.json` for service repos, `packages.json` for package repos. Requires `RABBITMQ_URL` env var or throws ([src/config.ts:31-65](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/config.ts#L31-L65)). `reloadRepos()` re-reads on signal without restarting ([src/config.ts:70-84](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/config.ts#L70-L84)).
+- **HTTP.** `GET /health` returns `status` and `time` ([src/server.ts:L115-L117](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L115-L117)). `POST /deploy/:owner/:repo` requires `DEPLOY_API_KEY` to be configured ([src/server.ts:L356-L360](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L356-L360)). The rest of that handler is outside the excerpt, so the `X-Deploy-Key` comparison is unverified here.
+- **Repo entries.** Fields are `path`, `branch`, `service`, `healthUrl`, `deploymentMode` and `releaseRoot` ([src/config.ts:L5-L12](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/config.ts#L5-L12)). Immutable mode requires `releaseRoot` ([src/deploy.ts:L247-L249](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L247-L249)).
+- **RabbitMQ.** Routing keys are `package.push.<owner>.<repo>` and `wiki.update.<owner>.<repo>` ([src/rabbit.ts:L144](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L144), [src/rabbit.ts:L170](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L170)).
 
-**`src/github.ts` — payload + signature.** `validateSignature` uses `timingSafeEqual` against the `sha256=` hex digest ([src/github.ts:6-28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/github.ts#L6-L28)). `parsePushEvent` and `parsePullRequestEvent` narrow the unknown body to typed shapes; if narrowing fails the route returns 400 ([src/github.ts:60-127](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/github.ts#L60-L127)). The push shape also carries `before` (the ref's prior commit, all zeros when the push created the ref), `commits` (added/removed/modified paths) and the repo's `default_branch`, which the wiki publisher reads.
+## Unknowns
 
-**`src/wiki-push.ts` — push → wiki event.** `buildPushWikiEvent` turns a push to the default branch into a `WikiUpdateEvent` with a deduplicated `changedFiles` list (capped at 300). When the push payload carries `before`, it is passed through on the event so the wiki updater can diff the whole push rather than only the head commit; it is left off when the payload has none. It returns `null` for deleted refs, non-default branches, package repos, the wiki content repo, and pushes whose head commit contains `[skip wiki]` ([src/wiki-push.ts:18-53](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/wiki-push.ts#L18-L53)).
-
-**`src/deploy.ts` — deploy runner.** Spawns `bash deploy.sh` if the repo provides one; otherwise runs the default `git pull` / `npm ci --production` / `sudo systemctl restart <service>` sequence ([src/deploy.ts:141-160](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L141-L160)). Tracks an `inflightDeploys` counter so shutdown can wait for them to drain ([src/deploy.ts:25-54](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L25-L54)). Keeps the last 20 deploy log entries per repo in a `Map` for `/deploy/:owner/:repo/logs` ([src/deploy.ts:21-78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L21-L78)). Optional `DEPLOY_WEBHOOK_URL` posts truncated failure payloads ([src/deploy.ts:90-119](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L90-L119)).
-
-**`src/rabbit.ts` — publisher.** Asserts two durable topic exchanges: `packages.events` and `wiki.events` ([src/rabbit.ts:10-11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L10-L11)). Publishes `package.push.<owner>.<repo>` routing keys for package repos. Publishes `wiki.update.<owner>.<repo>` routing keys for **all** merged PRs — not just package repos — and for every default-branch push (direct pushes include `changedFiles` and, when known, `before`, since merged-PR events carry no file list), using a `WikiUpdateEvent` payload; the wiki updater self-filters un-onboarded repos ([src/rabbit.ts:36-58](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L36-L58), [src/rabbit.ts:154-180](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L154-L180), [src/server.ts:147-173](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L147-L173), [src/server.ts:247-255](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L247-L255)). Auto-reconnects with exponential backoff capped at 60 s ([src/rabbit.ts:13-86](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L13-L86)).
-
-**`src/status.ts` — persisted status.** Reads/writes `data/status.json`; one record per repo containing last attempt time, commit, branch, success flag, duration, and error string ([src/status.ts:6-95](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/status.ts#L6-L95)). `getStatusSummary` derives an `ok`/`degraded`/`down` rollup for the status page, which is served only to a Pay admin ([src/status.ts:100-124](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/status.ts#L100-L124)).
-
-**`src/healthCheck.ts` — post-deploy probe.** Polls the optional `healthUrl` every 2 s up to 15 s, with a 3 s per-request timeout ([src/healthCheck.ts:1-37](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/healthCheck.ts#L1-L37)).
-
-**`src/notify.ts` — Telegram.** Posts a Markdown message to `api.telegram.org/bot<token>/sendMessage`. No-ops if `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHAT_ID` is missing ([src/notify.ts:6-25](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/notify.ts#L6-L25)).
-
-## Storage surfaces
-
-- `data/status.json` — last-known per-repo deploy state, JSON-pretty-printed and rewritten on every deploy ([src/status.ts:47-60](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/status.ts#L47-L60)).
-- In-memory `deployLogs` map, capped at 20 entries per repo, lost on restart ([src/deploy.ts:21-22](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L21-L22)).
-- `public/` — static status page served by Express after the Pay admin gate, so it is not reachable anonymously ([src/server.ts:95-110](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L110)).
+Excerpts of `server.ts`, `deploy.ts` and `deployment-logs.ts` are truncated. Behavior past those cuts is unknown, and the excerpts do not prove what is absent.

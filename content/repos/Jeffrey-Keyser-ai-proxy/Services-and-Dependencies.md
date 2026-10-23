@@ -1,39 +1,68 @@
 ---
-title: Services and Dependencies
-description: Inbound and outbound integrations — what AI Proxy depends on and what depends on it.
+title: "Services and Dependencies"
+description: "Upstream providers, infrastructure and packages AI Proxy depends on, and the callers named in source versus unknown or proposed consumers."
 ---
 
 # Services and Dependencies
 
+Having source code for an integration does not mean it is configured in production. Many provider keys default to an empty string when unset ([server/config/env.ts:L253-L269](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L253-L269)).
+
 ## Depends on
 
-### External services
-- **Pay service** at `https://pay.jeffreykeyser.net` — issues JWT/session for admin auth on `/v1/applications` and `/auth/*`. Configured via `PAY_SERVICE_URL` ([server/app.ts:60-66](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L60-L66), [README.md:128-129](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L128-L129)).
-- **OpenAI API** — chat completion across GPT-5/4/o-series models and Whisper transcription. Requires `OPENAI_API_KEY` starting with `sk-` ([README.md:62-83](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L62-L83), [CLAUDE.md:316-318](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L316-L318)).
-- **Anthropic API** — `@anthropic-ai/sdk` serves Claude models through chat endpoints, including `claude-haiku-5-5`, `claude-sonnet-5-5`, and `claude-opus-5-5`. Spend is capped by the monthly credit budget guard described in [Operations](./operations/) ([server/package.json:17](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L17), [server/infrastructure/providers/AnthropicClient.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/infrastructure/providers/AnthropicClient.ts), [server/domain/services/AnthropicBudgetService.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/domain/services/AnthropicBudgetService.ts)).
-- **Google Gemini** — image generation via `gemini-3.1-flash-image-preview`, requires `GOOGLE_API_KEY` ([README.md:85-86](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L85-L86), [README.md:125-126](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L125-L126)).
-- **ElevenLabs** — TTS streaming on `/v1/tts` (added in commit `f02b5e1`) ([server/routes/textToSpeech.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/routes/textToSpeech.ts)).
-- **PostgreSQL** — application store, request logs, async jobs, response cache, and Express sessions ([server/app.ts:142-148](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L142-L148)).
-- **Cloudflare Tunnel** — public ingress to the homelab; tunnel config sets `connectTimeout` and `keepAliveTimeout` to 120s for image generation ([README.md:284-292](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L284-L292)).
+### Infrastructure
 
-### First-party npm packages
-- `@jeffrey-keyser/express-server-factory` — composes the Express app from `ServerConfig` ([server/app.ts:3-7](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L3-L7)).
-- `@jeffrey-keyser/pay-auth-integration` v5 — Pay JWT/session middleware and routes ([server/app.ts:48](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L48), [server/package.json:23](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L23)).
-- `@jeffrey-keyser/database-base-config` — pg pool, session table, BaseDal pattern ([CLAUDE.md:282-285](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L282-L285)).
-- `@jeffrey-keyser/api-errors` — typed HTTP error classes ([server/package.json:18](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L18)).
-- `@jeffrey-keyser/github-error-issues` — auto-files GitHub issues from uncaught errors ([server/app.ts:25](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L25), [server/app.ts:272-274](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L272-L274)).
-- `@jeffrey-keyser/pay-api-types` — shared User/Session TS types from the Pay ecosystem ([server/package.json:22](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L22)).
+- **PostgreSQL.** Stores applications, async jobs, the response cache, request logs and daily summaries ([server/dal/ApplicationDal.ts:L35-L40](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/ApplicationDal.ts#L35-L40), [server/dal/RequestLogDal.ts:L37-L42](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/RequestLogDal.ts#L37-L42)). It also holds sessions in `public.user_sessions` ([server/app.ts:L143-L153](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L143-L153)).
+- **Pay service.** Handles JWT/session authentication. The URL defaults to `https://pay.jeffreykeyser.net` ([server/app.ts:L63-L74](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L63-L74)).
+- **Cloudflare Tunnel.** Provides public ingress. Its configuration lives outside this repository ([docs/deployment.md:L130-L134](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L130-L134)).
+- **Agency HQ dispatch registry (optional).** Read on each request for per-application model preferences.
+  - Default address: `http://127.0.0.1:3040`.
+  - Timeout: 1.5 seconds.
+  - If the registry is unreachable, the model named in the request is kept ([docs/model-controls.md:L5](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/model-controls.md#L5)).
 
-### Third-party libraries
-- `express` 5, `express-session`, `cookie-parser`, `cors`, `morgan`, `body-parser` ([server/package.json:27-37](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L27-L37)).
-- `multer` for multipart uploads (transcription) ([server/package.json:37](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L37)).
-- `zod` for request validation, `express-validator` legacy ([server/package.json:42](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L42)).
-- `swagger-jsdoc` + `swagger-ui-express` for `/api-docs` ([server/app.ts:175-195](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L175-L195)).
+### AI providers
+
+| Provider | What it is used for | Status in the provided source |
+|---|---|---|
+| OpenAI | Chat and Whisper transcription | Key is required and must start with `sk-` ([server/config/env.ts:L317-L321](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L317-L321)) |
+| Anthropic | Claude chat | Budgeted credit lane ([docs/anthropic-credit-lane.md:L3](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/anthropic-credit-lane.md#L3)) |
+| Google Gemini | Image generation | Listed in the README ([README.md:L84-L85](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L84-L85)) |
+| Meta Model API, OpenRouter | `muse-image-1.0`, `mai-image-2.6` | Rollout steps are documented, but completion is not recorded ([docs/image-model-setup.md:L30-L37](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/image-model-setup.md#L30-L37)) |
+| ElevenLabs | TTS streaming | Default voice and model are set in the route ([server/routes/textToSpeech.ts:L29-L37](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/textToSpeech.ts#L29-L37)) |
+| TypeSafe | Jev decisions via `/v1/systemone` | Reported verified in a dated document ([docs/TYPESAFE_SYSTEM_ONE.md:L10-L16](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L10-L16)) |
+
+### Packages
+
+The server depends on these first-party packages ([server/package.json:L18-L23](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/package.json#L18-L23)):
+- `@jeffrey-keyser/express-server-factory` ^2.0.1
+- `@jeffrey-keyser/pay-auth-integration` ^6.10.1
+- `@jeffrey-keyser/database-base-config`
+- `@jeffrey-keyser/api-errors`
+- `@jeffrey-keyser/github-error-issues`
+- `@jeffrey-keyser/pay-api-types`
+
+It also uses `openai`, `@anthropic-ai/sdk` and the OpenTelemetry SDK and exporter packages ([server/package.json:L17](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/package.json#L17), [server/package.json:L24-L27](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/package.json#L24-L27), [server/package.json:L42](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/package.json#L42)). Where traces are exported is unknown.
+
+For the auth package, see the cross-repo wiki: [Jeffrey-Keyser-pay-auth-integration](/repos/jeffrey-keyser-pay-auth-integration/home/).
 
 ## Consumed by
 
-- **Client apps in the `jeffreykeyser.net` ecosystem** — they call `https://api.ai-proxy.jeffreykeyser.net` with an `app_live_*` API key for chat, transcription, TTS, and image generation ([README.md:160-261](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L160-L261)).
-- **Admin/console UI** — uses Pay-issued JWT to manage applications and quotas via `/v1/applications` ([README.md:32-39](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L32-L39)).
-- **Usage aggregation consumers** — `/api/v1/usage` is mounted as a no-auth aggregated endpoint for dashboards ([server/app.ts:85-86](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L85-L86), [server/app.ts:209](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L209)).
-- **Loopback callers** — `GET /internal/anthropic-budget` reports Anthropic credit-cycle spend status to requests originating from localhost ([server/routes/anthropicBudget.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/routes/anthropicBudget.ts)).
-- **Cross-repo wiki:** see also [Jeffrey-Keyser-pay-auth-integration](https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay-auth-integration/) for the auth package wired in by `setupPayAuth` ([server/app.ts:48](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L48)).
+### Callers named in source
+
+These are named in code comments or docs. None of them was observed at runtime for this page.
+
+- **Life and image-studio** are described as application-key callers ([server/middleware/serviceApiKey.ts:L14-L17](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/serviceApiKey.ts#L14-L17)).
+- **Image Studio** uses the proxy's model IDs and the Agent Services key ([docs/image-model-setup.md:L3-L6](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/image-model-setup.md#L3-L6), [docs/image-model-setup.md:L33-L35](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/image-model-setup.md#L33-L35)).
+- **Agent Services** made the recorded `/v1/systemone` verification calls ([docs/TYPESAFE_SYSTEM_ONE.md:L28-L30](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L28-L30)).
+- **dev-inbox failover and Agency HQ** read `/internal/anthropic-budget` from loopback ([server/routes/anthropicBudget.ts:L5-L12](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/anthropicBudget.ts#L5-L12)).
+- **Agency HQ's Models page** uses `/internal/model-consumers` ([docs/model-controls.md:L3](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/model-controls.md#L3), [docs/model-controls.md:L9](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/model-controls.md#L9)).
+
+### Unknown or expected
+
+- **Other applications.** Any other application holding a key is unknown. The full list of applications lives in the database, not in source.
+- **The `/api/v1/usage` aggregation endpoint.**
+  - `app.ts` marks it public with the comment "no auth required" ([server/app.ts:L91](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L91)).
+  - The service-key gate treats it as an application-auth route instead ([server/middleware/serviceApiKey.ts:L28](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/serviceApiKey.ts#L28)).
+  - The route file was not provided, so both its consumers and its auth behaviour are unknown.
+- **Proposed Jev consumers.** The queue manager, Feedback Registry, Logos, Agency HQ admission and Pantry are listed as proposals, not implemented integrations ([docs/TYPESAFE_SYSTEM_ONE.md:L72-L80](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L72-L80)).
+
+See [Architecture](../architecture/) for how calls flow through the proxy.

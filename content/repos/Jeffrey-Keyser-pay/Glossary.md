@@ -1,34 +1,42 @@
 ---
-title: Glossary
-description: Pay-specific terms and where they are defined.
+title: "Glossary"
+description: "Project-specific Pay terms with source citations for where each term is defined or used."
 ---
 
 # Glossary
 
-**Pay** — this repo: standardized payment + auth backend used by ServerlessWebTemplate and personal web apps ([README.md:1-4](https://github.com/Jeffrey-Keyser/pay/blob/main/README.md#L1-L4)).
+**Pay**: standardized payment and authentication backend for personal web apps ([README.md:3](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L3)).
 
-**DomainServiceContainer** — singleton that constructs and exposes all domain services and infrastructure adapters; routes pull dependencies through it ([server/services/DomainServiceContainer.ts:49-60](https://github.com/Jeffrey-Keyser/pay/blob/main/server/services/DomainServiceContainer.ts#L49-L60)).
+**DomainServiceContainer**: singleton that builds repositories, providers, and domain services ([server/services/DomainServiceContainer.ts:52-77](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/services/DomainServiceContainer.ts#L52-L77)).
 
-**Port** — provider-agnostic TypeScript interface for an external concern. Defined under `server/ports/` (Email, Storage, Cache, Otp, EventBus, Revocation) ([server/ports](https://github.com/Jeffrey-Keyser/pay/blob/main/server/ports), [CLAUDE.md:175-217](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L175-L217)).
+**Port**: provider-agnostic interface for an external concern, such as email or cache ([CLAUDE.md:239-253](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CLAUDE.md#L239-L253)).
 
-**Adapter** — concrete implementation of a Port (e.g. `NodemailerEmailAdapter`, `S3StorageAdapter`, `RedisAdapter`). Lives under `server/adapters/<concern>/` ([server/adapters](https://github.com/Jeffrey-Keyser/pay/blob/main/server/adapters), [CLAUDE.md:198-217](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L198-L217)).
+**Adapter**: implementation of a port, selected by a factory and an env variable ([CLAUDE.md:255-270](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CLAUDE.md#L255-L270)).
 
-**PaymentProvider** — generic interface for any payment provider; default implementation is `StripePaymentProvider` ([server/infrastructure/providers](https://github.com/Jeffrey-Keyser/pay/blob/main/server/infrastructure/providers), [CLAUDE.md:144-160](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L144-L160)).
+**PaymentProvider**: generic payment interface with a Stripe implementation ([docs/PAYMENT_PROVIDER_ABSTRACTION.md:13-16](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/PAYMENT_PROVIDER_ABSTRACTION.md#L13-L16)).
 
-**Guest login** — temporary auth session with `guest:read`/`guest:trial` scope, 24h expiry, IP rate-limited, convertible to full user ([README.md:108-138](https://github.com/Jeffrey-Keyser/pay/blob/main/README.md#L108-L138)).
+**ProviderCustomerId**: domain value object for a provider's customer identifier, validated without provider-specific format rules ([docs/PAYMENT_PROVIDER_ABSTRACTION.md:37-40](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/PAYMENT_PROVIDER_ABSTRACTION.md#L37-L40)).
 
-**Admin token** — long-lived API token issued by `POST /users/admin/generateToken`; revocable via Redis blacklist ([CLAUDE.md:480-501](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L480-L501)).
+**Guest session**: temporary session created by `POST /users/guest`, with a 24-hour expiry and IP rate limiting ([README.md:109-116](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L109-L116), [README.md:123-125](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L123-L125)).
 
-**API versioning** — URL-path scheme: primary at `/api/v1/*`, legacy unversioned paths 308-redirect to `/api/v1/*`; `API-Version` + `Accept` headers also honored ([CLAUDE.md:53-75](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L53-L75)).
+**Guest cleanup run**: a pass that removes expired guests and records a summary for reporting ([server/services/GuestCleanupService.ts:63-91](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/services/GuestCleanupService.ts#L63-L91)).
 
-**ActionResponse** — standard success envelope (`ActionResponse.success(...)`) used by route handlers, defined in `pay-api-types` ([CLAUDE.md:711-720](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L711-L720)).
+**Admin token**: long-lived API token with a `type` of `api_key` and system-admin identity ([server/infrastructure/TokenService.ts:284-304](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/infrastructure/TokenService.ts#L284-L304)).
 
-**Correlation ID** — UUID attached to each request by `correlationIdMiddleware`, surfaced on every error response and log line ([CLAUDE.md:758-773](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L758-L773), [server/app.ts:2](https://github.com/Jeffrey-Keyser/pay/blob/main/server/app.ts#L2)).
+**Service token**: short-lived JWT for headless clients, issued from a shared secret ([docs/service-auth.md:7-9](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/service-auth.md#L7-L9)).
 
-**pgmigrations** — table that tracks applied migrations from the shared `database-base-config` package ([CLAUDE.md:418-422](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L418-L422)).
+**Scopes claim**: JSON array of registered OAuth scope names added to access tokens ([docs/scopes.md:51-59](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/scopes.md#L51-L59)).
 
-**contact schema / billing schema** — PostgreSQL schemas. `contact` holds users, apps, customers, payment_intents; `billing` holds subscriptions, items, usage_events ([CLAUDE.md:457-475](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L457-L475)).
+**API versioning**: primary `/api/v1` prefix with legacy redirects ([server/routes/v1/index.ts:27-31](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/v1/index.ts#L27-L31), [CLAUDE.md:56-61](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CLAUDE.md#L56-L61)).
 
-**deploy.sh** — VPS deploy script: pull, install, build, restart systemd `pay` unit ([deploy.sh:1-17](https://github.com/Jeffrey-Keyser/pay/blob/main/deploy.sh#L1-L17)).
+**ActionResponse**: standard response envelope with `status`, `message`, and `result` ([server/config/swaggerConfig.ts:50-75](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/swaggerConfig.ts#L50-L75)).
 
-**pay-auth-integration** — companion SDK package (separate repo) that downstream apps install to proxy auth UI/middleware through this backend ([CLAUDE.md:443-471](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L443-L471)).
+**Correlation ID**: request identifier returned in error bodies ([server/app.ts:227-231](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/app.ts#L227-L231)).
+
+**Dependency type**: API field `dependencyType`, mapped from the domain `type` ([server/routes/apps.ts:21-28](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/apps.ts#L21-L28)).
+
+**contact and billing schemas**: PostgreSQL schemas; `contact` holds customers and OAuth scopes, `billing` holds subscriptions ([docs/PROVIDER_AGNOSTIC_MIGRATION.md:22-27](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/PROVIDER_AGNOSTIC_MIGRATION.md#L22-L27), [docs/scopes.md:37](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/scopes.md#L37)).
+
+**deploy.sh**: VPS script that pulls `main`, builds, migrates, and restarts `pay` ([deploy.sh:1-23](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L1-L23)).
+
+**pay-auth-integration**: companion package listed as a server dependency ([server/package.json:48](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L48), [README.md:29](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L29)).

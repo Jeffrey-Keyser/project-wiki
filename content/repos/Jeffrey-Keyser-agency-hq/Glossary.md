@@ -1,42 +1,54 @@
 ---
-title: Glossary
-description: Repo-specific terms used in Agency HQ.
+title: "Glossary"
+description: "Project-specific Agency HQ terms with source citations."
 ---
 
 # Glossary
 
-**CEO agent.** The top-of-stack agent that interfaces with the human via Telegram/NanoClaw and delegates work to department leads. Owns `ceo_messages`, `ceo_directives`, and `ceo_webhook_traces` ([CLAUDE.md:16-17](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L16-L17), [CLAUDE.md:54-58](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L54-L58)).
+**Product reset.** The redesign that centres Agency HQ on Runs, Topology and a supervised control plane, with older mechanisms treated as legacy surfaces under audit ([CLAUDE.md:L5-L14](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/CLAUDE.md#L5-L14)).
 
-**CEO directive.** A strategic instruction (build / pause / pursue / deprioritize / investigate / general) translated by the PM into tasks or sprints; stored in `ceo_directives` ([CLAUDE.md:56-58](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L56-L58)).
+**Supervised control plane.** The small target core for proposals, decisions, dev-inbox dispatch and outcome reporting ([CLAUDE.md:L5-L7](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/CLAUDE.md#L5-L7)).
 
-**Department lead.** An agent persona one tier below the CEO that owns a vertical slice of work and runs facilitator-led meetings; implemented through the meeting engine's agent invoker ([README.md:21](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/README.md#L21), [src/meeting-engine/index.ts:1](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/meeting-engine/index.ts#L1)).
+**Legacy surface.** The dashboard, Kanban, backlog, sprint, meeting, CEO-agent, persona and memory mechanisms; still running, not parity requirements ([README.md:L5-L9](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/README.md#L5-L9)).
 
-**Meeting.** A scheduled, multi-agent conversation with a typed agenda and structured output (e.g. brainstorm, standup, retro, backlog-grooming). Triggered via `POST /api/v1/meetings/trigger`; only one of a given type can be active at a time ([CLAUDE.md:103-128](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L103-L128)).
+**Topology view.** Operator view at `/dashboard/topology`, aliased at `/topology` ([src/routes/index.ts:L16-L19](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/routes/index.ts#L16-L19)).
 
-**Facilitator.** The discourse driver inside the meeting engine; coordinates agent turns and emits transcripts plus structured artifacts ([src/meeting-engine/index.ts:1-3](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/meeting-engine/index.ts#L1-L3)).
+**Runs list.** The run history view; it can group runs by plan while recent-run paging stays independent ([src/routes/dashboard/templates/runs-plan-groups.ts:L1](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/routes/dashboard/templates/runs-plan-groups.ts#L1)).
 
-**Scrum board.** The `tasks` table with states `backlog → ready → in-progress → in-review → done`, backed by `task_status_log` for transitions ([CLAUDE.md:40](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L40), [migrations/1710600052200_add-task-status-log.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/migrations/1710600052200_add-task-status-log.ts)).
+**Run trace / run projection.** Read models in `agency.run_traces`, `run_steps`, `run_invocations`, `run_slices` and `run_events` derived from the runstream ledger ([src/dal/run-analyses.ts:L156-L178](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/dal/run-analyses.ts#L156-L178)), filled by a durable projection worker ([src/bin/www.ts:L222-L227](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L222-L227)).
 
-**Dispatch.** The act of handing a `ready` task to dev-inbox by spawning `manager-standalone.sh`. Tracked in the `dispatches` table; concurrency capped by `dispatch_slots` ([src/execution/dispatcher.ts:28](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/execution/dispatcher.ts#L28), [CLAUDE.md:50-51](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L50-L51)).
+**Plan.** The unit a run is attributed to by `plan_id`; its manifest is `plans/<id>/slices.json` ([src/services/run-list-context.ts:L60-L69](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/services/run-list-context.ts#L60-L69)).
 
-**Dispatch slot.** One of a fixed pool (default 4) of concurrency tickets controlling how many parallel dev-inbox runs can be in flight ([CLAUDE.md:50-51](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L50-L51)).
+**Slice.** A unit of work in a plan, with index, title and status normalised to completed, running, failed or blocked ([src/services/run-list-context.ts:L41-L48](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/services/run-list-context.ts#L41-L48)).
 
-**Heartbeat.** A periodic message on `TaskHeartbeatExchange` emitted by dev-inbox while a task is running; absence beyond `HEARTBEAT_RECOVER_THRESHOLD_MS` flags the task as stalled ([src/execution/index.ts:31-47](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/execution/index.ts#L31-L47)).
+**Run attempt.** One execution of a slice; attempts are ordered by `slice.dispatched` events ([src/dal/run-analyses.ts:L181-L205](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/dal/run-analyses.ts#L181-L205)). The Runs list shows the latest and hides earlier attempts behind a toggle ([src/routes/dashboard/templates/runs-plan-groups.ts:L29-L33](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/routes/dashboard/templates/runs-plan-groups.ts#L29-L33)).
 
-**Iteration engine.** A 5-minute interval job that runs stall detection and other proactive checks, gated by the `iteration-engine-enabled` autonomy rule ([src/services/iteration-engine.ts:7-34](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/services/iteration-engine.ts#L7-L34)).
+**Dispatch.** Handing a `ready` task to dev-inbox by spawning `manager-standalone.sh` ([src/execution/dispatcher.ts:L339-L349](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/execution/dispatcher.ts#L339-L349)).
 
-**Ghost task.** A task that appears stuck or zombied; detections are logged in `ghost_task_detections` and reviewed by the auto-resolver ([CLAUDE.md:50-52](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L50-L52), [src/execution/ghost-task-auto-resolver.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/execution/ghost-task-auto-resolver.ts)).
+**Dispatch gate.** A sequential precondition that allows, blocks or throws `DispatchError` ([src/execution/dispatcher.ts:L146-L158](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/execution/dispatcher.ts#L146-L158)).
 
-**Autonomy rule.** A row in `autonomy_rules` that maps a decision type to a trust level (propose / act-report / act-exception / autonomous), determining how much the agent may do without human approval ([CLAUDE.md:43](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L43)).
+**Dispatch slot.** One of a fixed four concurrency slots for parallel execution ([CLAUDE.md:L85](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/CLAUDE.md#L85)).
 
-**PM artifact.** A versioned planning document produced by the PM persona, stored across `pm_artifacts` and `pm_artifact_versions` with diffs and approval state ([CLAUDE.md:51](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L51)).
+**Trust level.** `propose`, `act-report`, `act-exception` or `autonomous`, set per decision type in `autonomy_rules` ([docs/autonomy-rules.md:L7-L14](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/autonomy-rules.md#L7-L14)).
 
-**Three-tier memory.** Identity (always loaded) → working memory (per-project, in `agent_memory`) → archive (`agent_memory_archive`) with compaction ([CLAUDE.md:18](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L18), [CLAUDE.md:48](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L48)).
+**autonomous-mode.** The global autonomy row; on only when its trust level is `autonomous` ([docs/autonomy-rules.md:L173-L178](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/autonomy-rules.md#L173-L178)).
 
-**Lineage ID.** A UUID propagated across meetings, decisions, tasks, dispatches, and agent sessions so a single human intent can be traced end to end via `/api/v1/lineage` ([CLAUDE.md:52](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/CLAUDE.md#L52), [migrations/1710600035000_add-lineage-to-meetings-and-dispatches.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/migrations/1710600035000_add-lineage-to-meetings-and-dispatches.ts)).
+**Iteration engine.** A timer (default 5 minutes) gated by the `iteration-engine-enabled` rule; it turns issued CEO directives whose `blocked_by` tasks are done into backlog tasks and logs stalled slots ([src/services/iteration-engine.ts:L13-L15](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/services/iteration-engine.ts#L13-L15), [src/services/iteration-engine.ts:L128-L145](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/services/iteration-engine.ts#L128-L145)). Older docs calling it unimplemented are stale ([docs/codebase-audit.md:L16](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/codebase-audit.md#L16)).
 
-**Plan.** The planning unit that execution runs are attributed to through `plan_id` on run traces. The Runs list can group runs by plan, with slice progress drawn from the latest projected `agency.run_slices` state ([src/dal/run-analyses.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/dal/run-analyses.ts), [src/services/run-list-context.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/services/run-list-context.ts)).
+**Ghost task.** An `in-progress` or `in-review` task stale beyond `GHOST_TASK_THRESHOLD_HOURS` (default 24). In autonomous mode it returns to `ready`, or to `blocked` after two stalls ([src/execution/ghost-task-auto-resolver.ts:L11-L34](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/execution/ghost-task-auto-resolver.ts#L11-L34), [src/execution/ghost-task-auto-resolver.ts:L68-L77](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/execution/ghost-task-auto-resolver.ts#L68-L77)).
 
-**Slice.** A unit of work inside a plan, identified by `slice_id` and stored in `agency.run_slices` with an index, title, and status. Slice progress counts each slice once, however many times it was run ([src/dal/run-analyses.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/dal/run-analyses.ts), [src/routes/dashboard/templates/runs-plan-groups.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/routes/dashboard/templates/runs-plan-groups.ts)).
+**Deployment work / admission.** Work wrapped in `withDeploymentWork`, admitted only while the attested runtime holds exclusivity ([src/execution/dispatcher.ts:L1](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/execution/dispatcher.ts#L1), [src/bin/www.ts:L101-L108](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L101-L108)).
 
-**Run attempt.** One execution of a slice. Retries produce additional attempts; the Runs list shows the latest attempt for each slice and keeps earlier attempts behind a disclosure, while run counts include retries ([src/routes/dashboard/templates/runs-plan-groups.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/main/src/routes/dashboard/templates/runs-plan-groups.ts)).
+**External access gate.** Middleware requiring Pay admin or owner credentials for public-hostname requests ([src/app.ts:L112-L114](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/app.ts#L112-L114)).
+
+**Acceptance workspace.** Temporary shared clones at bound SHAs where acceptance scripts run ([src/services/project-acceptance.ts:L93-L98](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/services/project-acceptance.ts#L93-L98)).
+
+**Ratchet.** An acceptance check printing its count as the last stdout line ([src/services/project-acceptance.ts:L305-L311](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/services/project-acceptance.ts#L305-L311)).
+
+**Readings root.** A repository's live state directory exposed as `ACCEPTANCE_READINGS_<REPO>` ([acceptance/environments/readings-reader.mjs:L131-L135](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/acceptance/environments/readings-reader.mjs#L131-L135)).
+
+**Model consumer.** A workload whose provider/model is controlled from the Models page on next invocation ([docs/model-consumers.md:L3-L14](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/model-consumers.md#L3-L14)).
+
+**Portfolio steward.** A service started at boot with its own model row ([src/bin/www.ts:L232](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L232), [docs/model-consumers.md:L42](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/model-consumers.md#L42)).
+
+**Meeting template (legacy).** Agenda definitions for standup, sprint-planning, ad-hoc, brainstorm, creative-brainstorm, implementation, design-review, retro and backlog-grooming ([src/meeting-engine/templates/index.ts:L13-L23](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/meeting-engine/templates/index.ts#L13-L23)); design-review is a placeholder ([CLAUDE.md:L129](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/CLAUDE.md#L129)).

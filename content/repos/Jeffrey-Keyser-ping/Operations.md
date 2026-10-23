@@ -1,68 +1,59 @@
 ---
-title: Ping Operations
-description: Deploy, runtime, observability, and on-call notes for the self-hosted Ping service.
+title: "Ping Operations"
+description: "Start, deploy, test, and health commands for Ping, with documented versus verified runtime notes."
 ---
 
 # Operations
 
-## Hosting
-
-Production runs on a Beelink mini PC, exposed publicly via Cloudflare Tunnel ([README.md:34-37](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L34-L37)).
+Ping is a deployed application, not a library. It has a server entry point and a web client, and the excerpts show no published package API.
 
 ## Start commands
 
-- **Server prod** — `npm start` → `node ./dist/bin/www.js` after `npm run build` (which compiles TS and copies `templates/` to `dist/`) ([server/package.json:7-10](https://github.com/Jeffrey-Keyser/ping/blob/main/server/package.json#L7-L10)).
-- **Server dev** — `npm run dev` → `ts-node ./bin/www.ts`, default port 3001 ([server/package.json:8](https://github.com/Jeffrey-Keyser/ping/blob/main/server/package.json#L8), [README.md:57](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L57)).
-- **Client dev** — `vite` on :3002 ([client/package.json:37](https://github.com/Jeffrey-Keyser/ping/blob/main/client/package.json#L37), [README.md:58](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L58)).
-- **Client prod** — `vite build`, static output served by `ping-frontend` systemd unit ([client/package.json:38](https://github.com/Jeffrey-Keyser/ping/blob/main/client/package.json#L38), [deploy.sh:27](https://github.com/Jeffrey-Keyser/ping/blob/main/deploy.sh#L27)).
+- **Server production:** `npm start` runs `node ./dist/bin/www.js` ([server/package.json:L7](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L7)). The build runs `tsc`, then copies a `templates` directory into `dist` ([server/package.json:L9](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L9)).
+- **Server development:** `npm run dev` runs `ts-node ./bin/www.ts` ([server/package.json:L8](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L8)). The port defaults to 3001 when `PORT` is unset ([server/config/env.ts:L103](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/config/env.ts#L103)).
+- **Client development:** `npm run dev` runs Vite on port 3002 ([client/package.json:L38](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/package.json#L38), [client/vite.config.js:L21](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/vite.config.js#L21)).
+- **Client build:** `npm run build` runs `vite build` ([client/package.json:L39](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/package.json#L39)).
 
-## One-off grocery zone provisioning
+## Test commands
 
-Bulk-provisioning command for one explicitly selected account. It is not a service start command and is run manually from `server/`:
+- `npm test` in `server/` runs Vitest once ([server/package.json:L14](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L14)).
+- `npm run test:integration` in `server/` uses the integration config ([server/package.json:L17](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L17)).
+- `npm run test` in `client/` runs Vitest with jsdom ([client/package.json:L41](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/package.json#L41), [client/vitest.config.ts:L9](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/vitest.config.ts#L9)).
 
-```bash
-npx ts-node --project tsconfig.json ../scripts/seed-grocery-zones.ts --user-id 42 --zones-file /absolute/path/zones.json
-```
+## Grocery zone provisioning
 
-- Both `--user-id` and `--zones-file` are required, each exactly once. The account id is illustrative only and has no default. Missing or invalid input prints help and performs no writes (exit 1). `--help` / `-h` prints usage (exit 0) ([server/scripts/groceryZoneProvisioning.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/scripts/groceryZoneProvisioning.ts), [scripts/seed-grocery-zones.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/scripts/seed-grocery-zones.ts)).
-- The entire zones file is validated before any category or zone write.
-- Category and zone writes apply in one transaction and roll back on failure. Re-running skips existing same-account, same-category, same-name zones without changing them.
-- The entry point loads `server/.env` relative to the repository, not the caller's working directory, and uses the `DATABASE_*` variables listed under Configuration.
-- For normal setup, create zones on the Map page instead ([README.md:75-98](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L75-L98)).
+This is a manual bulk command, not a service. It is run from `server/` with both `--user-id` and `--zones-file` ([README.md:L80](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L80)). Missing or invalid input prints help and performs no writes ([server/scripts/groceryZoneProvisioning.ts:L4-L18](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/scripts/groceryZoneProvisioning.ts#L4-L18)). The README recommends creating zones on the Map page for normal setup ([README.md:L97](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L97)).
 
-## systemd
+## Deploy
 
-`deploy.sh` runs `sudo systemctl restart ping` and `sudo systemctl restart ping-frontend` ([deploy.sh:25-27](https://github.com/Jeffrey-Keyser/ping/blob/main/deploy.sh#L25-L27)). Unit files live on the Beelink, not in the repo.
+- Push to `main` triggers `deploy.sh` via the webhook ([README.md:L63](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L63)).
+- The script pulls, builds the server and client, applies three migration helpers, writes a release marker, and restarts `ping` and `ping-frontend` ([deploy.sh:L8-L45](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/deploy.sh#L8-L45)).
+- The script's health probe checks `127.0.0.1:3020/health` and `127.0.0.1:3021/` ([deploy.sh:L48](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/deploy.sh#L48)). The production `PORT` value is not in the excerpts, so the link between those probe ports and the server config is unknown.
+- systemd unit files are not in the repo. The unit names appear only in `deploy.sh` ([deploy.sh:L44-L45](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/deploy.sh#L44-L45)).
 
-## Deploy flow
+## Health and probes
 
-1. Push to `main` ([README.md:61-63](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L61-L63)).
-2. `beelink-deploy` webhook invokes `deploy.sh`: `git pull origin main`, `npm install && npm run build` for both `server/` and `client/`, then restart both units ([deploy.sh:1-29](https://github.com/Jeffrey-Keyser/ping/blob/main/deploy.sh#L1-L29)).
-
-## Health & probes
-
-- `/health` returns service status; includes a Postgres connectivity check via `createDatabaseHealthCheck(pool)` ([server/app.ts:142](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L142), [server/app.ts:201-209](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L201-L209)).
-- Diagnostics: `GET /api/v1/diagnostics/detailed` (public) ([server/app.ts:93](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L93)).
-- Connectivity: `GET /api/v1/connectivity` confirms `X-Ping-Key` is reaching the box ([server/app.ts:105](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L105)).
+- `/health` is configured by the server factory with a database check ([server/app.ts:L206-L212](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L206-L212)).
+- `/ping` returns `pong` ([server/routes/index.ts:L14-L16](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/index.ts#L14-L16)).
+- `GET /api/v1/connectivity` checks that `X-Ping-Key` is present, not that it is valid ([server/routes/connectivity.ts:L8](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/connectivity.ts#L8)).
+- `GET /api/v1/diagnostics/detailed` is public and reports publisher and subscriber state ([server/app.ts:L93](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L93), [server/routes/diagnostics.ts:L126-L130](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/diagnostics.ts#L126-L130)).
 
 ## Observability
 
-- **Structured logs** — Pino, configured at boot with key config fields (NODE_ENV, port, origin, Pay URL, whether `PING_API_KEY` set) ([server/app.ts:57-64](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L57-L64), [server/logger.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/logger.ts)).
-- **Request logger** — Pino child logger keyed by correlation ID attached to every request ([server/middleware/requestLogger.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/middleware/requestLogger.ts), [server/app.ts:285](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L285)).
-- **Telemetry** — fire-and-forget endpoint-hit counts to Analytics Pulse ([server/app.ts:283](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L283), [server/services/telemetry.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/services/telemetry.ts)).
-- **Error → GitHub issues** — `githubErrorMiddleware` opens issues from uncaught errors ([server/app.ts:8](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L8)).
+- Logs use pino. `LOG_LEVEL` sets the level, and development uses pretty output ([server/logger.ts:L6-L16](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/logger.ts#L6-L16)).
+- Each request gets a child logger with a request ID ([server/middleware/requestLogger.ts:L9-L12](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/middleware/requestLogger.ts#L9-L12)).
+- Endpoint telemetry is wired through `telemetryMiddleware` ([server/app.ts:L293](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L293)). Its middleware body is not in the excerpts.
+- Runtime incident capture is controlled by environment flags, as described in the README ([README.md:L142-L144](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L142-L144)).
 
-## Configuration
+## Configuration and limits
 
-- Single source: `server/config/env.ts` validates env at boot ([CLAUDE.md:337-347](https://github.com/Jeffrey-Keyser/ping/blob/main/CLAUDE.md#L337-L347)).
-- Required: `PAY_SERVICE_URL`, `SESSION_SECRET`, `CORS_ALLOWED_ORIGINS`, `PING_API_KEY`, `DATABASE_*` ([server/app.ts:160-194](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L160-L194)).
-- `GITHUB_TOKEN` is required for npm installs that touch `@jeffrey-keyser/*`. It is not needed for builds or tests once dependencies are installed ([AGENTS.md:20-28](https://github.com/Jeffrey-Keyser/ping/blob/main/AGENTS.md#L20-L28)).
+- Required variables are the Pay URL, two secrets, the origin list, and the origin base URL ([server/config/env.ts:L176](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/config/env.ts#L176)). `PING_API_KEY` is optional and legacy ([server/config/env.ts:L169-L170](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/config/env.ts#L169-L170)).
+- The rate limit is 200 requests per minute ([server/app.ts:L156-L159](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L156-L159)).
+- CORS allows `X-Ping-Key` ([server/app.ts:L166](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L166)).
+- Terraform (Lambda, RDS, S3, CloudFront) is documented as unused fallback ([README.md:L139](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L139)).
 
-## Rate limits and CORS
+## Documented versus verified
 
-- Rate limit: 200 req/min (raised from default 60 for SPA bursts) ([server/app.ts:155-158](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L155-L158)).
-- CORS allow-list from `CORS_ALLOWED_ORIGINS`; allowed headers include `X-Ping-Key` ([server/app.ts:161-166](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L161-L166)).
-
-## Terraform / Lambda
-
-Lambda + RDS + S3 + CloudFront Terraform stack retained as fallback only; not the live deploy path ([README.md:113-116](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L113-L116), [server/lambda.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/lambda.ts)).
+- **Verified in source:** the scripts, the health route, the deploy steps, and the config rules above.
+- **Documented only:** the Beelink host, Cloudflare routing, the webhook, and the release marker's use by incident reporting.
+- **Unknown from excerpts:** the production `PORT`, systemd unit contents, webhook setup, and whether Analytics Pulse or the incident transport is live.

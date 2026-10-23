@@ -1,47 +1,53 @@
 ---
-title: Services and Dependencies
-description: Inbound producers, outbound consumers, and library dependencies of openclaw-bridge.
+title: "Services and Dependencies"
+description: "What openclaw-bridge depends on and what consumes it, separating confirmed callers in source from expected or unknown consumers."
 ---
 
 # Services and Dependencies
 
-The bridge sits in the middle of the ecosystem: it consumes from many producers (RabbitMQ + HTTP) and emits to two consumers (OpenClaw, NanoClaw). It also runs a couple of subprocess shells (himalaya, ical.py).
+The bridge consumes RabbitMQ events and HTTP requests, then calls out to agent endpoints and several local services. Confirmed means the source shows the call. Expected means the source only suggests a consumer, and unknown means this snapshot does not show it.
 
 ## Depends on
 
-### NPM libraries
+**Libraries.** Express, body-parser, amqplib, the message contracts package, `pg`, `mailparser`, `resend`, `twilio`, and the Anthropic SDK are listed in the package manifest ([package.json:L13-L22](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/package.json#L13-L22)). The excerpts show no `resend` or Anthropic import, so their use is unknown.
 
-From `package.json`: `express` (HTTP), `body-parser`, `amqplib` (RabbitMQ client), `@jeffrey-keyser/message-contracts` (typed event payloads), `@anthropic-ai/sdk`, `mailparser`, `pg` (Postgres — used by spanish handlers and others), `resend` (email send), `twilio` ([package.json:11-20](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/package.json#L11-L20)).
+**RabbitMQ (confirmed).** Connects using `RABBITMQ_URL` ([src/services/rabbit.js:L10](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/rabbit.js#L10)). The bridge also calls the management API for queue and consumer state ([src/services/rabbit.js:L158-L174](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/rabbit.js#L158-L174)).
 
-### External infrastructure
+**OpenClaw webhook (confirmed call).** Default URL is a localhost hook path, and the bearer token comes from `OPENCLAW_HOOK_TOKEN` ([src/services/openclaw.js:L8-L9](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/openclaw.js#L8-L9)). The source includes a fallback token value, which should be removed.
 
-- **RabbitMQ** — connection URL from `RABBITMQ_URL`. On connect, asserts the outbound `openclaw.events` topic exchange ([src/services/rabbit.js:10-50](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/services/rabbit.js#L10-L50)). systemd unit declares `After=rabbitmq-server.service` ([openclaw-bridge.service:3](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/openclaw-bridge.service#L3)).
-- **OpenClaw webhook** — `OPENCLAW_WEBHOOK_URL` (default `http://localhost:18789/hooks/agent`), bearer auth via `OPENCLAW_HOOK_TOKEN` ([src/services/openclaw.js:8-9](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/services/openclaw.js#L8-L9), [src/services/openclaw.js:53-67](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/services/openclaw.js#L53-L67)).
-- **NanoClaw Message API** — `NANOCLAW_MESSAGE_API_URL` (default `http://127.0.0.1:3102/api/v1/messages`), gated on `NANOCLAW_ENABLED=true`, recipient JID `NANOCLAW_CHAT_JID` ([src/services/nanoclaw.js:7-9](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/services/nanoclaw.js#L7-L9)).
-- **Postgres** — `pg` is in the dependency set for handlers like spanish review that call SQL functions directly ([src/index.js:580-589](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L580-L589)).
-- **Ping API** — `PING_API_BASE` + `PING_API_KEY` for gym-zone workout auto-provisioning ([src/handlers/ping.js:18-40](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/handlers/ping.js#L18-L40)).
-- **himalaya CLI + ical.py** — invoked via `execFile` for `/email/*` and `/calendar/events` proxy endpoints ([src/index.js:326-505](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L326-L505)).
+**NanoClaw agent API (confirmed call, gated).** Used only when `NANOCLAW_ENABLED` is `true` ([src/services/nanoclaw.js:L7](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/nanoclaw.js#L7)). The default URL is `http://127.0.0.1:3102/api/v1/agent-events` ([L8](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/nanoclaw.js#L8)). Whether NanoClaw is enabled in production is unknown.
 
-### Inbound RabbitMQ producers
+**Ping API.** Used for gym workout provisioning. Base URL defaults to `localhost:3007`, with `PING_API_KEY` as the key ([src/handlers/ping.js:L19-L20](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/ping.js#L19-L20)). Without the key, the handler returns a fallback message ([L115-L118](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/ping.js#L115-L118)).
 
-Each handler module names the exchange it subscribes to. The registry has 30 entries; representative examples ([src/handlers/index.js:41-71](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/handlers/index.js#L41-L71)):
+**Other HTTP services called directly:**
+- Prompt registry, default `localhost:3002`, for thrash prompts ([src/handlers/thrash.js:L15](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/thrash.js#L15)).
+- Cron service API, default `localhost:3016`, for Spanish lesson jobs ([src/handlers/spanish-scheduler.js:L22](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/spanish-scheduler.js#L22)).
+- Flights service at `localhost:3081` for parse and purge commands ([src/handlers/flights.js:L15](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/flights.js#L15), [src/handlers/flights-purge.js:L15](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/flights-purge.js#L15)).
+- Twilio API, through credentials in environment variables ([src/handlers/twilio.js:L21-L25](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/twilio.js#L21-L25)).
 
-- `ping.events` (location arrive/depart) — ping handler ([README.md:69](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/README.md#L69))
-- `cron.alerts` (cron job failures) — cron handler ([README.md:70](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/README.md#L70))
-- Spanish, briefing, news, summary, package, backup, reminder, ccw, thrash, pantry, flights, workout, drive, agency, decisions, cron-health, logos, qa-patrol, plan-manager — all registered handlers in `src/handlers/index.js` ([src/handlers/index.js:41-71](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/handlers/index.js#L41-L71))
+**Postgres.** The Spanish tutor and CCW email webhook each create a `pg` pool with a configurable connection string ([src/handlers/spanish.js:L21-L23](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/spanish.js#L21-L23), [src/handlers/ccw-email-webhook.js:L15-L17](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/ccw-email-webhook.js#L15-L17)).
 
-### Inbound HTTP webhooks (port 3099)
+**Local CLIs.** The email proxy runs `himalaya`, and the calendar route references `ical.py` ([src/index.js:L258-L263](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L258-L263)).
 
-- `POST /twilio/sms`, `/twilio/voice`, `/twilio/sms/status`, `/twilio/send`, `/twilio/call` ([src/index.js:131-185](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L131-L185))
-- `POST /email/inbound` — Cloudflare worker forwards inbound CCW email ([src/index.js:273-280](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L273-L280))
-- `POST /ccw/contact` — creamcityweb.com contact form ([src/index.js:285-322](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L285-L322))
-- `POST /pantry/receipt` — uploads receipt image, publishes to `pantry.events` ([src/index.js:189-251](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L189-L251))
-- `POST /dev-inbox/submit`, `POST /decisions/notify`, `POST /spanish/review` ([src/index.js:518-594](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L518-L594))
-- `GET /email/list|read|attachments`, `GET /calendar/events` — himalaya + ical proxy ([src/index.js:334-505](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L334-L505))
+**Filesystem.** Agency tasks are written as JSON files into an IPC directory for NanoClaw ([src/handlers/agency.js:L16](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/agency.js#L16), [L43-L62](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/agency.js#L43-L62)).
+
+## Inbound sources
+
+Confirmed subscriptions, from the handler registry and each module:
+- `ping.events` fanout, used by the ping, workout, and drive handlers ([src/handlers/workout.js:L78](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/workout.js#L78), [src/handlers/drive.js:L94](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/drive.js#L94)).
+- `cron.alerts` with pattern `#` ([src/handlers/cron.js:L14-L16](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/cron.js#L14-L16)).
+- `cron.jobs` triggers for briefing, news, backups, flights, and reconnect probe ([src/handlers/briefing.js:L11-L13](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/briefing.js#L11-L13), [src/handlers/reconnect-probe.js:L17-L19](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/reconnect-probe.js#L17-L19)).
+- `ccw.events` with `email.*` and `contact.*` patterns ([src/handlers/ccw-email.js:L22-L24](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/ccw-email.js#L22-L24), [src/handlers/ccw-contact.js:L11-L13](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/ccw-contact.js#L11-L13)).
+- `agency.events`, `packages.events`, and `thrash.events` ([src/handlers/agency.js:L12-L14](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/agency.js#L12-L14), [src/handlers/package.js:L11-L13](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/package.js#L11-L13), [src/handlers/thrash.js:L11-L13](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/thrash.js#L11-L13)).
+
+HTTP inbound routes include `/twilio/*`, `/email/inbound`, and `/ccw/contact` ([src/index.js:L130-L153](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L130-L153), [L205-L212](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L205-L212), [L225-L227](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L225-L227)). The decisions handler says it is called from Agency HQ, but the route is not visible in the excerpt ([src/handlers/decisions.js:L5-L7](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/decisions.js#L5-L7)).
 
 ## Consumed by
 
-- **OpenClaw / Milo** — receives every event the bridge routes to it via `/hooks/agent` ([src/services/openclaw.js:53-67](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/services/openclaw.js#L53-L67)).
-- **NanoClaw** — receives Telegram-shaped events at `recipient: tg:...` ([src/services/nanoclaw.js:9-47](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/services/nanoclaw.js#L9-L47)).
-- **cron-service admin UI** — calls the `/admin/handlers` and `/admin/targets` endpoints; CORS is wildcarded for that origin ([src/index.js:38-44](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L38-L44), [src/index.js:73-95](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L73-L95)).
-- **Downstream RabbitMQ exchanges** — the bridge publishes to `openclaw.events` (for inbound webhooks like Twilio) and `ccw.events`, `pantry.events` as a producer too ([src/index.js:122-129](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L122-L129), [src/index.js:243-244](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L243-L244), [src/index.js:256-269](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L256-L269)).
+- **Milo / OpenClaw:** confirmed as the webhook target. Receipt on the other end is unknown ([src/services/openclaw.js:L53-L68](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/openclaw.js#L53-L68)).
+- **NanoClaw:** confirmed as the agent-events target when enabled. The IPC directory is an expected consumer of agency tasks, but the consumer is not in this snapshot ([src/handlers/agency.js:L16](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/agency.js#L16)).
+- **Cloudflare email worker:** described as the sender of `/email/inbound` ([src/index.js:L204](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L204)). Unknown and unverified here.
+- **Cron-service admin UI:** the CORS comment names a cron-service origin ([src/index.js:L35](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L35)). The caller is expected, not confirmed.
+- **Spanish tutor and session tutor:** they consume messages published by the dispatchers on the same Spanish exchanges ([src/handlers/spanish-dispatcher.js:L35](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/spanish-dispatcher.js#L35), [src/handlers/spanish-session-tutor.js:L16-L18](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/spanish-session-tutor.js#L16-L18)).
+
+Not in the registry: the older wiki listed `qa-patrol`, `summary`, `cron-health`, and `logos`. No such entries appear in the current registry ([src/handlers/index.js:L38-L62](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/index.js#L38-L62)). A documented auto-reply handler is also absent from the registry ([docs/ccw-auto-reply.md:L62](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/docs/ccw-auto-reply.md#L62)).

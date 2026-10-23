@@ -1,36 +1,36 @@
 ---
-title: Iteration Loop
-description: How a change moves from migration → DAL → route → tests → deploy in this repo.
+title: "Iteration Loop"
+description: "Contributor workflow for Pantry Manager, grounded in the npm scripts, migration helpers, and the systemd restart documented in the repo."
 ---
 
 # Iteration Loop
 
-Schema-first cycle. New behavior usually starts at the database (migration), surfaces through the DAL, gets exposed in a versioned router, gets covered by vitest, then ships via `tsc` + systemd restart.
+A typical change starts at the database, moves through the DAL and a versioned router, is tested, then is built and restarted. The steps below follow the scripts in the repo.
 
 ```mermaid
 flowchart LR
-  A[Idea / ticket] --> B[npm run migrate:create]
-  B --> C[Write migration<br/>migrations/*.ts]
-  C --> D[npm run migrate]
-  D --> E[Add DAL fn<br/>src/dal/*.ts]
-  E --> F[Wire route<br/>src/routes/versions/v1/*]
-  F --> G[Vitest<br/>tests/*.test.ts]
-  G --> H[npm run build]
-  H --> I[systemctl --user restart<br/>pantry-manager]
+  a["Plan change"] --> b["Scaffold migration with migrate create"]
+  b --> c["Write up and down in migrations folder"]
+  c --> d["Apply with npm run migrate"]
+  d --> e["Add DAL function in src dal"]
+  e --> f["Mount route in src routes versions v1"]
+  f --> g["Write tests in tests folder then npm test"]
+  g --> h["Compile with npm run build"]
+  h --> i["Restart with systemctl user restart"]
 ```
 
 ## Steps
 
-1. **Scaffold migration** — `npm run migrate:create -- <name>` invokes `scripts/create-migration.js`, producing a timestamped TS file in `migrations/` ([package.json:13](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/package.json#L13), [README.md:46](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L46)).
-2. **Define schema** — write `up`/`down` using `MigrationBuilder` SQL; follow the pattern of `1710600000000_initial-pantry-schema.ts` (raw SQL in `pgm.sql(...)`, indexes alongside table) ([migrations/1710600000000_initial-pantry-schema.ts:3-41](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/migrations/1710600000000_initial-pantry-schema.ts#L3-L41)).
-3. **Apply** — `npm run migrate` runs `scripts/run-migrate.js` against the configured `pantry_manager` DB ([package.json:11](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/package.json#L11)).
-4. **DAL function** — add a typed function in the matching `src/dal/*.ts`. Convention: export `interface XxxInput`, `interface Xxx`, then async `createXxx`/`getXxx` calling `pool.query` ([src/dal/products.ts:13-40](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/dal/products.ts#L13-L40)).
-5. **Route** — mount the handler in `src/routes/versions/v1/<resource>.ts`; the v1 index aggregates sub-routers under `/api/v1` ([src/routes/versions/v1/index.ts:9-15](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/routes/versions/v1/index.ts#L9-L15)).
-6. **Test** — write a vitest spec in `tests/` using supertest; existing examples cover api-key auth, nudges, and receipt parse ([package.json:10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/package.json#L10)). Run with `npm test`.
-7. **Build + deploy** — `npm run build` compiles to `dist/`, then `systemctl --user restart pantry-manager` flips the running service ([README.md:51-56](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L51-L56)).
+1. **Scaffold a migration.** `npm run migrate:create` runs `scripts/create-migration.js` ([package.json:L13](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L13)). It reads the `migrations` directory and writes a file named with the next timestamp, stepping by 1000 ([scripts/create-migration.js:L13-L14](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/scripts/create-migration.js#L13-L14), [scripts/create-migration.js:L26-L28](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/scripts/create-migration.js#L26-L28)).
+2. **Write up and down.** The generated template exports `up` and `down` functions with a `MigrationBuilder` ([scripts/create-migration.js:L31-L39](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/scripts/create-migration.js#L31-L39)).
+3. **Apply.** `npm run migrate` runs `scripts/run-migrate.js`, which builds a `DATABASE_URL` from `DATABASE_*` variables and runs node-pg-migrate with `up` ([scripts/run-migrate.js:L8-L15](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/scripts/run-migrate.js#L8-L15), [scripts/run-migrate.js:L19](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/scripts/run-migrate.js#L19)). Rollback uses `npm run migrate:down` ([scripts/run-migrate-down.js:L19](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/scripts/run-migrate-down.js#L19)).
+4. **DAL function.** Add typed functions in `src/dal/`. Writes that touch products or pantry items must carry receipt lineage, which `requireReceiptLineage` enforces ([src/dal/products.ts:L31-L32](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/products.ts#L31-L32), [src/dal/pantry-items.ts:L43-L44](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/pantry-items.ts#L43-L44)).
+5. **Route.** Add handlers in `src/routes/versions/v1/` and keep the v1 mount list current ([src/routes/versions/v1/index.ts:L12-L17](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/routes/versions/v1/index.ts#L12-L17)).
+6. **Test.** `npm test` runs `vitest run` ([package.json:L10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L10)). Vitest only includes `tests/**/*.test.ts` ([vitest.config.ts:L6](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/vitest.config.ts#L6)). The tests folder is not in the excerpts, so its contents are unverified.
+7. **Build and restart.** `npm run build` runs `tsc` ([package.json:L8](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L8)). The README documents `systemctl --user restart pantry-manager` after the build ([README.md:L51-L54](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L51-L54)).
 
 ## Notes
 
-- No PR templates / CI workflow committed; merge gate is local `npm test` + `npm run build`.
-- API key (`PANTRY_MANAGER_API_KEY`) must be set in `.env` before boot or `validateAndLoadConfig` throws ([src/config/env.ts:52-55](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/config/env.ts#L52-L55)).
-- Public paths bypass auth: `/health` and `/` only — every new route inherits API-key requirement automatically ([src/middleware/api-key-auth.ts:4-7](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/middleware/api-key-auth.ts#L4-L7)).
+- The excerpts include no CI workflow. Because the snapshot is partial, its absence is not established. The gate that is documented is local `npm test` and `npm run build`.
+- The server reads `.env` through dotenv ([src/config/env.ts:L7](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/config/env.ts#L7)). Missing `PANTRY_MANAGER_API_KEY` makes config loading throw ([src/config/env.ts:L55-L58](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/config/env.ts#L55-L58)).
+- For the client, `npm run dev` starts Vite ([client/package.json:L7](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/client/package.json#L7)). Its dev server proxies `/api` and `/auth` to the API ([client/vite.config.ts:L7-L10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/client/vite.config.ts#L7-L10)).

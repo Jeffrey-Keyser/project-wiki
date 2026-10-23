@@ -1,45 +1,44 @@
 ---
-title: Glossary
-description: Repo-specific terminology for Analytics-Pulse.
+title: "Glossary"
+description: "Project-specific terms used across Analytics-Pulse, each with source citations."
 ---
 
 # Glossary
 
-### Pay service
-External authentication and user-profile service hosted at `https://pay.jeffreykeyser.net`. Analytics-Pulse does not store user identity locally; it validates JWTs and proxies profile lookups through `@jeffrey-keyser/pay-auth-integration`. Setup, public-routes list, and fallback URL live in the auth-setup block ([server/app.ts:32-93](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L32-L93)).
+**Pay service.** The external authentication and profile service at `https://pay.jeffreykeyser.net` by default. The server configures Pay auth with it ([server/app.ts:L84-L87](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L84-L87)).
 
-### Project
-A logical grouping in Analytics-Pulse representing one tracked website or app. Owns its API keys, goals, campaigns, email preferences, and event history. Managed under `/api/v1/projects/*` ([README.md:427-444](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L427-L444)).
+**Project.** A tracked website or app. Projects are managed under the projects route group ([docs/API_REFERENCE.md:L124-L126](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/API_REFERENCE.md#L124-L126)).
 
-### API key (`ap_*`)
-Per-project, bcrypt-hashed secret used by the tracking SDK to authenticate event ingestion calls. Issued by `POST /api/v1/projects/:projectId/api-keys` and shown in plaintext exactly once. Distinct from JWT bearer tokens used by the dashboard ([README.md:446-462](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L446-L462), [server/app.ts:166-178](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L166-L178)).
+**API key (`ap_` prefix).** A key for tracking endpoints. Its format is documented in Swagger, and it can be sent as a bearer token or query parameter ([server/app.ts:L214-L219](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L214-L219)). Full keys are not returned after creation ([docs/API_REFERENCE.md:L336](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/API_REFERENCE.md#L336)).
 
-### Tracking library
-The browser SDK at `tracking-library/`, published as `@analytics-pulse/tracking-library`. Built with Rollup into ESM, CJS, and minified UMD bundles for `<script>` embedding ([tracking-library/package.json:1-10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/tracking-library/package.json#L1-L10)).
+**Tracking library.** The browser SDK, published as `@analytics-pulse/tracking-library` ([tracking-library/package.json:L2](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/tracking-library/package.json#L2)).
 
-### Goal
-A user-defined conversion event — event-based, pageview-based, or value-based. Goal completions feed funnel analysis and conversion-rate reporting ([README.md:31-37](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L31-L37), [README.md:502-520](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L502-L520)).
+**Public routes.** Paths that bypass Pay auth, such as track, errors, unsubscribe, diagnostics, and Swagger ([server/app.ts:L90-L108](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L90-L108)).
 
-### Funnel
-A multi-step path through ordered goals, queried via `POST /api/v1/projects/:id/goals/funnel` ([README.md:512-520](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L512-L520)).
+**Version negotiation.** The middleware chain for version headers, legacy redirects, and version validation ([server/app.ts:L264-L270](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L264-L270)).
 
-### Campaign / UTM
-A set of events sharing UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`). Tracked with first-touch attribution so the originating UTM stays on the session even after navigation ([README.md:38-44](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L38-L44)).
+**Background job.** A `node-cron` task started from the app when its flag is enabled ([server/app.ts:L48-L79](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L48-L79)).
 
-### Daily aggregation
-A pre-computed rollup table populated by `server/cron/dailyAggregation.ts` running at 1 AM UTC. Lets the dashboard load instantly without scanning raw event partitions ([server/cron/dailyAggregation.ts:32-36](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/cron/dailyAggregation.ts#L32-L36), [README.md:67-71](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L67-L71)).
+**Daily aggregation.** The job that rolls up prior-day analytics for all active projects at 01:00 UTC ([server/cron/dailyAggregation.ts:L12-L26](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/cron/dailyAggregation.ts#L12-L26)). Its results go to the `analytics_daily` table ([docs/ARCHITECTURE.md:L246-L248](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L246-L248)).
 
-### Partition / partition maintenance
-Monthly Postgres partitions on the events table that bound query scans to a small time window. The `partitionMaintenance` cron creates next-month partitions and drops aged-out ones; `/api/v1/partitions/*` admin endpoints expose the current state ([server/app.ts:35](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L35), [server/routes/versions/v1/index.ts:143-145](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/routes/versions/v1/index.ts#L143-L145)).
+**Partition.** A monthly range slice of the events table, named `events_YYYY_MM` ([docs/PARTITION_STRATEGY.md:L18-L24](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/PARTITION_STRATEGY.md#L18-L24)).
 
-### Public routes
-The whitelist of paths that bypass Pay auth — tracking, error ingestion, unsubscribe, diagnostics, Swagger, root. Anything not on the list requires a valid JWT ([server/app.ts:53-71](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L53-L71)).
+**Runtime telemetry.** Background job state served at `/api/v1/diagnostics/runtime` ([docs/ARCHITECTURE.md:L72-L78](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L72-L78)).
 
-### Version negotiation
-The middleware chain that adds the `API-Version` response header, redirects legacy `/v1/*` URLs to `/api/v1/*`, and rejects requests that ask for an unsupported version ([server/app.ts:217-223](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L217-L223)).
+**Goal.** A conversion definition with type `event`, `pageview`, or `value` ([server/routes/goals.ts:L286-L288](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/goals.ts#L286-L288)). Goals are API-first, not a shipped dashboard workflow ([README.md:L44](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L44)).
 
-### OIDC role
-The IAM role created by Terraform (`enable_github_oidc = true`) that GitHub Actions assumes via `aws-actions/configure-aws-credentials@v4`. Replaces long-lived AWS access keys in CI ([README.md:353-380](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L353-L380)).
+**Funnel.** An ordered goal path, exposed at the goals funnel route ([server/routes/versions/v1/index.ts:L122](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/versions/v1/index.ts#L122)). It is backend-only in the README ([README.md:L44](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L44)).
 
-### `new-service-auto.sh`
-The bootstrap script that takes the repo from clone to live deployment in <10 minutes. Idempotent, with rollback on failure ([README.md:238-291](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L238-L291)).
+**Campaign and UTM.** Campaigns group events by UTM parameters, including source, medium, campaign, term, and content ([server/routes/campaigns.ts:L8-L10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/campaigns.ts#L8-L10), [docs/TRACKING_GUIDE.md:L292-L296](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/TRACKING_GUIDE.md#L292-L296)).
+
+**Error reporting.** Errors are deduplicated by fingerprint, and repeated occurrences increase a counter ([server/routes/errors.ts:L37-L38](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/errors.ts#L37-L38)).
+
+**Email reporting schedule.** Daily, weekly, and monthly reports at 09:00 ([docs/OPERATIONS.md:L81-L83](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L81-L83)).
+
+**Shipped versus API-first.** A label for workflows in the client versus those only available through the API ([README.md:L9-L10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L9-L10)).
+
+**Schema migration tracking.** Applied migrations are recorded in `schema_migrations` ([docs/OPERATIONS.md:L41-L42](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L41-L42)).
+
+**Admin-only routes.** Aggregation, partitions, and performance routes require an admin ([server/routes/versions/v1/index.ts:L137-L149](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/versions/v1/index.ts#L137-L149)).
+
+**OIDC role.** The AWS role that GitHub Actions assumes through OIDC, documented as created by Terraform ([CLAUDE.md:L264-L266](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L264-L266)).

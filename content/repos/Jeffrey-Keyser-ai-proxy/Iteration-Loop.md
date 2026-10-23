@@ -1,37 +1,76 @@
 ---
-title: Iteration Loop
-description: How a change moves from a local edit to a deployed self-hosted release of AI Proxy.
+title: "Iteration Loop"
+description: "How a contributor edits, tests, builds and ships AI Proxy using the server npm scripts and the host deploy.sh workflow."
 ---
 
 # Iteration Loop
 
-This repo is a single-developer service with a tight loop: edit TypeScript, run tests, build, restart the systemd unit. CI runs on every push, but production is a homelab box rather than Lambda.
+All active development happens in the `server/` workspace. Its npm scripts cover the dev server, build, lint and tests ([server/package.json:L5-L15](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/package.json#L5-L15)).
 
 ```mermaid
 flowchart TD
-  A[Edit TS under server/] --> B[npm run lint + npm test]
-  B --> C[npm run build → server/dist]
-  C --> D{Local smoke?}
-  D -->|dev| E[npm run dev — ts-node bin/www.ts]
-  D -->|prod-like| F[systemctl --user restart ai-proxy]
-  F --> G[journalctl --user -u ai-proxy -f]
-  G --> H[git commit]
-  H --> I[git push main]
-  I --> J[GitHub Actions: ci-cd-pipeline.yml]
-  J --> K[CHANGELOG.md entry under Unreleased]
+  A["Copy .env.example to .env"] --> B["npm run dev via ts-node"]
+  B --> C["Edit TypeScript under server/"]
+  C --> D["npm run lint"]
+  D --> E["npm test - Jest"]
+  E --> F["npm run build - tsc to dist"]
+  F --> G["Commit and push to main"]
+  G --> H["deploy.sh on host"]
+  H --> I["Health gate on /health"]
+  I -->|"2xx"| J["Done"]
+  I -->|"timeout"| K["Dump journal and fail"]
+  K --> C
 ```
 
-## Steps cited to source
+## 1. Local setup
 
-1. **Edit + lint + test.** ESLint v9 flat config and Jest run from the `server/` workspace ([server/package.json:10-13](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L10-L13), [CLAUDE.md:38-58](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L38-L58)). Tests live in `server/tests/__tests__/` with unit and integration subdirectories ([CLAUDE.md:330-336](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L330-L336)).
-2. **Build.** `npm run build` invokes `tsc` and emits to `server/dist/` ([server/package.json:8](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L8), [CLAUDE.md:181](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L181)).
-3. **Local smoke.** Dev uses `ts-node ./bin/www.ts` on port 3001 ([server/package.json:7](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L7), [README.md:111-113](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L111-L113)). Swagger UI at `/api-docs` lets you exercise endpoints interactively ([README.md:22](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L22)).
-4. **Restart prod.** After build, `systemctl --user restart ai-proxy` reloads the running instance ([CLAUDE.md:168-170](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L168-L170)).
-5. **Observe.** `journalctl --user -u ai-proxy -f` tails logs; the boot banner echoes service version and Pay-service URL ([CLAUDE.md:174-176](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L174-L176), [server/app.ts:35-42](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L35-L42)).
-6. **Commit and push.** Recent commits show the cadence: focused fixes against `main` (e.g., `fix(auth): add /v1/tts to application-auth route prefixes`). Conventional Commit prefixes are the norm.
-7. **CI.** `.github/workflows/ci-cd-pipeline.yml` runs on push; `terraform_deploy.yml` is `workflow_dispatch` only ([CLAUDE.md:342-348](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L342-L348)).
-8. **Changelog.** Notable changes are added under `## [Unreleased]` in `CHANGELOG.md` and graduated when a version is cut ([CHANGELOG.md:1-15](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CHANGELOG.md#L1-L15)).
+1. From `server/`, copy `.env.example` to `.env`.
+2. Run `npm install`.
+3. Run `npm run dev`, which starts `ts-node ./bin/www.ts` ([README.md:L106-L114](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L106-L114), [server/package.json:L7](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/package.json#L7)).
 
-## Failure-recovery side-loop
+Startup fails fast if any of these are missing ([server/config/env.ts:L127-L132](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L127-L132), [server/config/env.ts:L221-L231](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L221-L231), [server/config/env.ts:L282](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L282)):
+- `NODE_ENV`
+- `AI_PROXY_API_KEY`
+- `ORIGIN_BASE_URL`, `CORS_ALLOWED_ORIGINS`, `SESSION_SECRET`, `JWT_SECRET`, `PAY_SERVICE_URL` and `OPENAI_API_KEY`
 
-When a request raises an uncaught error in production, `githubErrorMiddleware` opens (or comments on) an issue in `Jeffrey-Keyser/ai-proxy`, which becomes the next item in the loop ([server/app.ts:272-274](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L272-L274)).
+## 2. Lint, test, build
+
+- **Lint.** `npm run lint` runs ESLint 9 with a flat config. `no-console` and `no-explicit-any` produce warnings, not errors ([server/eslint.config.js:L35-L46](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/eslint.config.js#L35-L46)).
+- **Test.** `npm test` runs Jest with ts-jest.
+  - Tests are any files under `__tests__` or named `*.test.ts` / `*.spec.ts`.
+  - The setup file is `tests/setup.ts` ([server/jest.config.js:L1-L20](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/jest.config.js#L1-L20)).
+  - Tests live in `server/tests/__tests__/` and mocks in `server/tests/__mocks__/` ([CLAUDE.md:L318-L319](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L318-L319)).
+  - To run one file: `npm test -- path/to/test.test.ts` ([CLAUDE.md:L59-L60](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L59-L60)).
+- **Provider costs in tests.** The image-provider tests make no billable calls ([docs/image-model-setup.md:L44-L45](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/image-model-setup.md#L44-L45)). Model-control validation uses mocked model calls ([docs/model-controls.md:L13](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/model-controls.md#L13)).
+- **Build.** `npm run build` runs `tsc` with strict ES2020 settings and writes to `dist/`. The `tests` directory is excluded from compilation ([server/tsconfig.json:L3-L8](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/tsconfig.json#L3-L8), [server/tsconfig.json:L25](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/tsconfig.json#L25)).
+
+## 3. Contributor conventions
+
+The documented workflow ([CLAUDE.md:L344-L353](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L344-L353)):
+- Keep TypeScript types intact.
+- Update the Swagger JSDoc when you change an endpoint.
+- Run tests and lint before committing.
+
+Swagger collects annotations from `./routes/**/*.ts` and is disabled when `NODE_ENV=test` ([server/app.ts:L181-L187](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L181-L187)). Notable changes go under `## [Unreleased]` in the changelog ([CHANGELOG.md:L8-L11](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CHANGELOG.md#L8-L11)).
+
+## 4. Shipping
+
+CLAUDE.md says pushes to main use `deploy.sh`. The script does a lockfile-exact install, builds, restarts the systemd service and then applies a health gate ([CLAUDE.md:L162](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L162)). The deployment guide lists the steps as ([docs/deployment.md:L146-L158](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L146-L158)):
+
+1. `git pull`
+2. `npm install`
+3. `npm run build`, with build errors no longer masked
+4. `systemctl restart`
+5. Poll `/health`; on timeout, dump the journal and exit non-zero
+
+The two documents disagree in two places:
+- **Install command:** the guide says `npm install`, while CLAUDE.md says the install is lockfile-exact.
+- **Health URL:** the guide's default is `127.0.0.1:3001`, while CLAUDE.md says `127.0.0.1:3005`.
+
+The `deploy.sh` file itself was not part of this snapshot, so neither version is confirmed.
+
+**CI status is unknown.** No GitHub Actions workflow files were provided. The Lambda/ECR pipeline described in CLAUDE.md is labelled legacy ([CLAUDE.md:L187](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L187), [CLAUDE.md:L336-L342](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L336-L342)). It is also not documented here how a push to main triggers `deploy.sh` on the host.
+
+## 5. Feedback loop
+
+Errors that reach the after-route middleware are passed to `githubErrorMiddleware` for this repository ([server/app.ts:L281-L283](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L281-L283)). That feeds production failures back into the issue tracker. For runtime checks after a deploy, see [Operations](../operations/).

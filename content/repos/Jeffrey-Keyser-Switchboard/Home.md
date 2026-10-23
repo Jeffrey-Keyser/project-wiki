@@ -1,35 +1,39 @@
 ---
-title: Switchboard
-description: Serverless feature toggle and configuration management service on AWS Lambda with hybrid caching, audit logging, and a React admin UI.
+title: "Switchboard"
+description: "Overview of Switchboard, a feature toggle and configuration service with an Express API, React admin UI, and TypeScript client SDK."
 ---
 
 # Switchboard
 
-Switchboard is a feature toggle and configuration management service that lets applications change behavior dynamically without redeploying. It runs on AWS Lambda with PostgreSQL, Upstash Redis, and a React admin dashboard ([README.md:10](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L10)).
+Switchboard is a feature toggle and configuration management service. Applications read flags and typed configuration values at runtime, so behavior can change without a redeploy ([README.md:L10](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/README.md#L10)).
+
+Older wiki text described an AWS Lambda deployment. The current deployment guide says Switchboard is no longer on Lambda and runs as a systemd-managed Node/Express process behind a Cloudflare Tunnel ([DEPLOYMENT_BEELINK.md:L3-L6](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/DEPLOYMENT_BEELINK.md#L3-L6)). This is a documented deployment, not something the source excerpts alone prove.
 
 ## At a glance
 
-- **Purpose:** dynamic feature flags + typed configs (string / number / boolean / json) with hierarchical scopes (user → application → global) ([README.md:14-20](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L14-L20), [README.md:196-220](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L196-L220)).
-- **Runtime:** Express 5 wrapped in `serverless-http` on AWS Lambda, single handler exported from `server/lambda.ts` ([server/lambda.ts:1](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/lambda.ts#L1), [server/package.json:38-46](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/package.json#L38-L46)).
-- **Storage:** PostgreSQL on RDS via `pg` driver and a DAL pattern; Upstash Redis as L2 cache; `lru-cache` as L1 ([README.md:182-188](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L182-L188), [server/dal/BaseDal.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/dal/BaseDal.ts)).
-- **Surfaces:** REST API under `/api/v1/*` ([server/routes/versions/v1/index.ts:46-76](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/routes/versions/v1/index.ts#L46-L76)), React admin UI in `client/`, official SDK in `client-sdk/` published as `@switchboard/client` ([client-sdk/package.json:2-7](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/client-sdk/package.json#L2-L7)).
-- **Auth:** API keys (bcrypt) for consumers, JWT/sessions via `@jeffrey-keyser/pay-auth-integration` for admin ([README.md:598-610](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L598-L610), [server/app.ts:38-88](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L38-L88)).
-- **Realtime:** SSE endpoint `/api/v1/realtime/events` backed by Redis pub/sub via `EventBus` ([CLAUDE.md:235-260](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L235-L260), [server/services/EventBus.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services/EventBus.ts)).
+- **Feature toggles:** enable or disable features without code deployments ([README.md:L14](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/README.md#L14)).
+- **Typed configs:** string, number, boolean, and JSON values ([README.md:L15](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/README.md#L15)).
+- **Scopes:** user overrides win over application values, which win over global defaults ([ScopeResolver.ts:L17-L20](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/ScopeResolver.ts#L17-L20)).
+- **Caching:** hybrid in-memory plus Upstash strategy, selected by `CACHE_STRATEGY` ([cache/index.ts:L43-L54](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/cache/index.ts#L43-L54)).
+- **Auth:** API keys for consumer endpoints, Pay-service integration for admin routes ([apiKeyAuth.ts:L14-L35](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/middleware/apiKeyAuth.ts#L14-L35), [app.ts:L86](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/app.ts#L86)).
+- **Audit trail:** feature mutations write audit log entries when a user ID is supplied ([FeatureToggleService.ts:L73-L80](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/FeatureToggleService.ts#L73-L80)).
+- **Realtime:** an SSE endpoint streams update events ([v1/index.ts:L74-L76](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/routes/versions/v1/index.ts#L74-L76)).
+- **Client SDK:** `SwitchboardClient` and React hooks are exported from `client-sdk/` ([client-sdk/src/index.ts:L9](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/client-sdk/src/index.ts#L9), [client-sdk/src/react/index.ts:L6-L10](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/client-sdk/src/react/index.ts#L6-L10)).
 
-## Who uses this
+## Who uses it
 
-- **Consumer apps** call REST / SDK to read flags and configs; resolution is scope-aware (user override > application > global) ([README.md:196-220](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L196-L220)).
-- **Operators / product** use the admin UI in `client/` to create features, configs, applications, and inspect audit logs ([client/src](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/client/src), [server/routes/audit-logs.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/routes/audit-logs.ts)).
-- **Other Jeffrey-Keyser services** integrate via the SDK and Pay auth, sharing the central Pay identity service at `pay.jeffreykeyser.net` ([server/app.ts:51](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L51)).
+- **Consumer applications** call the REST API or the SDK to check features and configs. Consumer routes accept an optional API key ([API.md:L63](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/API.md#L63)).
+- **Operators** use the admin UI. Page modules exist for dashboard, features, config, applications, and audit logs ([pages/admin/index.ts:L1-L5](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/client/src/pages/admin/index.ts#L1-L5)).
+- **Confirmed external callers:** unknown. The source excerpts do not identify any specific consuming application.
 
-## How work moves through it
+## Main flow
 
-Edits in the admin UI hit `/api/v1/features|configs|applications` routes, which call domain services (`FeatureToggleService`, `ConfigService`, `ApplicationService`), which write through DALs to Postgres and publish change events on `EventBus` so connected SSE clients refresh instantly ([server/services](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services), [CLAUDE.md:222-260](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L222-L260)).
+A consumer request reaches the Express app, passes version and API-key middleware, and then reaches a v1 route. The service layer resolves the value through the cache and database. Mutations publish events to the EventBus ([app.ts:L212-L216](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/app.ts#L212-L216), [EventBus.ts:L134-L136](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/EventBus.ts#L134-L136)).
 
 ## Wiki pages
 
-- [Architecture](./architecture/) — internal module layout, Lambda app composition, cache + scope resolution.
-- [Iteration Loop](./iteration-loop/) — how a change moves from branch to prod (CI, Terraform, Lambda deploy).
-- [Services & Dependencies](./services-and-dependencies/) — npm packages, AWS services, and downstream consumers.
-- [Operations](./operations/) — deploy commands, runtime ports, health probes, observability.
-- [Glossary](./glossary/) — Switchboard-specific terms (scope, hybrid cache, rollout, EventBus, etc.).
+- [Architecture](../architecture/): components and contracts.
+- [Iteration Loop](../iteration-loop/): contributor workflow and CI.
+- [Services & Dependencies](../services-and-dependencies/): what Switchboard depends on and who calls it.
+- [Operations](../operations/): commands, health checks, and observability.
+- [Glossary](../glossary/): project terms with source references.

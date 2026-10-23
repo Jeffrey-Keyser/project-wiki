@@ -1,46 +1,54 @@
 ---
-title: Iteration Loop
-description: How a change moves from edit through tests to a deployed environment in Analytics-Pulse.
+title: "Iteration Loop"
+description: "Contributor workflow for Analytics-Pulse, grounded in the repository's package scripts, contributing guide, and documented CI and deployment path."
 ---
 
 # Iteration Loop
 
-The cycle differs slightly per surface (server / client / tracking SDK) but all three share the same gate: lint + tests locally, PR to GitHub, then a workflow-driven build that lands on AWS.
+Changes move from a local branch through lint and tests, then a pull request. Deployment after merge is driven by workflows that the excerpts describe but do not include.
 
-## Typical change cycle
+## Local setup
+
+Contributors can use Docker or a manual setup. The Docker path copies `.env.docker.example` and runs `./scripts/docker-dev.sh` ([CONTRIBUTING.md:L95-L103](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CONTRIBUTING.md#L95-L103)). The manual path installs server dependencies, copies `.env`, runs `./deploy.sh` under `db`, and starts `npm run dev` ([CONTRIBUTING.md:L108-L123](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CONTRIBUTING.md#L108-L123)). The server dev script runs `ts-node ./bin/www.ts` ([server/package.json:L7](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/package.json#L7)).
+
+The guide expects the server at `localhost:3001` and the client at `localhost:3002` ([CONTRIBUTING.md:L141-L148](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CONTRIBUTING.md#L141-L148)). The Vite dev port is set to 3002 ([client/vite.config.js:L7](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/client/vite.config.js#L7)).
+
+## Branch and change
+
+- Branches use prefixes such as `feature/`, `fix/`, `docs/`, and `test/` ([CONTRIBUTING.md:L167-L173](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CONTRIBUTING.md#L167-L173)).
+- New API endpoints are mounted in the v1 router and documented with Swagger JSDoc ([CLAUDE.md:L191-L198](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L191-L198)).
+
+## Verify gates
+
+Server tests run with `npm test`, and the server lint script runs ESLint over `.ts` files ([server/package.json:L10-L11](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/package.json#L10-L11)). Client tests use Vitest, and the client has `lint`, `typecheck` against `tsconfig.ci.json`, and `build` scripts ([client/package.json:L34-L38](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/client/package.json#L34-L38)). The tracking library runs Jest with a jsdom environment ([tracking-library/jest.config.js:L3](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/tracking-library/jest.config.js#L3)).
+
+The README states that CI includes explicit package validation ([README.md:L11](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L11)). The CI workflow files are not in these excerpts, so their exact steps are unknown.
+
+## Database changes
+
+SQL is applied with the server `db:*` scripts: bootstrap, migrate, rollback, and status ([server/package.json:L15-L18](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/package.json#L15-L18)). Migrations are tracked in `schema_migrations`, and rollbacks use paired files ([docs/OPERATIONS.md:L41-L44](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L41-L44)). CLAUDE.md still lists Sequelize CLI migration commands ([CLAUDE.md:L95-L96](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L95-L96)), which conflicts with the SQL-first runbook. Treat the runbook path as current and the Sequelize path as unverified.
+
+## Pull request and deployment
 
 ```mermaid
 sequenceDiagram
-  participant Dev as Developer
-  participant Local as Local env
-  participant GH as GitHub
-  participant CI as GitHub Actions
-  participant AWS as AWS (Lambda/S3/CF)
-
-  Dev->>Local: cp .env.example .env, npm install
-  Dev->>Local: npm run dev (server :3001, client :3002)
-  Dev->>Local: edit code, hit Swagger /api-docs, watch hot-reload
-  Dev->>Local: npm test (jest / vitest)
-  Dev->>Local: npm run lint (server only)
-  Dev->>GH: git push, open PR
-  GH->>CI: trigger workflow
-  CI->>CI: run tests, build server Docker image
-  CI->>AWS: push image to ECR, update Lambda
-  CI->>AWS: build client, sync to S3, invalidate CloudFront
-  AWS-->>Dev: live URL serving new code
+  participant Dev as "Contributor"
+  participant Local as "Local checkout"
+  participant GH as "GitHub"
+  participant CI as "GitHub Actions workflows"
+  participant AWS as "AWS deploy targets"
+  Dev->>Local: "run npm test and npm run lint"
+  Dev->>Local: "run client typecheck and build"
+  Dev->>GH: "push branch and open pull request"
+  GH->>CI: "workflow triggered on push"
+  CI->>AWS: "push image update Lambda and sync client"
+  AWS-->>Dev: "environment serves the new build"
 ```
 
-## Step-by-step references
+CLAUDE.md documents that a push triggers the server image build, Lambda update, client sync, and CloudFront invalidation ([CLAUDE.md:L354-L359](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L354-L359)). Terraform changes are manual, through `workflow_dispatch` ([CLAUDE.md:L360](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L360)). The diagram reflects documentation, not verified workflow files.
 
-1. **Environment setup.** Copy `server/.env.example` → `server/.env`; the server's `config/env.ts` validates required vars at startup and throws if any are missing ([README.md:940-956](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L940-L956)).
-2. **Run locally.** `cd server && npm run dev` for the API (port 3001) and `cd client && npm run dev` for the dashboard, or `./scripts/docker-dev.sh` to bring up server + client + PostgreSQL together with hot-reload ([README.md:813-846](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L813-L846)).
-3. **Add API endpoint.** Drop a route in `server/routes/`, add JSDoc for Swagger, register it in `server/routes/versions/v1/index.ts`, then mirror types in `server/types/` and add an RTK Query slice in `client/src/reducers/` ([CLAUDE.md](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/CLAUDE.md), [server/routes/versions/v1/index.ts:73-149](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/routes/versions/v1/index.ts#L73-L149)).
-4. **Database changes.** Generate a migration with `npx sequelize-cli migration:generate`, apply with `server/db/deploy.sh`; new DAL classes extend `BaseDal` with `withTransaction` for atomicity ([README.md:960-987](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L960-L987)).
-5. **Test.** Server uses Jest + Supertest (`server/tests/__tests__/{unit,integration}`); client uses Vitest + Testing Library; the SDK uses Jest with `jest-environment-jsdom` ([README.md:997-1018](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L997-L1018), [tracking-library/package.json:46-51](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/tracking-library/package.json#L46-L51)).
-6. **Lint.** Server runs ESLint v9 flat config; client relies on react-app eslintConfig in `package.json` ([server/package.json:10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/package.json#L10), [client/package.json:40-45](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/client/package.json#L40-L45)).
-7. **Open PR.** Push to GitHub triggers CI/CD; the Docker image is built and pushed to ECR, Lambda is updated with the new image, the client is built and synced to S3, and CloudFront cache is invalidated ([README.md:1041-1042](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1041-L1042)). Terraform changes are gated behind manual `workflow_dispatch` ([README.md:1042](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1042)).
-8. **Contribution standards.** See `CONTRIBUTING.md` for code-of-conduct and PR conventions ([CONTRIBUTING.md:1-17](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/CONTRIBUTING.md#L1-L17)).
+## First-time bootstrap
 
-## Bootstrap loop (first-time deploy)
+For a new deployment, `scripts/new-service-auto.sh` runs prerequisite checks and project setup, then Terraform init, ECR creation, Docker build and push, and a full Terraform apply ([scripts/new-service-auto.sh:L189-L281](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/scripts/new-service-auto.sh#L189-L281)). It supports `--yes` for non-interactive mode ([scripts/new-service-auto.sh:L102-L104](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/scripts/new-service-auto.sh#L102-L104)). Contributor guidance on code style and tests is in [CONTRIBUTING.md](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CONTRIBUTING.md#L238-L247).
 
-For a fresh clone targeting a new domain, the fast path is `./scripts/new-service-auto.sh <name> <domain>`, which validates prerequisites, runs project setup, applies Terraform, builds and pushes the ECR image, then commits and pushes to trigger CI/CD — target time under 10 minutes ([README.md:238-291](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L238-L291)).
+Related pages: [Architecture](../architecture/), [Operations](../operations/).

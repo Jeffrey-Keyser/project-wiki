@@ -1,159 +1,56 @@
 ---
-title: dev-inbox — Services and Dependencies
-description: Inbound and outbound services dev-inbox talks to, with source citations.
+title: "Services and Dependencies"
+description: "What dev-inbox depends on, which callers are confirmed in source, and which consumers remain expected or unknown."
 ---
 
-This page catalogues the runtime services `dev-inbox` interacts with.
-Each claim is backed by a concrete `file:line` reference in the
-`dev-inbox` source.
+# Services and Dependencies
 
-## Outbound dependencies
+This page separates what the source confirms from what is only documented or expected. See [Operations](../operations/) for runtime commands.
 
-### Prompt registry (`prompt-api.jeffreykeyser.net`)
+## Depends on
 
-The Manager fetches **ecosystem** and **host** context, plus an
-optional persona catalog, from the centralized
-[prompt-registry](../../prompt-registry/) before planning. The exact
-calls live in the orchestrate slash command:
+### Host tooling
 
-```bash
-curl -s https://prompt-api.jeffreykeyser.net/api/v1/prompts/Jeffrey-Keyser%2Fecosystem | jq -r '.data.value' > /tmp/eco.txt
-curl -s https://prompt-api.jeffreykeyser.net/api/v1/prompts/Jeffrey-Keyser%2Fhost      | jq -r '.data.value' > /tmp/host.txt
-```
+- Required: bash, git, tmux, jq, uuidgen, Node.js 18+, Go, and at least one authenticated agent CLI ([README.md:L53-L54](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L53-L54), [package.json:L11-L13](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/package.json#L11-L13)).
+- Release-tarball installs also need `perl` and an authenticated `gh` ([docs/PORTABLE-INSTALL.md:L25-L29](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/PORTABLE-INSTALL.md#L25-L29)).
 
-([orchestrate.md:52-57](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/.claude/commands/orchestrate.md#L52-L57)).
-The persona catalog endpoint is used to dynamically discover relevant
-personas for Planner / Worker / Reviewer prompts:
+### Agent providers
 
-```bash
-curl -s https://prompt-api.jeffreykeyser.net/api/v1/prompts/catalog | jq '.data | map({namespace, count})'
-```
+- Supported providers are Claude, Codex, Copilot, Gemini, Kimi, and OpenCode ([README.md:L21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L21)).
+- `internal/providers` owns selection, health, fallback order, and retry ([docs/inference-layer.md:L33-L36](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/inference-layer.md#L33-L36)).
+- **Optional API lane.** The single-shot synthesizers can send requests through an AI Proxy `/v1/chat` instead of the CLI ([docs/model-completion-api-lane.md:L3](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/model-completion-api-lane.md#L3)).
+  - It is off by default, or whenever the config file is absent ([docs/model-completion-api-lane.md:L22](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/model-completion-api-lane.md#L22)).
+  - The proxy URL appears only in a config example.
 
-([orchestrate.md:70](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/.claude/commands/orchestrate.md#L70)).
-The Prompter library
-[`scripts/lib/prompter.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/prompter.sh)
-encapsulates the persona fetch for Worker / Reviewer / Revision prompts
-([CLAUDE.md:23](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L23)).
+### Optional external systems
 
-### Agency HQ — dispatch slots and config (best-effort)
+- **RabbitMQ and Agency HQ.** Both are optional for a portable standalone install. Their integrations degrade gracefully or can be disabled ([README.md:L85-L86](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L85-L86)).
+- **GitHub.**
+  - `issue-publisher` builds a GitHub tracker for issues and forge lifecycle ([cmd/issue-publisher/main.go:L47-L60](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/issue-publisher/main.go#L47-L60)).
+  - Forge lifecycle stays disabled unless `DEV_INBOX_FORGE_LIFECYCLE_MODE=on` ([cmd/issue-publisher/main.go:L171](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/issue-publisher/main.go#L171)).
+- **OpenClaw.** The supervise heartbeat monitor sends its first alert per incident through OpenClaw ([systemd/README.md:L10](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L10)).
+- **Image Studio.** Only two explicit cross-repository CI proofs use it ([docs/ci-testing.md:L17-L21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/ci-testing.md#L17-L21)).
 
-Each spawn script claims a dispatch slot from `agency-hq` so that the
-broader agency dashboard knows what is running. The call is
-**best-effort**: failures degrade gracefully and the slice still runs.
+None of the optional systems above are verified as deployed by this snapshot.
 
-- Planner: "Claim agency-hq planner dispatch slot (best-effort)"
-  ([spawn-planner.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-planner.sh)).
-- Worker: "Claim agency-hq worker dispatch slot (best-effort)" at
-  [spawn-worker.sh:220](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-worker.sh#L220);
-  dispatch-config fetch at
-  [spawn-worker.sh:240](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-worker.sh#L240).
-- Reviewer:
-  [spawn-reviewer.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-reviewer.sh).
-- Scout:
-  [spawn-scout.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-scout.sh).
-- Revision:
-  [spawn-revision.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-revision.sh).
+## Consumed by
 
-The Manager-side webhook dispatch flow is also documented in
-[`CLAUDE.md`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)
-under the bake-period notes (`scripts/manager-standalone.sh` writes
-the canonical `startup.json` / `failed.json` markers Agency HQ
-consumes —
-[CLAUDE.md:35](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L35)).
+### Confirmed callers in this repository
 
-### RabbitMQ — heartbeat publishing
+- **`/orchestrate` slash command.** It is the manager brain for interactive runs ([CLAUDE.md:L22](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/CLAUDE.md#L22)).
+- **`npm run orchestrate`.** It wraps `scripts/manager-standalone.sh` ([package.json:L9](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/package.json#L9)).
+- **Plan manager.** It dispatches each slice as a sub-orchestration ([docs/plan-manager-quickstart.md:L3-L5](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/plan-manager-quickstart.md#L3-L5)).
+- **`dev-inbox-queued`.** It constructs the production `devinbox` driver, configured with the scripts and plans roots and a `plan-managerd` binary ([cmd/dev-inbox-queued/main.go:L194-L198](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/dev-inbox-queued/main.go#L194-L198)).
+- **`launch-prospector-ideas.sh`.** It runs `manager-standalone.sh` sequentially, one run per repo ([docs/KEY-PATHS.md:L55](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/KEY-PATHS.md#L55)).
+- **`issue-triage approve`.** It admits jobs into the work queue, but only in `approval-gated` mode ([cmd/issue-triage/main.go:L323-L344](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/issue-triage/main.go#L323-L344)).
+- **`issue-publisher`.** It consumes the filesystem outboxes ([systemd/README.md:L20](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/systemd/README.md#L20)).
 
-Long-running Workers, Reviewers, and Revision workers run alongside a
-heartbeat daemon that publishes `task.heartbeat` events to RabbitMQ
-every `HEARTBEAT_INTERVAL_MS` (default 30 000 ms):
+### Expected external consumers (not verified)
 
-- Header contract — [`scripts/heartbeat-publisher.js`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/heartbeat-publisher.js).
-- Default URL — `amqp://localhost:5672`, overridable via `RABBITMQ_URL`
-  ([heartbeat-publisher.js:23](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/heartbeat-publisher.js#L23),
-  [heartbeat-publisher.js:46](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/heartbeat-publisher.js#L46)).
-- Exchange — `task.heartbeat`, topic, declared in the publisher
-  ([heartbeat-publisher.js](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/heartbeat-publisher.js)).
-- `amqplib` is loaded dynamically from sibling `node_modules` of
-  agency-hq / business-hq / pantry / cron-hq so the dev-inbox repo
-  does not own the dependency itself
-  ([heartbeat-publisher.js:57-64](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/heartbeat-publisher.js#L57-L64)).
+- **Agency HQ.** Source comments say the startup and failure markers exist so that Agency HQ can tell when a manager never started ([scripts/manager-standalone.sh:L157-L158](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/scripts/manager-standalone.sh#L157-L158)).
+- **Agency HQ release workflow.** Agency HQ is described as owning drain, activation, health, and rollback of reconciler releases ([cmd/project-reconciler-release/main.go:L1-L2](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/project-reconciler-release/main.go#L1-L2)).
+- **Relay sessions.** A cloud agent session can exchange prompts through the opt-in clipboard relay ([README.md:L302-L306](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L302-L306)).
 
-> **Scope note.** The dev-inbox source documents RabbitMQ for the
-> heartbeat publisher path; the rest of orchestration state remains
-> filesystem-first (`dispatch-events.jsonl`,
-> [ADR — Filesystem-Based State](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/docs/adrs/filesystem-state.md)).
-> Do not assume RabbitMQ as the source of truth for run state.
+### Unknown
 
-### Image Studio — artifact publishing
-
-Worker / Prospector tasks that emit images publish them to Image
-Studio via
-[`scripts/publish-artifacts.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/publish-artifacts.sh).
-The script POSTs `artifacts[]` entries from the result file to
-`https://images-api.../api/v1/import`. Auth is via
-`IMAGE_STUDIO_SERVICE_TOKEN` (preferred) or the legacy
-`IMAGE_STUDIO_JWT`
-([CLAUDE.md:72](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L72)).
-
-### Solo Vault — opt-in package-install credential
-
-Repository bootstrap (`internal/worktreebootstrap`) can read one GitHub
-package token from Solo Vault, but only when the repository's
-`config/bootstrap/<repo>.json` sets `githubTokenSecret` to a three-part
-secret reference such as `dev-inbox/production/GITHUB_ISSUE_TOKEN`
-([config/bootstrap/README.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/config/bootstrap/README.md),
-[credentials.go](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/internal/worktreebootstrap/credentials.go)).
-
-- The lookup happens only on a dependency-cache miss. Cache hits make no
-  Solo Vault request. A host `GITHUB_TOKEN` takes precedence and skips the lookup.
-- The lookup uses the existing Solo Vault loader credential. Bootstrap
-  removes that loader from the install child's environment.
-- The token is passed only to the install child as `GITHUB_TOKEN`. Its
-  value is redacted from logs and failure receipts. It is never written
-  to config, cache identity, the parent environment, or the worker agent.
-- A lookup failure, or an empty or invalid value, stops bootstrap before
-  any install command runs.
-
-## Inbound dependencies
-
-### `/orchestrate` slash command
-
-The primary inbound entry point inside an Agent CLI session — defined
-in
-[`.claude/commands/orchestrate.md`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/.claude/commands/orchestrate.md).
-Acts as the Manager brain
-([CLAUDE.md:17](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L17)).
-
-### `scripts/manager-standalone.sh` — webhook / CLI entry
-
-Standalone entry for webhook or scripted starts. Takes the prompt as
-the first positional argument and runs the full orchestration flow
-end-to-end, including writing the canonical `results/<runId>/startup.json`
-and `results/<runId>/failed.json` markers that Agency HQ polls
-([CLAUDE.md:35](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L35)).
-
-### Background systemd timers
-
-Three background units run on the Beelink homelab (see
-[Operations](../operations/) for the journalctl commands):
-
-- `dev-inbox-zombie-cleanup.timer` — hourly sweep of abandoned legacy
-  `dev-inbox-*` tmux sessions; the service runs
-  `scripts/cleanup-zombie-sessions.sh --force`
-  ([systemd/dev-inbox-zombie-cleanup.timer](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/systemd/dev-inbox-zombie-cleanup.timer),
-  [systemd/README.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/systemd/README.md)).
-- `dev-inbox-bake-telemetry.timer` — daily telemetry retention
-  ([CLAUDE.md:69](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L69)).
-- `dev-inbox-plan-watchdog.service` — plan-stage timeout watchdog.
-
-## Concurrency and state primitives
-
-- **Slot semaphore** —
-  [`scripts/acquire-slot.sh:22`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/acquire-slot.sh#L22)
-  enforces a default cap of 12 concurrent agents
-  (`DEV_INBOX_MAX_SLOTS`) using lockfiles in `results/.slots/`.
-- **Dispatch events** —
-  [`scripts/lib/dispatch-events.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/dispatch-events.sh)
-  appends to `results/<runId>/dispatch-events.jsonl` with `flock`
-  serialization and `python3 os.fsync` on flush
-  ([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)).
+- Any other downstream reader of `results/` or the event streams (for example, consumers of the runstream publisher) is not identified in the provided source.

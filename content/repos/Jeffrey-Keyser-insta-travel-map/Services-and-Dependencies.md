@@ -1,42 +1,44 @@
 ---
-title: Services and Dependencies
-description: Inbound and outbound integrations — Pay auth, ai-proxy, S3/CloudFront, beelink-deploy, GitHub.
+title: "Services and Dependencies"
+description: "What Insta Travel Map depends on and who calls it, with confirmed callers separated from expected or unknown ones."
 ---
 
 # Services and Dependencies
 
 ## Depends on
 
-### Internal Jeffrey-Keyser packages
-- `@jeffrey-keyser/pay-auth-integration` `^6.10.1` — server-side `setupPayAuth` + client-side `usePayAuth`. Version pin enforced; private subpaths forbidden ([server/package.json:22](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L22), [client/package.json:8](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/client/package.json#L8), [AGENTS.md:5-19](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/AGENTS.md#L5-L19)).
-- `@jeffrey-keyser/express-server-factory` — server bootstrap factory ([server/package.json:19](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L19)).
-- `@jeffrey-keyser/express-middleware-suite` — shared middleware ([server/package.json:18](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L18)).
-- `@jeffrey-keyser/database-base-config` — PG pool + session table management ([server/package.json:17](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L17)).
-- `@jeffrey-keyser/api-errors` — error response shape ([server/package.json:16](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L16)).
-- `@jeffrey-keyser/github-error-issues` — auto-opens GitHub issues on runtime errors ([server/package.json:20](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L20), [server/app.ts:5-8](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L5-L8)).
-- `@jeffrey-keyser/pay-api-types` — typed Pay-service contracts ([server/package.json:21](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L21)).
-- `@jeffrey-keyser/personal-ui-kit`, `@jeffrey-keyser/redux-app-toolkit`, `@jeffrey-keyser/feedback-widget` — client UI/state primitives ([client/package.json:7-11](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/client/package.json#L7-L11)).
+### Jeffrey-Keyser packages
 
-### Third-party runtime
-- Express 5, `express-session`, `cookie-parser`, `cors`, `helmet`-equivalent via factory ([server/package.json:26-34](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L26-L34)).
-- `pg` + `connect-session-sequelize` for PG-backed sessions ([server/package.json:26](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L26), [server/package.json:39](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L39)).
-- `swagger-jsdoc` + `swagger-ui-express` for `/api-docs` ([server/package.json:41-42](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L41-L42)).
-- React 19, Redux Toolkit, react-leaflet, Stripe Elements, react-i18next, Vite ([client/package.json:29-42](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/client/package.json#L29-L42)).
+- **`@jeffrey-keyser/pay-auth-integration`** `^6.10.1` provides server `setupPayAuth`/`requireAuth` and client `usePayAuth` ([server/package.json:L22](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L22), [client/package.json:L8](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/package.json#L8), [server/routes/travel-requests.ts:L8](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/travel-requests.ts#L8)).
+- **`@jeffrey-keyser/express-server-factory`** builds the app ([server/package.json:L19](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L19), [server/app.ts:L1-L4](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L1-L4)).
+- **`@jeffrey-keyser/database-base-config`** supplies validation, pool creation, and the health DAL ([server/config/env.ts:L2-L5](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/env.ts#L2-L5), [server/db/connection.ts:L1](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/db/connection.ts#L1)).
+- **`@jeffrey-keyser/api-errors`** provides error classes used by routes and services ([server/routes/travel-requests.ts:L2-L5](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/travel-requests.ts#L2-L5)).
+- **`@jeffrey-keyser/github-error-issues`** is instantiated in the app ([server/app.ts:L5-L8](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L5-L8)).
+- **`@jeffrey-keyser/pay-api-types`** is declared ([server/package.json:L21](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L21)). No import appears in the excerpts, so its use is unknown.
+- **Client UI and state**: `@jeffrey-keyser/redux-app-toolkit`, `@jeffrey-keyser/feedback-widget`, and `@jeffrey-keyser/personal-ui-kit` ([client/package.json:L7-L10](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/package.json#L7-L10)).
 
 ### External services
-- **Pay service** at `https://pay.jeffreykeyser.net` — issues sessions/JWTs, source of `PayUser` ([server/app.ts:93](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L93), [CLAUDE.md:46-53](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/CLAUDE.md#L46-L53)).
-- **Solo Vault** — bootstrap secrets (DATABASE_PASSWORD, SESSION_SECRET, JWT_SECRET, AI_PROXY_APP_ID) loaded via `loadVaultSecrets()` ([server/app.ts:49-51](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L49-L51), [CLAUDE.md:225](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/CLAUDE.md#L225)).
-- **ai-proxy** at `https://ai-proxy-api.jeffreykeyser.net` — all AI/LLM traffic routes here, not direct OpenAI. Auth via `X-App-Id: $AI_PROXY_APP_ID` ([CLAUDE.md:215-237](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/CLAUDE.md#L215-L237)).
-- **GitHub Packages** — registry for `@jeffrey-keyser/*` packages; install requires `GITHUB_TOKEN` ([AGENTS.md:21-29](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/AGENTS.md#L21-L29)).
-- **AWS S3 + CloudFront** — frontend hosting ([README.md:486-490](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L486-L490)).
-- **beelink-deploy** webhook — backend redeploy trigger ([.github/workflows/ci-cd-pipeline.yml:104-113](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/.github/workflows/ci-cd-pipeline.yml#L104-L113)).
-- **Stripe** — payment processing via Stripe Elements ([client/package.json:13-14](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/client/package.json#L13-L14), [CLAUDE.md:38](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/CLAUDE.md#L38)).
+
+- **Pay service**: the server calls `PAY_SERVICE_URL` for ACL lookups, admin actions, and payment proxying ([server/routes/access-requests.ts:L71](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/access-requests.ts#L71), [server/routes/acl.ts:L33](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/acl.ts#L33), [server/routes/payment.ts:L10-L15](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/payment.ts#L10-L15)). The default is `https://pay.jeffreykeyser.net` ([server/config/env.ts:L103-L104](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/env.ts#L103-L104)).
+- **Solo Vault**: bootstrap secrets are loaded from `https://api.vault.jeffreykeyser.net` unless `SOLO_VAULT_URL` overrides it ([server/config/vault.ts:L18-L20](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/vault.ts#L18-L20)).
+- **Google Flights service**: admin flight routes proxy to `GOOGLE_FLIGHTS_SERVICE_URL`, which defaults to `https://api.flights.jeffreykeyser.net` ([server/config/env.ts:L107](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/env.ts#L107), [server/routes/flights.ts:L81-L89](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/flights.ts#L81-L89)). Deployment status is unknown.
+- **SMTP and Pushover**: `NotifyService` sends email when SMTP and admin email are set, and posts to `api.pushover.net` when Pushover is configured ([server/services/NotifyService.ts:L65](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/services/NotifyService.ts#L65), [server/services/NotifyService.ts:L114-L125](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/services/NotifyService.ts#L114-L125)). Configuration is not visible for production.
+- **ai-proxy**: CLAUDE.md requires all AI calls to route through `https://ai-proxy-api.jeffreykeyser.net` and forbids the `openai` SDK ([CLAUDE.md:L222-L225](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/CLAUDE.md#L222-L225)). `openai` is listed in the server package ([server/package.json:L38](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L38)), but no call site appears in the excerpts.
+- **Stripe**: the client declares Stripe packages ([client/package.json:L13-L14](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/package.json#L13-L14)). The `/payment` route is present ([client/src/App.tsx:L34-L41](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/src/App.tsx#L34-L41)).
+- **GitHub**: the CI job uses the private actions repo, and `@jeffrey-keyser/*` packages install from GitHub Packages ([.github/workflows/ci-cd-pipeline.yml:L19-L23](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/.github/workflows/ci-cd-pipeline.yml#L19-L23), [AGENTS.md:L21](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/AGENTS.md#L21)).
+- **beelink-deploy webhook and AWS**: CI POSTs to the webhook and syncs the frontend to S3 and CloudFront ([.github/workflows/ci-cd-pipeline.yml:L90-L113](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/.github/workflows/ci-cd-pipeline.yml#L90-L113)).
 
 ## Consumed by
 
-- **End users** via `https://travel.jeffreykeyser.net` (CORS allow-list) calling `https://api.jeffreykeyser.net` ([server/app.ts:182-203](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L182-L203)).
-- **Pay service** — calls back into `/auth` flows during login redirect ([server/app.ts:189](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L189), [server/app.ts:288-292](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L288-L292)).
-- **github-error-issues service** consumes 5xx error events emitted from the error handler ([server/app.ts:312-327](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L312-L327)).
-- **Swagger UI consumers** at `/api-docs` ([README.md:80-82](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L80-L82)).
+**Confirmed by source:**
 
-No upstream Jeffrey-Keyser app currently imports this repo as a library — it ships as a standalone product surface.
+- **Browser client**: the client calls the API through the base URL that CI passes as `VITE_API_URL` ([.github/workflows/ci-cd-pipeline.yml:L73](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/.github/workflows/ci-cd-pipeline.yml#L73)). Admin dashboard data comes from an RTK Query hook ([client/src/components/AdminDashboard.tsx:L62-L63](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/src/components/AdminDashboard.tsx#L62-L63)).
+- **Dev proxy**: Vite forwards `/auth`, `/api`, `/acl`, and related paths to `localhost:3001` ([client/vite.config.js:L9-L34](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/vite.config.js#L9-L34)).
+- **Swagger UI**: served at `/api-docs` ([server/bin/www.ts:L51](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/bin/www.ts#L51)).
+
+**Expected or unknown (not established by the snapshot):**
+
+- Pay service calling back into this app's `/auth` routes. The old claim is not supported by the excerpts.
+- Other Jeffrey-Keyser apps importing this repo as a library. The root `package.json` excerpt shows no exports or package entry ([package.json:L1-L14](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/package.json#L1-L14)).
+- External consumers of the public access-request endpoints beyond this client.
+- Consumers of `/api/v1/customers/*` proxy routes. The payment handlers in the excerpt do not call `requireAuth`, so whether the Pay proxy enforces auth is unknown ([server/routes/payment.ts:L44-L49](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/payment.ts#L44-L49)).

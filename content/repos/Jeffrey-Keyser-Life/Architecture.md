@@ -1,58 +1,51 @@
 ---
-title: Architecture
-description: Internal module and service layout of the Life monorepo — client, server, AI proxy, and PostgreSQL with stored procedures.
+title: "Architecture"
+description: "Components and contracts of the Life monorepo: React client, Express server, stored-procedure database, and external AI, auth, and storage integrations."
 ---
 
 # Architecture
 
-Life is a two-workspace monorepo: a React/Vite client and an Express/TypeScript server, with PostgreSQL behind the server and an external AI Proxy fronting Whisper and GPT-4o-mini ([README.md:30-34](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L30-L34)).
+Life is a two-package monorepo. The root package wraps `client` and `server` and runs scripts across both ([package.json:5-8](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/package.json#L5-L8)). Both packages are private ([client/package.json:4](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/package.json#L4), [server/package.json:4](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/package.json#L4)).
 
 ## Component map
 
 ```mermaid
 flowchart LR
-  Browser[Browser MediaRecorder] -->|audio + RTK Query| Client[client/ React 19 + Vite]
-  Client -->|HTTPS REST| Server[server/ Express 5 + TS]
-  Server -->|payAuthMiddleware| PayAuth[Pay SSO service]
-  Server -->|aiProxy.ts| AIProxy[AI Proxy service]
-  AIProxy --> Whisper[Whisper]
-  AIProxy --> GPT[GPT-4o-mini]
-  Server -->|pg + stored procs| Postgres[(PostgreSQL: public + life schemas)]
-  Server -->|S3 SDK| S3[(S3 audio + images)]
-  Server -->|githubErrorMiddleware| GitHub[GitHub Issues]
+  U["Browser user"] -->|"HTTPS"| C["Client React 19 and Vite"]
+  C -->|"REST via RTK Query"| S["Server Express 5"]
+  S -->|"Pay SSO middleware"| P["Pay auth service"]
+  S -->|"aiProxy service"| A["AI Proxy"]
+  S -->|"STRUCT_URL"| T["Struct analysis service"]
+  S -->|"pg and stored procedures"| D["PostgreSQL public and life schemas"]
+  S -->|"storage provider"| R["S3 object storage"]
+  S -->|"feedback route"| F["Feedback Registry"]
+  S -->|"error middleware production"| G["GitHub issues"]
+  A --> W["Whisper and chat models"]
 ```
 
-## Role contracts
+## Client
 
-### Client — voice + journal UI
+- The client is a Vite app. Dev server port is 3001, with an `/api` proxy to 3002 ([client/vite.config.ts:13-19](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/vite.config.ts#L13-L19)).
+- The API base comes from `VITE_API_URL`, defaulting to a localhost URL ([client/src/config/api.ts:2](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/src/config/api.ts#L2)). Pay uses `VITE_PAY_URL` ([client/src/config/payAuth.ts:4](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/src/config/payAuth.ts#L4)).
+- Routes separate public screens from protected ones. Journal, person, tag, and debug routes sit under `ProtectedRoute` ([client/src/Router.tsx:17-27](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/src/Router.tsx#L17-L27)).
+- The graph is a custom canvas and d3-force pipeline. Cytoscape remains as a dependency ([client/package.json:21-22](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/package.json#L21-L22), [docs/time-tags-era-cloud-design.md:35](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/time-tags-era-cloud-design.md#L35)). The renderer file itself is not in the attached excerpts.
 
-- `client/src/App.tsx` mounts the React 19 root; routing lives in `client/src/Router.tsx` and the Redux store + RTK Query slices live under `client/src/reducers/` (`entries.api.ts`, `voice.api.ts`, `persons.api.ts`, `tags.api.ts`, etc.) ([client/src directory](https://github.com/Jeffrey-Keyser/Life/tree/master/client/src)).
-- The API base is configured at build time via `VITE_API_URL` and `VITE_PAY_URL`, baked into the bundle by Vite ([README.md:64-67](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L64-L67)).
-- RTK Query's base query unwraps the standard `{ success, data }` server envelope so reducers see plain payloads ([CLAUDE.md:143-144](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L143-L144)).
-- Graph rendering uses Cytoscape with the `cose-bilkent` layout ([client/package.json:22-23](https://github.com/Jeffrey-Keyser/Life/blob/master/client/package.json#L22-L23)).
+## Server contracts
 
-### Server — Express app, routes, services
+- `server/app.ts` composes middleware and routers. Correlation IDs are first ([server/app.ts:56-57](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/app.ts#L56-L57)).
+- Journal APIs live under `/api/v1/journals`, with voice routes mounted beside them ([server/app.ts:101-102](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/app.ts#L101-L102)). Health, user, and diagnostics routes are root-level ([server/app.ts:97-100](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/app.ts#L97-L100)).
+- Successful responses use an `ok()` envelope ([server/routes/index.ts:29](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/index.ts#L29)). The client unwraps it ([CLAUDE.md:151](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L151)).
+- Entries carry `parent_entry_id` and optional addenda ([server/types/index.ts:50](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/types/index.ts#L50), [server/services/entries.service.ts:43-49](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/entries.service.ts#L43-L49)).
 
-- `server/app.ts` is the composition root: it wires correlation IDs, session store, CORS, body parsers, Swagger UI, all routers, the GitHub-error middleware, and the final error handler ([server/app.ts:44-127](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L44-L127)).
-- Routes are mounted under `/api/v1` and split by resource. Journals (nested resources: entries, persons, tags, edges, audio, images, search, time-tags) live under `server/routes/journals/` ([server/app.ts:97-110](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L97-L110)).
-- Domain logic lives in `server/services/` (e.g. `voiceEntry.ts`, `aiProxy.ts`, `entries.service.ts`, `edges.service.ts`, `search.service.ts`) — routes stay thin and delegate ([server/services directory](https://github.com/Jeffrey-Keyser/Life/tree/master/server/services)).
-- All AI traffic goes through `server/services/aiProxy.ts`; nothing in the server calls OpenAI directly ([README.md:84-85](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L84-L85)).
+## Voice and AI
 
-### Middleware stack
+- Transcription uses Whisper-1 through the AI Proxy ([server/services/aiProxy.ts:114-119](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/aiProxy.ts#L114-L119)).
+- Chat calls also go through the AI Proxy. The default chat model is `gpt-4o-mini` ([server/services/aiProxy.ts:138](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/aiProxy.ts#L138)).
+- Structuring sends a schema-constrained prompt to the Struct service ([server/services/voiceEntry.ts:244-247](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/voiceEntry.ts#L244-L247)).
+- Uploads are capped at 25 MB ([server/routes/voiceEntry.ts:25-28](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/voiceEntry.ts#L25-L28)).
 
-- `correlationId` is registered first so every downstream log line carries `requestId` ([server/app.ts:56-57](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L56-L57)).
-- `payAuthMiddleware` validates Pay-issued tokens and resolves them into a local Life user, auto-provisioning a row in `life.users` and a default journal on first hit ([CLAUDE.md:155-159](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L155-L159)).
-- Rate limiting is applied generally in production and tighter on `/user/login` and `/user/register` ([server/app.ts:60-64](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L60-L64), [server/app.ts:90-91](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L90-L91)).
-- `errorHandler` is last in the chain, after the GitHub-error reporter that opens issues for production exceptions ([server/app.ts:117-125](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L117-L125)).
+## Data and storage
 
-### Database — stored procedures as the only contract
-
-- All write paths go through PostgreSQL stored procedures; there are two schemas: `public` for application data and `life` for user mapping ([CLAUDE.md:118-141](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L118-L141)).
-- `life.get_or_create_user(pay_uuid, email)` is the atomic upsert used during auto-provisioning ([CLAUDE.md:124](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L124)).
-- Edges between journal entries (people/tag overlap) are bidirectional and recalculated automatically on entry change ([CLAUDE.md:107-110](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L107-L110)).
-
-### Storage and observability adjuncts
-
-- S3 (via `@aws-sdk/client-s3` and `s3-request-presigner`) stores audio and image bytes; the DB only holds object keys and dominant colors ([server/package.json:21-22](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L21-L22), [CLAUDE.md:140](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L140)).
-- Winston is the structured logger; Morgan logs HTTP lines ([server/package.json:39](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L39), [server/package.json:47](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L47)).
-- Production exceptions are auto-reported as GitHub Issues via `@jeffrey-keyser/github-error-issues` ([server/app.ts:117-123](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L117-L123)).
+- The `life` schema maps Pay users to local users, and the `public` schema holds journal data ([CLAUDE.md:131-136](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L131-L136)).
+- Audio and images go to a storage provider, currently S3 only. The database stores object keys ([server/services/storage/index.ts:9-12](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/storage/index.ts#L9-L12), [server/services/audioEntry.ts:15-19](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/audioEntry.ts#L15-L19)).
+- Synopsis vectors use a local model with 384 dimensions ([server/embed/index.ts:4-5](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/embed/index.ts#L4-L5)).

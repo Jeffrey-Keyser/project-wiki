@@ -1,40 +1,40 @@
 ---
-title: Services and Dependencies
-description: Runtime dependencies, libraries, and downstream consumers of cron-service.
+title: "Services and Dependencies"
+description: "What cron-service depends on at runtime and who is confirmed or expected to call or consume it. Unconfirmed consumers are marked as unknown."
 ---
 
 # Services and Dependencies
 
 ## Depends on
 
-### Infrastructure
+### Confirmed runtime dependencies
 
-- **PostgreSQL** — job catalog and run history. Connection string in `DATABASE_URL`; schema in `schema.sql` ([README.md:36-37](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L36-L37), [schema.sql:1-50](https://github.com/Jeffrey-Keyser/cron-service/blob/main/schema.sql#L1-L50), [src/services/db.ts:3-5](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/db.ts#L3-L5)). Systemd ordering requires `postgresql.service` to be up first ([cron-service.service:3](https://github.com/Jeffrey-Keyser/cron-service/blob/main/cron-service.service#L3)).
-- **RabbitMQ** — publish target for every job. `RABBITMQ_URL`, default `amqp://localhost` ([src/services/rabbit.ts:24-25](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/rabbit.ts#L24-L25)). Systemd requires `rabbitmq-server.service` ([cron-service.service:3](https://github.com/Jeffrey-Keyser/cron-service/blob/main/cron-service.service#L3)).
-- **SMTP server (optional)** — `SMTP_HOST/PORT/USER/PASS/FROM` for failure alerts; falls back to stdout log if unset ([src/services/email.ts:3-32](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/email.ts#L3-L32)).
-- **openclaw-bridge (optional)** — proxied via `/api/bridge/*` to `BRIDGE_HOST:BRIDGE_PORT` (default `localhost:3099`). Only required if the operator uses the bridge admin UI through cron-service ([src/routes/bridge.ts:6-7](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/bridge.ts#L6-L7)).
+- **PostgreSQL.** Required for job and run state. The pool is built from `DATABASE_URL` ([src/services/db.ts:3-5](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/db.ts#L3-L5)). Startup fails if `SELECT 1` fails ([src/index.ts:145](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L145), [src/index.ts:161-164](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L161-L164)).
+- **RabbitMQ.** Required for startup. `rabbit.connect()` runs before jobs load ([src/index.ts:149-153](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L149-L153)). The URL comes from `RABBITMQ_URL`, defaulting to `amqp://localhost` ([src/services/rabbit.ts:25](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/rabbit.ts#L25)).
+- **systemd ordering.** The unit lists `postgresql.service` and `rabbitmq-server.service` in `After=`. This orders startup but does not guarantee availability ([cron-service.service:3](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/cron-service.service#L3)).
 
-### NPM libraries (runtime)
+### Optional dependencies
 
-- `@jeffrey-keyser/api-errors` — typed HTTP errors + `RouteHandler.wrap` + Express error middleware ([package.json:14](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L14), [src/index.ts:10-59](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L10-L59)).
-- `@jeffrey-keyser/message-contracts` — supplies `CronExchange`, `CronJobTriggered`, and `CronTargets` shared with subscriber services ([package.json:15](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L15), [src/services/rabbit.ts:2](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/rabbit.ts#L2), [src/routes/message-types.ts:2-7](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/message-types.ts#L2-L7)).
-- `amqplib` ^0.10.5 — RabbitMQ client ([package.json:16](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L16)).
-- `node-cron` ^4.2.1 — in-process cron timers ([package.json:22](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L22), [src/services/scheduler.ts:1](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L1)).
-- `cron-parser` ^5.5.0 + `cronstrue` ^2.50.0 — next-run computation and human-readable schedule text ([package.json:18-19](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L18-L19), [src/routes/jobs.ts:3-4](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/jobs.ts#L3-L4)).
-- `express` ^5.2.1 + `cors` — HTTP layer ([package.json:17-21](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L17-L21)).
-- `pg` ^8.13.0 — Postgres pool ([package.json:24](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L24)).
-- `pino` ^10.3.1 — structured logging ([package.json:25](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L25)).
-- `nodemailer` ^8.0.6 — failure alert mail ([package.json:23](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L23)).
-- `uuid` ^14.0.0 — run IDs ([package.json:26](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L26), [src/services/scheduler.ts:2-58](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L2-L58)).
-- `dotenv` ^16.4.5 — local `.env` loading ([package.json:20](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L20), [src/index.ts:1](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L1)).
+- **SMTP server.** Used for failure alerts when `SMTP_HOST` is set. Otherwise alerts go to stdout ([src/services/email.ts:3-15](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/email.ts#L3-L15), [src/services/email.ts:20-23](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/email.ts#L20-L23)).
+- **openclaw-bridge.** Reached only through `/api/bridge/*`, at `BRIDGE_HOST:BRIDGE_PORT` with defaults `localhost` and `3099` ([src/routes/bridge.ts:6-7](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/bridge.ts#L6-L7)). Whether a bridge is deployed is unknown.
+
+### Key libraries
+
+- `@jeffrey-keyser/message-contracts` at 1.19.0 supplies `CronExchange`, `CronJobTriggered`, and `CronTargets` ([package.json:15](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L15), [src/services/rabbit.ts:2](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/rabbit.ts#L2)). Its source is not provided.
+- `@jeffrey-keyser/api-errors` supplies typed HTTP errors, `RouteHandler`, and the error middleware ([src/index.ts:10](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L10), [src/index.ts:58-59](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L58-L59)).
+- `amqplib`, `node-cron`, `cron-parser`, `cronstrue`, `pg`, `pino`, `nodemailer`, and `express` do the work named by their imports. For example, `node-cron` provides scheduling ([src/services/scheduler.ts:1](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L1)).
 
 ## Consumed by
 
-- **Any RabbitMQ subscriber** bound to the shared `CronExchange` (default name in message-contracts) with a routing key equal to a job's `queue` field. The default message body is `CronJobTriggered = { jobId, jobName, schedule, payload, triggeredAt, runId }` ([src/services/scheduler.ts:74-84](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L74-L84), [README.md:108-119](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L108-L119)).
-- **Custom-exchange consumers** — if a job sets `exchange` to something other than empty or `cron.jobs`, the raw `payload` is published verbatim to that topic exchange. Used to integrate with subscribers that own their own message envelopes ([src/services/scheduler.ts:64-73](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L64-L73), [src/services/rabbit.ts:95-109](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/rabbit.ts#L95-L109)).
-- **Operator dashboard** — the SPA in `public/index.html`, served from `/`, plus any external script using the JSON API with the bearer token ([src/index.ts:49-117](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L49-L117), [README.md:53-64](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L53-L64)).
-- **Seed scripts** — `scripts/seed-flights-job.sh` and `scripts/seed-flights-purge-job.sh` POST jobs into a running instance using `CRON_API_KEY`, an example of an external system provisioning cron entries ([README.md:96-106](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L96-L106)).
+### Confirmed in source
 
-## External admin coupling
+- **The API and UI.** The app serves static files from `public/` and returns `index.html` for non-API paths. Those UI files are not in the provided excerpts ([src/index.ts:49](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L49), [src/index.ts:116-120](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L116-L120)).
+- **Seed scripts.** Two scripts POST jobs to `localhost:3016` with a bearer key. They are in the repo, but whether they run in any environment is unknown ([scripts/seed-flights-job.sh:3-4](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/scripts/seed-flights-job.sh#L3-L4), [scripts/seed-flights-job.sh:18-20](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/scripts/seed-flights-job.sh#L18-L20), [scripts/seed-flights-purge-job.sh:23-25](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/scripts/seed-flights-purge-job.sh#L23-L25)).
+- **Run completion callers.** `POST /api/runs/:id/downstream-completion` and the correlation-ID variant accept calls from a service or operator holding the key ([src/routes/runs.ts:91](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/runs.ts#L91), [src/routes/runs.ts:106](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/runs.ts#L106)). No caller of these routes is identified in the source.
 
-`openclaw-bridge` is the only outbound HTTP integration. Failures return `502 Bridge unreachable` or `504 Bridge timeout` instead of cascading into the scheduler ([src/routes/bridge.ts:32-46](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/bridge.ts#L32-L46)).
+### Expected but unconfirmed
+
+- **Subscribers on `CronExchange`.** Messages are published with a routing key equal to the job's `queue` ([src/services/scheduler.ts:181](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L181), [src/services/rabbit.ts:86](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/rabbit.ts#L86)). The subscribing services are unknown.
+- **Custom-exchange consumers.** Jobs with a non-empty exchange other than the literal `cron.jobs` publish raw payloads to that exchange ([src/services/scheduler.ts:184-190](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L184-L190)). The consumers are unknown.
+- **Flights queues.** The seed scripts name queues `flights-parse-emails` and `flights-purge-expired`. This suggests consumers, but no consumer is in the provided source ([scripts/seed-flights-job.sh:4](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/scripts/seed-flights-job.sh#L4), [scripts/seed-flights-purge-job.sh:4](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/scripts/seed-flights-purge-job.sh#L4)).
+- **Agency.** The README names Agency as the party that completes work and sends receipts ([README.md:87](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/README.md#L87)). Its implementation and deployment are unknown.

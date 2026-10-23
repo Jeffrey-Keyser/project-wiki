@@ -1,79 +1,145 @@
 ---
-title: Architecture
-description: Internal module layout of NanoClaw — channels, queue, dispatch pool, tmux runtime, IPC, scheduler, and supporting services.
+title: "Architecture"
+description: "Components and contracts inside the NanoClaw process: channels, SQLite, dispatcher, queue, tmux runtime, agent runner, IPC, and health."
 ---
 
 # Architecture
 
-NanoClaw is a single Node.js process composed of small, well-named modules. The entry point `src/index.ts` bootstraps the app, the dispatcher, and the message loop, then keeps the process alive ([src/index.ts:13-21](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/index.ts#L13-L21)).
+NanoClaw runs as a single Node.js process. Channels self-register at startup. Group work is queued and executed in tmux sessions that receive explicit host mounts ([README.md:L190-L194](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L190-L194)). The default execution path runs from `container-runner.ts` through `session-settings.ts` to `runtime-adapter.ts` ([docs/PROJECT_STATUS.md:L9](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/PROJECT_STATUS.md#L9)).
 
 ## Component diagram
 
 ```mermaid
 flowchart LR
-    subgraph Inbound
-        CH[Channels<br/>self-register]
-        IPC[IPC watcher<br/>filesystem]
-        SCH[Task scheduler<br/>cron + one-shot]
-    end
-
-    subgraph Orchestration
-        ROUTER[Router]
-        QUEUE[GroupQueue]
-        DISP[Dispatch pool]
-    end
-
-    subgraph Runtime
-        ADAPT[Runtime adapter]
-        TMUX[tmux session<br/>agent runner]
-        PROXY[Credential proxy]
-    end
-
-    DB[(SQLite<br/>better-sqlite3)]
-    HQ[Agency HQ client]
-    HEALTH[/health + /skills/]
-
-    CH --> ROUTER
-    IPC --> ROUTER
-    SCH --> ROUTER
-    ROUTER --> QUEUE --> DISP --> ADAPT --> TMUX
-    TMUX --> PROXY --> CLAUDE[Anthropic API]
-    DISP <--> HQ
-    ROUTER --> DB
-    DISP --> DB
-    TMUX --> DB
-    DB --> HEALTH
+    TG["Telegram channel"] --> CB["Lifecycle onMessage callback"]
+    CB --> DB["SQLite messages.db"]
+    DB --> ML["Message loop and dispatcher"]
+    ML --> GQ["GroupQueue"]
+    SCH["Task scheduler"] --> CR["Container runner"]
+    GQ --> CR
+    CR --> RA["tmux runtime adapter"]
+    RA --> AR["Agent runner process"]
+    AR --> PB["Provider backend"]
+    AR --> MCP["nanoclaw MCP stdio server"]
+    MCP --> IPC["Filesystem IPC watcher"]
+    IPC --> RT["Router"]
+    ML --> RT
+    RT --> TG
+    PB --> CP["Credential proxy"]
+    HS["Skill server health and skills"] --> SH["Service health snapshot"]
 ```
 
-## Role contracts
+The scheduler-to-runner edge follows the specification's diagram ([docs/SPEC.md:L119-L127](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SPEC.md#L119-L127)). The specification's references to containers are historical design intent ([docs/SPEC.md:L5](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SPEC.md#L5)).
 
-### Lifecycle and orchestration
-- `src/lifecycle.ts` owns startup: it imports the channel registry side-effects, initializes secrets, the credential proxy, the SQLite DB, the IPC watcher, message API, skill registry, and the Agency HQ subsystems ([src/lifecycle.ts:1-67](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L1-L67)).
-- `src/index.ts` is intentionally tiny: it calls `initApp`, `initDispatcher`, recovers pending messages, then starts the message loop ([src/index.ts:13-21](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/index.ts#L13-L21)).
-- Shared mutable state (sessions, registered groups, last timestamps) lives in a single `state` object in `lifecycle.ts` ([src/lifecycle.ts:72-77](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L72-L77)).
+The credential proxy edge describes Anthropic-style requests. Whether the `opencode` and `codex` backends route through the proxy is not shown in the attached source.
+
+## Contracts
+
+### Startup
+
+`initApp` runs the following steps in order ([src/lifecycle.ts:L175-L234](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/lifecycle.ts#L175-L234)):
+
+- loads secrets;
+- verifies the runtime;
+- initializes SQLite;
+- prunes events older than 7 days;
+- loads state;
+- starts the credential proxy;
+- starts the skill registry, which serves `/skills` and `/health`.
+
+Shutdown handlers for SIGTERM and SIGINT stop each subsystem and mark it as disabled ([src/lifecycle.ts:L236-L304](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/lifecycle.ts#L236-L304)).
 
 ### Channels
-- Channels self-register through `src/channels/registry.ts` at startup; Telegram is the in-repo example ([CLAUDE.md:16](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L16), [README.md:72-73](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L72-L73)).
-- Additional channels (WhatsApp, Slack, Discord, Gmail, X) are explicitly out of core and arrive via skills or forks ([README.md:81-86](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L81-L86)).
 
-### Router, queue, dispatch
-- `src/router.ts` handles message formatting and outbound routing ([CLAUDE.md:19](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L19)).
-- `src/group-queue.ts` (`GroupQueue`) holds per-group work, instantiated once in `lifecycle.ts` ([src/lifecycle.ts:80](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L80)).
-- `src/dispatch-pool.ts` runs the slot lifecycle, startup recovery, and drain behavior ([CLAUDE.md:23](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L23)); `src/dispatch-loop.ts` enforces the 3-strike `dispatch_blocked_until` rule against Agency HQ ([CLAUDE.md:115-117](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L115-L117)).
+A channel implements the following methods ([docs/channel-development.md:L18-L30](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/channel-development.md#L18-L30)):
 
-### Runtime layer
-- `src/runtime-adapter.ts` defines the runtime contract; the only shipping implementation is `TmuxRuntimeAdapter`, with `kind: 'tmux-host'` and `preferredTarget: 'micro-vm'` for the next step ([src/runtime-adapter.ts:5-40](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/runtime-adapter.ts#L5-L40)).
-- `src/container-runner.ts` spawns tmux-backed agent sessions and wires output ([CLAUDE.md:22](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L22), [README.md:182](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L182)).
-- `src/session-settings.ts` builds the per-group Claude config and runtime env bootstrap ([README.md:183](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L183)).
-- `src/credential-proxy.ts` keeps the real Anthropic credentials on the host and exposes a local proxy on `CREDENTIAL_PROXY_PORT` (default 3001) ([README.md:79](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L79), [src/config.ts:47-50](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L47-L50)).
-- `src/mount-security.ts` is paired with a host-side allowlist stored *outside* the project root and never mounted into agents ([src/config.ts:22-28](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L22-L28)).
+- `connect`
+- `sendMessage`
+- `isConnected`
+- `ownsJid`
+- `disconnect`
+
+A channel registers itself by being imported from the barrel file ([src/channels/index.ts:L1-L11](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/channels/index.ts#L1-L11)).
+
+### Router
+
+Inbound messages are formatted as XML `<messages>` blocks that carry a timezone header. Outbound text has its `<internal>` blocks stripped before sending ([src/router.ts:L13-L35](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/router.ts#L13-L35)).
+
+### Dispatcher
+
+The dispatcher advances the message cursor in memory. It persists the cursor only after success, or after output has already been sent to the user ([src/message-dispatcher.ts:L186-L287](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/message-dispatcher.ts#L186-L287)).
+
+"Capture" executions run in a diagnostic copy of the group. This copy has no extra mounts, and nothing is delivered to the channel ([src/message-dispatcher.ts:L55-L98](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/message-dispatcher.ts#L55-L98)).
+
+### Runtime adapter
+
+The adapter exposes the following operations ([src/runtime-adapter.ts:L22-L30](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/runtime-adapter.ts#L22-L30)):
+
+- `ensureReady`
+- `hasSession`
+- `stopSession`
+- `cleanupOrphans`
+- `getStatus`
+
+Orphan cleanup stops any tmux session whose name starts with `nanoclaw-` ([src/runtime-adapter.ts:L99-L119](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/runtime-adapter.ts#L99-L119)).
+
+### Agent runner
+
+Input to the runner contains these fields:
+
+- `prompt`
+- `sessionId`
+- `groupFolder`
+- `chatJid`
+- `isMain`
+
+Output contains:
+
+- `status`
+- `result`
+- `newSessionId`
+- `execution`
+
+The output is framed between `---NANOCLAW_OUTPUT_START---` and `---NANOCLAW_OUTPUT_END---` ([container/agent-runner/src/index.ts:L15-L34](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/agent-runner/src/index.ts#L15-L34)).
+
+Instructions passed to the agent combine a role line, the global `CLAUDE.md` (included for non-main groups only), and the group's `CLAUDE.local.md` ([container/agent-runner/src/index.ts:L66-L74](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/agent-runner/src/index.ts#L66-L74)).
+
+Providers self-register. The ones present are `claude` and `mock` ([container/agent-runner/src/providers/index.ts:L5-L6](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/agent-runner/src/providers/index.ts#L5-L6)).
+
+### MCP and IPC
+
+The `nanoclaw` MCP server exposes whatever tools were registered at import time ([container/agent-runner/src/mcp-tools/server.ts:L24-L54](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/agent-runner/src/mcp-tools/server.ts#L24-L54)).
+
+IPC works through JSON files ([docs/IPC.md:L5-L25](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/IPC.md#L5-L25)):
+
+- Requests are written to `data/ipc/{group}/messages/` or `data/ipc/{group}/tasks/`.
+- The main group is authorized to target any group; other groups can only target themselves.
+- Files that fail processing are moved to `data/ipc/errors/`.
 
 ### Persistence
-- SQLite via `better-sqlite3`, accessed through `src/db/` (groups, sessions, tasks, messages, outbound messages, dispatch slots, migrations) ([package.json:40](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L40), [CLAUDE.md:23](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L23)).
 
-### Cross-cutting subsystems
-- `src/ipc.ts` is the filesystem IPC watcher and handler dispatch ([CLAUDE.md:18](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L18), [README.md:186](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L186)).
-- `src/task-scheduler.ts` runs recurring + one-shot tasks against group context ([CLAUDE.md:20](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L20), [README.md:75](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L75)).
-- `src/agency-hq-dispatcher.ts` + `src/agency-hq-client.ts` integrate Agency HQ dispatch, stall detection, ops watchdog, sprint retro watcher ([src/lifecycle.ts:50-56](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L50-L56)).
-- `src/service-health.ts` builds the `/health` snapshot served alongside `/skills` ([CLAUDE.md:13](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L13), [README.md:78](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L78)).
-- `src/notification-batcher.ts`, `src/uptime-monitor.ts`, `src/systemd-crash-monitor.ts`, `src/circuit-breaker.ts` — observability + resilience helpers wired in lifecycle ([src/lifecycle.ts:58-67](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L58-L67)).
+A single SQLite handle is shared across these domain modules ([src/db/index.ts:L17-L26](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/db/index.ts#L17-L26)):
+
+- agent events
+- messages
+- sessions
+- groups
+- tasks
+- dispatch slots
+- outbound messages
+- tool events
+
+### Health
+
+The health snapshot reports `degraded` when any of these is true ([src/service-health.ts:L59-L83](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/service-health.ts#L59-L83)):
+
+- the runtime is not ready;
+- no agent provider is available;
+- no channels are registered or connected;
+- a production subsystem is unhealthy.
+
+### Agency HQ dispatch
+
+External Agency HQ and dev-inbox services own task dispatch. NanoClaw's polling dispatcher is disabled unless `NANOCLAW_LEGACY_AGENCY_DISPATCH=true` is set ([README.md:L167-L171](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L167-L171), [src/agency-hq-dispatcher.ts:L45-L51](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/agency-hq-dispatcher.ts#L45-L51)).
+
+When legacy dispatch is enabled, slots are stored in SQLite by default, or in Agency HQ's PostgreSQL when `DISPATCH_SLOTS_PG=true` ([src/dispatch-slot-backends.ts:L21-L23](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/dispatch-slot-backends.ts#L21-L23)).

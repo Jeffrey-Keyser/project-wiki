@@ -1,39 +1,46 @@
 ---
-title: Services & Dependencies
-description: Inbound and outbound integrations for Cream City Web — libraries, external APIs, message queues, and downstream consumers.
+title: "Services & Dependencies"
+description: "Inbound and outbound integrations of Cream City Web, separating libraries and external services from confirmed callers, documented-only callers, and unknown consumers."
 ---
 
 # Services & Dependencies
 
 ## Depends on
 
-### npm dependencies
-- `express ^5.2.1`, `cors ^2.8.6` — payment API HTTP layer ([package.json:18-20](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/package.json#L18-L20)).
-- `pg ^8.13.0` — PostgreSQL client used by every script and the API server ([package.json:22](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/package.json#L22)).
-- `amqplib ^0.10.9` — RabbitMQ client used by `poll-email.mjs` to publish inbound emails ([package.json:18](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/package.json#L18), [scripts/poll-email.mjs:14-25](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/scripts/poll-email.mjs#L14-L25)).
-- `resend ^6.9.2` — outbound email via `ai@creamcityweb.com` ([package.json:23](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/package.json#L23), [tools.md:28-34](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L28-L34)).
-- `stripe ^20.3.1` — checkout sessions + webhook verification in the API ([package.json:24](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/package.json#L24), [api/server.mjs:1-12](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/api/server.mjs#L1-L12)).
-- `jsdom ^28.1.0` — HTML parsing for site templating and modification ([package.json:21](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/package.json#L21)).
+### npm packages
+- `express` and `cors` form the payment API HTTP layer ([package.json:L19-L20](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/package.json#L19-L20)).
+- `pg` is the PostgreSQL client ([package.json:L22](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/package.json#L22), [db.mjs:L87](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/db.mjs#L87)).
+- `amqplib` publishes inbound email events in `poll-email.mjs` ([package.json:L18](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/package.json#L18), [poll-email.mjs:L244-L257](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/poll-email.mjs#L244-L257)).
+- `resend` sends outreach and confirmation email ([send-email.mjs:L21](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/send-email.mjs#L21), [api/server.mjs:L326-L329](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L326-L329)).
+- `stripe` is listed as a dependency ([package.json:L24](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/package.json#L24)). The API verifies webhook signatures by hand with `crypto` ([api/server.mjs:L246-L252](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L246-L252)).
+- `jsdom` parses HTML for site edits ([site-modifier.mjs:L21](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/site-modifier.mjs#L21)).
 
 ### External services
-- **PostgreSQL 17** `cream_city_web` on localhost — primary datastore ([README.md:5-14](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/README.md#L5-L14)).
-- **pay-api.jeffreykeyser.net** — billing backend; called by API server via `PAY_API_URL` + bearer token ([api/server.mjs:41-65](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/api/server.mjs#L41-L65)).
-- **Stripe** — checkout + webhooks; secret loaded as `STRIPE_WEBHOOK_SECRET` ([README.md:57-60](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/README.md#L57-L60)).
-- **Resend** — outbound email transport, 3k/month free tier, SPF/DKIM verified ([tools.md:28-34](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L28-L34)).
-- **Cloudflare** — DNS, Email Routing (`*@creamcityweb.com` catch-all), Tunnel for `*.creamcityweb.com`, Workers ([tools.md:37-52](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L37-L52)).
-- **Brave Search API** — lead discovery, rate-limited ([tools.md:9-15](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L9-L15)).
-- **Google APIs** via `~/google-tools/google-api.py` — Tasks, Calendar, Drive, Sheets, Contacts, Docs ([tools.md:16-24](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L16-L24)).
-- **Solo Vault** — secret loader overriding `.env` at API startup via `scripts/secrets.mjs` ([api/server.mjs:22-39](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/api/server.mjs#L22-L39)).
-- **RabbitMQ** — `cron.jobs/ccw.run` queue is how the operator gets triggered ([CLAUDE.md:13-19](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/CLAUDE.md#L13-L19)).
-- **NanoClaw IPC** — drop JSON in `/home/jkeyser/nanoclaw/data/ipc/schedule_task/` to reach Telegram ([scripts/run.mjs:21-34](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/scripts/run.mjs#L21-L34)).
-
-### Other repos
-- `/home/jkeyser/pay/` — local checkout of the Pay billing service ([tools.md:54-57](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/tools.md#L54-L57)).
+- **PostgreSQL** `cream_city_web` on localhost ([README.md:L7](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/README.md#L7)).
+- **Pay API**, the billing backend, set by `PAY_API_URL` with a bearer token ([api/server.mjs:L43-L44](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L43-L44), [billing.mjs:L25-L26](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/billing.mjs#L25-L26)).
+- **Stripe** Checkout and webhooks. The webhook secret is read from `STRIPE_WEBHOOK_SECRET` ([api/server.mjs:L243](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L243)).
+- **Resend** for outbound email from `ai@creamcityweb.com` ([send-email.mjs:L38](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/send-email.mjs#L38), [tools.md:L28-L31](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L28-L31)).
+- **Cloudflare**: DNS and tunnel via `cloudflared tunnel route dns -f beelink` ([deploy.mjs:L46](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/deploy.mjs#L46)), Email Routing, and Workers ([tools.md:L37-L42](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L37-L42)).
+- **RabbitMQ** defaults to `amqp://localhost` and publishes to exchange `ccw.events` ([poll-email.mjs:L45-L47](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/poll-email.mjs#L45-L47)). The operator trigger uses `cron.jobs` `ccw.run` ([CLAUDE.md:L19](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/CLAUDE.md#L19)).
+- **NanoClaw IPC** drops JSON files into a fixed directory to reach Telegram ([run.mjs:L21](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/run.mjs#L21), [run.mjs:L32](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/run.mjs#L32)).
+- **Solo Vault** overrides env values through `loadSecrets()` ([db.mjs:L6](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/db.mjs#L6), [api/server.mjs:L39](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L39)). The loader is not in the snapshot.
+- **Himalaya CLI** reads the inbox for `poll-email.mjs` ([poll-email.mjs:L24](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/poll-email.mjs#L24), [poll-email.mjs:L93](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/poll-email.mjs#L93)). The runbook calls it secondary ([runbook.md:L268](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/docs/runbook.md#L268)).
+- **Brave Search** and **Google APIs** support scouting and admin ([tools.md:L9-L24](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L9-L24)).
 
 ## Consumed by
 
-- **cron-service** — publishes hourly business-hour triggers to `cron.jobs/ccw.run` ([CLAUDE.md:13-19](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/CLAUDE.md#L13-L19)). See cross-repo wiki at `https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-cron-service/`.
-- **openclaw-bridge / OpenCLAW** — consumes the same queue and spawns the Claude session.
-- **Stripe** — calls `POST /webhook/stripe` on this repo's API ([api/server.mjs:7-11](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/api/server.mjs#L7-L11)).
-- **Cloudflare Email Routing** — delivers prospect replies to `ccw-email-receiver` worker → `webhook.creamcityweb.com/email/inbound` ([workers/email-receiver/wrangler.toml:1-7](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/workers/email-receiver/wrangler.toml#L1-L7)).
-- **Prospect browsers** — hit `{slug}.creamcityweb.com` and `staging.creamcityweb.com/{slug}.html` served through the Tunnel ([README.md:73-77](https://github.com/Jeffrey-Keyser/cream-city-web/blob/main/README.md#L73-L77)).
+**Confirmed in source:**
+- **Stripe** is expected to call `POST /webhook/stripe` ([api/server.mjs:L10](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L10), [api/server.mjs:L240](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/api/server.mjs#L240)). Stripe's configuration is not visible.
+- **Cloudflare Email Routing** is expected to invoke the worker's `email` handler ([index.js:L8-L9](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/workers/email-receiver/src/index.js#L8-L9)). The worker posts to the configured webhook ([index.js:L42](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/workers/email-receiver/src/index.js#L42)).
+- **Browsers** request sites from the static server ([serve.mjs:L2-L5](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/serve.mjs#L2-L5)).
+
+**Documented only, not verified:**
+- **cron-service** publishes hourly triggers ([CLAUDE.md:L16-L19](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/CLAUDE.md#L16-L19)). The cross-repo wiki reference is https://wiki.jeffreykeyser.net/repos/jeffrey-keyser-cron-service/home/.
+- **openclaw-bridge and OpenCLAW** consume the trigger and receive the email webhook ([tools.md:L39](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L39)). Their source is not in the snapshot.
+- **Prospects** reach mockups at `{slug}.creamcityweb.com` and staging at `staging.creamcityweb.com` ([README.md:L75-L77](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/README.md#L75-L77)).
+
+**Unknown:** any other callers of the Pay API, the payment page, or the Stripe webhook. The provided excerpts do not show them.
+
+## Notes on mismatches
+
+- The staging banner's feedback link uses `creamcityweb@outlook.com`, the legacy address ([staging.mjs:L193](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/scripts/staging.mjs#L193)). The runbook marks that account as deprecated ([tools.md:L44-L46](https://github.com/Jeffrey-Keyser/cream-city-web/blob/2415ed7675f004fc1f879d5b43cab444b4bbb495/tools.md#L44-L46)).

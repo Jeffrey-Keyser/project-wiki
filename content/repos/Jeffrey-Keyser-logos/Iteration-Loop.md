@@ -1,49 +1,70 @@
 ---
-title: Logos — Iteration Loop
-description: How changes move from idea to merged code inside the Logos repo — PRD-driven phased rollout, agent-executable slices, auto-deploy on push to main.
+title: "Logos — Iteration Loop"
+description: "How a change moves from local edit to deploy: npm scripts, Vitest, migrations, prompt seeding and deploy.sh."
 ---
 
 # Iteration Loop
 
-Logos uses a **PRD-per-phase** model: each rollout phase has a self-contained, agent-executable PRD under `prds/`, and a worker (human or agent) is handed one file at a time ([README.md:469-470](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L469-L470)).
+This page describes the contributor workflow that the attached source can confirm. **CI is unknown.** No CI workflow file is among the provided excerpts, so this page does not claim that any automated check runs on pull requests. The checks below are the local scripts plus what `deploy.sh` runs on the host.
 
 ```mermaid
-sequenceDiagram
-  participant Author as Author (Jeff)
-  participant PRD as prds/phase-N.md
-  participant Worker as Agent / dev worker
-  participant Repo as logos repo (main)
-  participant Deploy as beelink-deploy
-  participant Prod as logos.service on Beelink
-
-  Author->>PRD: Draft phase PRD (scope, acceptance)
-  PRD->>Worker: Hand off one PRD file
-  Worker->>Repo: Implement slice on a branch
-  Worker->>Repo: tsc build + vitest tests
-  Worker->>Repo: Open PR, review, merge to main
-  Repo->>Deploy: webhook on push to main
-  Deploy->>Prod: deploy.sh — npm ci, build, migrate, systemctl restart
-  Prod->>Author: /health passes, behavior verified
-  Author->>PRD: Mark phase ✅ Done in README §16
+flowchart LR
+  Edit["Edit src/ and tests/"] --> Dev["npm run dev"]
+  Dev --> Test["npm test - vitest run"]
+  Test --> Build["npm run build - tsc"]
+  Build --> Mig["npm run migrate:create / migrate"]
+  Mig --> Merge["Merge to main"]
+  Merge --> Deploy["deploy.sh on host"]
+  Deploy --> Smoke["curl /health smoke test"]
 ```
 
-## Phase ledger
+## Local scripts
 
-Phases 0 and 1 are complete (✅ Done 2026-04-30); phase 2 (proposal review), phase 3 (query API), and phase 4+ backlog tracks (RabbitMQ wiring, HTML review, cron, RSS, empty-hub tuning) are checked into `prds/` as discrete files ([README.md:472-499](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L472-L499), [prds/](https://github.com/Jeffrey-Keyser/logos/blob/main/prds)).
+| Script | What it runs |
+|---|---|
+| `npm run dev` | `ts-node src/bin/www.ts` ([package.json:L7](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L7)) |
+| `npm run build` | `tsc` into `dist/` with strict settings ([package.json:L8](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L8), [tsconfig.json:L6-L8](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/tsconfig.json#L6-L8)) |
+| `npm test` | `vitest run` over `tests/**/*.test.ts`, with a 30s timeout ([package.json:L10](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L10), [vitest.config.ts:L4-L8](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/vitest.config.ts#L4-L8)) |
+| `migrate`, `migrate:down`, `migrate:create` | Migration wrappers in `scripts/` ([package.json:L11-L13](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L11-L13)) |
+| `prepare:models` | Populates the local embedding model cache ([package.json:L16](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L16)) |
+| `seed:prompts` | Seeds the extract-fallback, page-propose, proposal-revise and answer-synthesize prompts, plus the query skill ([package.json:L17](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L17)) |
+| `register-cron`, `dedupe-themes` | Maintenance scripts ([package.json:L14-L15](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L14-L15)) |
 
-## Build + test loop
+**Required environment.** Local boot needs `NODE_ENV` and `LOGOS_SERVICE_TOKEN`, plus database settings. `RABBITMQ_URL` defaults to `amqp://localhost:5672` outside production ([src/config/env.ts:L19-L57](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/config/env.ts#L19-L57)).
 
-- `npm run dev` — `ts-node src/bin/www.ts` for local iteration ([package.json:7](https://github.com/Jeffrey-Keyser/logos/blob/main/package.json#L7)).
-- `npm run build` — TypeScript compile to `dist/` ([package.json:8](https://github.com/Jeffrey-Keyser/logos/blob/main/package.json#L8)).
-- `npm test` — Vitest suite under `tests/` ([package.json:10](https://github.com/Jeffrey-Keyser/logos/blob/main/package.json#L10)).
-- `npm run migrate` — `node-pg-migrate` driver in `scripts/run-migrate.js`, run against the `logos` schema ([package.json:11](https://github.com/Jeffrey-Keyser/logos/blob/main/package.json#L11)).
-- `npm run prepare:models` — downloads `bge-small-en-v1.5` ONNX into `~/logos/models/` on first deploy ([package.json:16](https://github.com/Jeffrey-Keyser/logos/blob/main/package.json#L16), [README.md:454-455](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L454-L455)).
-- `npm run seed:prompts` — pushes the four `logos/*` prompt bodies to prompt-registry as part of bringing up a fresh environment ([package.json:17](https://github.com/Jeffrey-Keyser/logos/blob/main/package.json#L17)).
+## Testing patterns
 
-## Merge → deploy
+Most modules take injectable dependencies, so tests can avoid live infrastructure:
 
-Auto-deploy is wired through `Jeffrey-Keyser/beelink-deploy`. On push to `main`, the deploy hook fires `deploy.sh` which runs `npm ci`, `npm run build`, `npm run migrate`, and `systemctl --user restart logos` ([README.md:430](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L430), [deploy.sh:1-14](https://github.com/Jeffrey-Keyser/logos/blob/main/deploy.sh#L1-L14)). The user-systemd path requires `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` to be exported so `systemctl --user` works under the deploy daemon ([deploy.sh:4-7](https://github.com/Jeffrey-Keyser/logos/blob/main/deploy.sh#L4-L7)).
+- **Worker.** It accepts fakes for fetch, extraction, Struct and the publisher. A `manual` flag lets tests drive `tick()` themselves ([src/worker/ingest.ts:L42-L79](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/worker/ingest.ts#L42-L79)).
+- **Struct client.** `fetchFn` and `fetchPromptFn` can be overridden ([src/llm/struct.ts:L12-L19](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/llm/struct.ts#L12-L19)).
+- **Bus consumer.** Its handlers can be overridden ([src/bus/consumer.ts:L34-L49](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bus/consumer.ts#L34-L49)).
+- **HTML review router.** It exposes a test hook for the `/v1` caller ([src/routes/proposals-html.ts:L78-L82](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/proposals-html.ts#L78-L82)).
 
-## What "done" looks like for a slice
+New code should follow the same pattern so that tests need no broker, Struct instance or live database.
 
-A phase is "done" when its acceptance bullets in the PRD pass, the README's §16 phase ledger flips to ✅ with a date, and the live `/health` shows the new build's embedding warmup + DB probe passing ([README.md:472-499](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L472-L499)).
+## Design documents
+
+Larger changes have been preceded by design-only memos. The context-isolation memo is one example; it split implementation into follow-on PRDs ([prds/context-isolation-feasibility.md:L3-L7](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/prds/context-isolation-feasibility.md#L3-L7)).
+
+The dry-run report `reconciliation-design.md` is explicitly marked superseded. Treat it as history, not guidance ([reconciliation-design.md:L3-L14](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/reconciliation-design.md#L3-L14)).
+
+New reconciliation goals should use `project-<project>-<goal>` context slugs ([README.md:L9-L24](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/README.md#L9-L24)).
+
+## Merge to deploy
+
+The README documents auto-deploy by `beelink-deploy` on push to `main` ([README.md:L54](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/README.md#L54)). `deploy.sh` runs these steps in order:
+
+1. `git pull origin main`.
+2. Hydrate secrets.
+3. `npm ci --include=dev`.
+4. `prepare:models`.
+5. `build`.
+6. `migrate`.
+7. `seed:prompts`. A failure here fails the deploy.
+8. `register-cron`. A failure here is non-fatal.
+9. Restart the service and smoke-test `/health`.
+
+([deploy.sh:L89-L152](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L89-L152))
+
+Migrations and prompt seeding therefore run on every deploy. Keep both idempotent.

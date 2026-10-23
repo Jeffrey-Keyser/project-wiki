@@ -1,97 +1,118 @@
 ---
-title: Architecture
-description: Internal module layout — server middleware, client SDK, React components, and shared core.
+title: "Architecture"
+description: "Subpath entry points, server proxy pipeline, client auth and payment SDK, React layer, and their contracts."
 ---
 
 # Architecture
 
-Package splits into five subpath-export surfaces backed by a shared `core/` ([package.json:9-34](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L9-L34)).
+The package is organised as five subpath exports, each with its own ESM, CJS and type-declaration builds ([package.json:L9-L35](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L9-L35)).
+
+The root entry `.` exports only integration-specific types and configuration builders. Since v6.0.0, the Pay API types must be imported directly from `@jeffrey-keyser/pay-api-types` ([src/index.ts:L1-L60](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/index.ts#L1-L60)).
 
 ```mermaid
-flowchart TB
-  subgraph Entry["Subpath exports"]
-    Root["./ (types + builders)"]
-    Server["./server"]
-    Client["./client"]
-    React["./client/react"]
-    Testing["./testing"]
-  end
-
-  subgraph SrcServer["src/server"]
-    AuthMW["auth-middleware.ts"]
-    ProxyRoutes["pay-proxy-routes.ts"]
-    ProxyClient["pay-proxy-client.ts"]
-    Setup["setup/pay-auth-setup.ts"]
-    UserRes["user-resolution.ts"]
-    Validation["validation.ts"]
-  end
-
-  subgraph SrcClient["src/client"]
-    PayAuth["pay-auth.ts (PayAuth)"]
-    PayClient["PaymentClient.ts"]
-    Providers["providers/ (Stripe, factory)"]
-    Services["services/ (Customer, Subscription, Product)"]
-  end
-
-  subgraph SrcReact["src/client/react"]
-    Components["components/"]
-    Context["context/"]
-    Hooks["hooks/"]
-  end
-
-  subgraph Core["src/core + interfaces"]
-    Config["configuration/"]
-    HTTP["http/"]
-    Storage["storage/"]
-    Repos["repositories/"]
-    Interfaces["interfaces/"]
-  end
-
-  Server --> SrcServer
-  Client --> SrcClient
-  React --> SrcReact
-  Root --> Core
-  SrcServer --> Core
-  SrcClient --> Core
-  SrcReact --> SrcClient
-  SrcClient --> Providers
-  ProxyRoutes --> ProxyClient
-  Setup --> AuthMW
-  Setup --> ProxyRoutes
+flowchart LR
+  Browser["Browser app"]
+  ReactLayer["client/react: PayAuthProvider, PaymentProvider, modals"]
+  PayAuthC["client: PayAuth"]
+  PayClient["client: PaymentClient and services"]
+  Adapter["PaymentProviderAdapter - Stripe registered"]
+  Setup["server: setupPayAuth"]
+  MW["authMiddleware and guards"]
+  Proxy["createPayProxyRoutes - PayProxyClient"]
+  Handler["ProxyRouteHandler"]
+  Pay["Pay service /api/v1"]
+  Browser --> ReactLayer
+  ReactLayer --> PayAuthC
+  ReactLayer --> PayClient
+  PayClient --> Adapter
+  PayAuthC -->|"HTTP to consumer server"| Proxy
+  PayClient -->|"HTTP to consumer server"| Proxy
+  Setup --> MW
+  Setup --> Proxy
+  Proxy --> Handler
+  Handler -->|"fetch with bearer and cookies"| Pay
 ```
 
-## Role contracts
+## Server (`./server`)
 
-### Server entry
+### setupPayAuth
 
-`setupPayAuth(config)` — one-call wiring. Merges defaults, validates config, builds middleware + proxy router, mounts on Express app ([src/server/index.ts:37-126](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/server/index.ts#L37-L126)). Backed by `PayAuthSetup` class ([src/server/index.ts:24-24](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/server/index.ts#L24)).
+`setupPayAuth` accepts either a config object or a `PayAuthConfigBuilder` ([src/server/index.ts:L37-L126](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/index.ts#L37-L126)). It then:
 
-`authMiddleware` — token validation, attaches `req.user`, caches token results, exposes `requireAuth`/`requireRole`/`requirePermission` guards ([src/server/index.ts:128-144](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/server/index.ts#L128-L144)).
+- merges `DEFAULT_PUBLIC_ROUTES` and `DEFAULT_AUTH_ENDPOINTS` with the caller's values;
+- adds `${authPath}/*` to the public routes;
+- throws `PayAuthConfigurationError` if validation fails;
+- returns `{ middleware, routes, applyTo }`.
 
-`createPayProxyRoutes` / `PayProxyClient` — Express router that forwards `/auth/*` and payment endpoints to Pay ([src/server/index.ts:27-29](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/server/index.ts#L27-L29)).
+### Proxy router
 
-User resolution pipeline — `createUserResolutionMiddleware`, `createAuthPipeline` for layered auth flows ([src/server/index.ts:146-155](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/server/index.ts#L146-L155)).
+`createPayProxyRoutes` requires a `payUrl` ([src/server/pay-proxy-routes.ts:L28-L140](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/pay-proxy-routes.ts#L28-L140)). It:
 
-### Client SDK
+- attaches a correlation ID to each request and returns it in the `X-Correlation-ID` header;
+- mounts the routes produced by `PayProxyClient`;
+- adds a `/health` route;
+- formats errors in the ActionResponse shape.
 
-`PayAuth` — auth client: login, register, logout, getUser, token getters, event listeners ([README.md:294-311](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/README.md#L294-L311), [src/client/index.ts:7](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/client/index.ts#L7)).
+### Route table
 
-`PaymentClient` — provider-agnostic payment ops, loads provider SDK dynamically ([src/client/index.ts:11-12](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/client/index.ts#L11-L12)).
+Route metadata is declarative. Each entry records `path`, `method`, `requiresAuth`, `cacheable` and `cacheTTL`, under the `API_V1 = '/api/v1'` prefix. The table covers auth, user, OAuth, admin and payment routes ([src/server/config/route-config.ts:L6-L194](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/config/route-config.ts#L6-L194), [src/server/config/payment-route-config.ts:L12-L175](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/config/payment-route-config.ts#L12-L175)).
 
-`PaymentProviderAdapter` — interface for plug-in providers; ships `StripeProviderAdapter`, registered via `PaymentProviderAdapterFactory` ([src/client/index.ts:25-29](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/client/index.ts#L25-L29), [README.md:427-444](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/README.md#L427-L444)).
+### ProxyRouteHandler
 
-`CustomerService`, `SubscriptionService`, `ProductService` — higher-level payment management services on top of proxy routes ([src/client/index.ts:31-34](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/client/index.ts#L31-L34)).
+For each request, `ProxyRouteHandler` ([src/server/helpers/ProxyRouteHandler.ts:L48-L170](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/helpers/ProxyRouteHandler.ts#L48-L170)):
 
-### React surface
+- enforces a bearer token when `requiresAuth` is set;
+- optionally serves and stores cached responses;
+- substitutes `:params` into the path, URL-encoded;
+- forwards the `Authorization` header and cookies upstream;
+- relays `Set-Cookie` headers back to the client.
 
-`PayAuthProvider` context wraps the app, `useAuthModal` / `useSubscriptions` / `usePayment` hooks expose state; `AuthModal` and `PaymentModal` are the rendered surfaces ([README.md:336-391](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/README.md#L336-L391)).
+The upstream `HttpClient` retries with exponential backoff ([src/server/services/http-client.ts:L37-L72](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/services/http-client.ts#L37-L72)).
 
-### Core shared
+### Token validation
 
-`core/configuration` — `PayAuthConfigBuilder`, `ConfigurationFactory`, `AuthModalThemeBuilder` plus theme presets ([src/index.ts:38-49](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/index.ts#L38-L49)).
+`TokenValidator` calls `${payUrl}` plus a ping endpoint, which defaults to `/auth/ping`. It then decodes the JWT to build the user object ([src/server/services/token-validator.ts:L15-L163](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/services/token-validator.ts#L15-L163)).
 
-`core/http`, `core/storage`, `core/repositories`, `core/validation` and `interfaces/` — HTTP client, token storage, cache manager, event emitter abstractions consumed by both server and client surfaces ([src tree](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/interfaces/http-client.interface.ts), [src/interfaces/token-storage.interface.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/src/interfaces/token-storage.interface.ts)).
+The `auth-middleware.ts` source is not in this snapshot. Which validator the middleware actually wires in is therefore unverified.
 
-### Testing surface
+## Client (`./client`)
 
-`MockHttpClient`, `ResponseBuilder`, `createMockAuthMiddleware` published from `./testing` for downstream test suites ([README.md:469-477](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/README.md#L469-L477)).
+### PayAuth
+
+`PayAuth` is a facade over several internal pieces ([src/client/pay-auth.ts:L31-L90](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/pay-auth.ts#L31-L90)):
+
+- `ConfigurationManager`
+- `TokenStorageService`
+- `AuthOperations` and `UserOperations`
+- an `AuthStateMachine`
+
+Its HTTP client refreshes the access token automatically when it receives a 401. The refresh token lives in an httpOnly cookie, not in client storage ([src/client/pay-auth.ts:L313-L353](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/pay-auth.ts#L313-L353)).
+
+Default endpoint paths are defined in `ConfigurationManager` ([src/client/services/configuration-manager.ts:L38-L63](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/services/configuration-manager.ts#L38-L63)).
+
+### PaymentClient
+
+`PaymentClient` provides lazy-loaded `customer`, `subscriptions` and `products` services. It resolves the payment adapter via `PaymentProviderAdapterFactory.create` ([src/client/PaymentClient.ts:L99-L241](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/PaymentClient.ts#L99-L241), [src/client/providers/PaymentProviderAdapter.ts:L214-L247](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/providers/PaymentProviderAdapter.ts#L214-L247)).
+
+## React (`./client/react`)
+
+`PayAuthProvider` performs four jobs, each through a separate hook. It wraps its children in the personal-ui-kit `ThemeProvider` ([src/client/react/context/PayAuthProvider.tsx:L58-L175](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/react/context/PayAuthProvider.tsx#L58-L175)):
+
+- validation
+- i18n
+- auth state
+- auth operations
+
+`PaymentProvider` holds customer, subscription and product state on top of `PaymentClient` ([src/client/react/context/PaymentProvider.tsx:L87-L356](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/react/context/PaymentProvider.tsx#L87-L356)).
+
+## Shared core and testing
+
+`src/core` re-exports five modules ([src/core/index.ts:L1-L15](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/core/index.ts#L1-L15)):
+
+- validation
+- repositories
+- http
+- configuration
+- environment
+
+`./testing` ships mocks and builders for consumers' test suites ([src/testing/index.ts:L4-L40](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/testing/index.ts#L4-L40)).

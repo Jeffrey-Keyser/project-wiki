@@ -1,41 +1,58 @@
 ---
-title: Ping Architecture
-description: Internal layout of the Ping server, client, DAL, event bus, and external integrations.
+title: "Ping Architecture"
+description: "Components, request path, and external contracts of the Ping server, web client, data layer, and event publisher."
 ---
 
 # Architecture
 
-Ping monorepo two deployable artifacts: Express API (`server/`) and Vite-built SPA (`client/`). Both ship to single Beelink host ([README.md:34-37](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L34-L37), [deploy.sh:24-27](https://github.com/Jeffrey-Keyser/ping/blob/main/deploy.sh#L24-L27)).
+Ping has two runtime parts: an Express API in `server/` and a Vite-built React single-page app in `client/` ([README.md:L34-L35](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L34-L35)). The diagram shows components that the excerpts confirm. Production wiring beyond these excerpts is not shown.
 
 ```mermaid
 flowchart LR
-  iOS[Apple Shortcuts] -- X-Ping-Key --> API
-  Browser[React SPA] -- JWT/cookie --> API
-  API[Express app.ts] --> MW[Middleware: versioning, apiKeyAuth, requestLogger, telemetry]
-  MW --> Routes[/api/v1 routes/]
-  Routes --> Domain[Domain services]
-  Routes --> DAL[DAL classes]
-  Domain --> DAL
-  DAL --> PG[(PostgreSQL)]
-  Domain --> EP[EventPublisher]
-  EP --> MQ[(RabbitMQ)]
-  API -.proxies auth.-> Pay[pay.jeffreykeyser.net]
-  API --> WS[DriveWebSocketService]
-  WS --> Browser
+  ios["Apple Shortcuts"]
+  spa["React SPA"]
+  api["Express app in server app.ts"]
+  mw["Middleware pipeline"]
+  v1["Routers under api v1"]
+  dom["Domain services and ports"]
+  dal["DAL classes"]
+  pg["PostgreSQL"]
+  pub["EventPublisher"]
+  mq["RabbitMQ exchange"]
+  ws["DriveWebSocketService at ws drives"]
+  pay["Pay auth service"]
+  ios -->|"X-Ping-Key"| api
+  spa -->|"JWT or session"| api
+  api --> mw
+  mw --> v1
+  v1 --> dom
+  v1 --> dal
+  dom --> dal
+  dal --> pg
+  v1 --> pub
+  pub --> mq
+  api --> ws
+  ws -->|"live drive updates"| spa
+  mw -.->|"auth proxy"| pay
 ```
 
-## Role contracts
+## Components
 
-- **Server entrypoint (`server/app.ts`)** — builds `ServerConfig` for `createServerlessAppSync` from `@jeffrey-keyser/express-server-factory`, mounts `indexRouter`, `v1Router` at `/api/v1`, and `payAuthSetup.routes` at `/auth` ([server/app.ts:1-5](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L1-L5), [server/app.ts:244-248](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L244-L248)).
-- **Middleware pipeline** — correlation ID, telemetry (Analytics Pulse), request logger (Pino), version negotiation, legacy `/v1/*` redirect, version validation, conditional API-key auth, user resolution ([server/app.ts:278-299](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L278-L299)).
-- **Routes (`server/routes/`)** — one file per domain: `location-pings`, `drives`, `zones`, `visits`, `moods`, `weights`, `expenses`, `workouts/*`, `bluetooth`, `health-sync`, `shortcuts`, `daily-summary`, `weekly-summary`, etc. ([server/routes](https://github.com/Jeffrey-Keyser/ping/blob/main/server/routes)).
-- **Domain services (`server/domain/services/`)** — `PingService`, `DriveService`, `ZoneResolutionService`, `DiagnosticsService`, `TimeSeriesBuilder`, health checks ([server/domain/services](https://github.com/Jeffrey-Keyser/ping/blob/main/server/domain/services)).
-- **Operational scripts (`server/scripts/`, `scripts/`)** — one-off CLI commands run from `server/` with `ts-node`, outside the HTTP route and DAL path. `scripts/seed-grocery-zones.ts` is a thin entry point: it loads `server/.env`, opens its own `pg` pool, and delegates to `server/scripts/groceryZoneProvisioning.ts`, which parses and validates input and writes `ping.categories` and `ping.zones` in a single transaction ([scripts/seed-grocery-zones.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/scripts/seed-grocery-zones.ts), [server/scripts/groceryZoneProvisioning.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/scripts/groceryZoneProvisioning.ts)).
-- **DAL (`server/dal/`)** — one DAL per table family extending shared base; e.g. `PingDal`, `DriveDal`, `DriveWaypointDal`, `ZoneDal`, `VisitDal`, `MoodDal`, `WeightDal`, `WorkoutSessionDal`, `ExpenseDal` ([server/dal](https://github.com/Jeffrey-Keyser/ping/blob/main/server/dal)).
-- **Application services (`server/services/`)** — orchestration helpers: `apiKeyService`, `MoodApplicationService`, `WeightApplicationService`, `WorkoutDashboardService`, `ActivityHeatmapService`, `DigestService`, `CronSubscriber`, `EventPublisher`, `DriveWebSocketService`, `telemetry` ([server/services](https://github.com/Jeffrey-Keyser/ping/blob/main/server/services)).
-- **EventPublisher** — connects to RabbitMQ via `amqplib`, publishes only for Jeff's user ID; routing keys from `@jeffrey-keyser/message-contracts` ([server/services/EventPublisher.ts:1-32](https://github.com/Jeffrey-Keyser/ping/blob/main/server/services/EventPublisher.ts#L1-L32)).
-- **Auth** — `setupPayAuth` from `@jeffrey-keyser/pay-auth-integration/server`; public routes include health, swagger, location-pings, health-sync, shortcuts/links, connectivity ([server/app.ts:70](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L70), [server/app.ts:86-122](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L86-L122)).
-- **Sessions** — `express-session` backed by `user_sessions` table in `ping` schema, 24h TTL ([server/app.ts:174-193](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L174-L193)).
-- **API versioning** — `versionNegotiation`/`legacyRedirect`/`validateVersion([1])` middleware; `/v1/*` 301s to `/api/v1/*` ([server/middleware/versioning.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/middleware/versioning.ts), [CLAUDE.md:96-118](https://github.com/Jeffrey-Keyser/ping/blob/main/CLAUDE.md#L96-L118)).
-- **Client (`client/src/`)** — React 19 SPA; Redux Toolkit + RTK Query slices under `reducers/`, containers/components split, Leaflet for maps via `react-leaflet`, Recharts for charts ([client/package.json:6-34](https://github.com/Jeffrey-Keyser/ping/blob/main/client/package.json#L6-L34)).
-- **Lambda fallback** — `server/lambda.ts` wraps Express with `serverless-http`; Terraform infra retained but currently unused (Beelink is live) ([server/package.json:49](https://github.com/Jeffrey-Keyser/ping/blob/main/server/package.json#L49), [README.md:113-116](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L113-L116)).
+- **Entry points.** `server/app.ts` builds a `ServerConfig` and calls `createServerlessAppSync` ([server/app.ts:L1-L5](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L1-L5), [server/app.ts:L319](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L319)). `server/bin/www.ts` listens on `config.PORT` and attaches the drive WebSocket and cron subscriber ([server/bin/www.ts:L23](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/bin/www.ts#L23), [server/bin/www.ts:L27-L34](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/bin/www.ts#L27-L34)).
+- **Routers.** The root router serves `/` and `/ping` ([server/routes/index.ts:L6-L16](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/index.ts#L6-L16)). The v1 router mounts feature routers, including location pings, drives, and Bluetooth events ([server/routes/versions/v1/index.ts:L108](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/versions/v1/index.ts#L108), [server/routes/versions/v1/index.ts:L207](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/versions/v1/index.ts#L207), [server/routes/versions/v1/index.ts:L220](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/versions/v1/index.ts#L220)).
+- **Auth.** `setupPayAuth` supplies auth middleware and `/auth` routes ([server/app.ts:L70](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L70), [server/app.ts:L252](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L252)). Shortcut-facing routes such as location pings and health sync are public to Pay auth but check `X-Ping-Key` ([server/app.ts:L100-L104](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L100-L104)).
+- **Sessions.** `express-session` uses a database store in the `ping` schema with a 24-hour TTL ([server/app.ts:L178-L188](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L178-L188)).
+- **Domain.** Ports declare repository and publisher contracts such as `PingRepository` and `DriveEventPublisher` ([server/domain/ports/index.ts:L17](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/domain/ports/index.ts#L17), [server/domain/ports/index.ts:L95-L97](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/domain/ports/index.ts#L95-L97)). `ZoneResolutionService` matches coordinates to zones by haversine distance ([server/domain/services/ZoneResolutionService.ts:L9](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/domain/services/ZoneResolutionService.ts#L9)).
+- **Data access.** DAL classes are static, require `userId` on each call, and use raw SQL ([server/dal/DriveDal.ts:L37-L40](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/DriveDal.ts#L37-L40)). `VisitDal.create` depends on a partial unique index and returns `null` when another arrival wins ([server/dal/VisitDal.ts:L49-L58](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/VisitDal.ts#L49-L58)).
+- **Events.** `EventPublisher` connects to `RABBITMQ_URL` and publishes to the `PingExchange` ([server/services/EventPublisher.ts:L64](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/EventPublisher.ts#L64), [server/services/EventPublisher.ts:L118-L121](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/EventPublisher.ts#L118-L121)). Publish failures are logged, not rethrown ([server/services/EventPublisher.ts:L130-L131](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/EventPublisher.ts#L130-L131)).
+- **Live drives.** `DriveWebSocketService` handles upgrades on `/ws/drives` and checks the API key before upgrading ([server/services/DriveWebSocketService.ts:L119](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/DriveWebSocketService.ts#L119), [server/services/DriveWebSocketService.ts:L131-L136](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/DriveWebSocketService.ts#L131-L136)).
+- **Telemetry.** `sendTelemetryEvent` posts fire-and-forget events to `ANALYTICS_PULSE_URL` ([server/services/telemetry.ts:L11-L22](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/telemetry.ts#L11-L22)).
+- **Operational scripts.** `scripts/seed-grocery-zones.ts` loads `server/.env`, opens its own pool, and delegates to `server/scripts/groceryZoneProvisioning.ts` ([scripts/seed-grocery-zones.ts:L36](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/scripts/seed-grocery-zones.ts#L36), [scripts/seed-grocery-zones.ts:L49](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/scripts/seed-grocery-zones.ts#L49)).
+- **Client.** Containers are exported from `client/src/containers/index.ts` ([client/src/containers/index.ts:L1-L15](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/src/containers/index.ts#L1-L15)).
+- **Lambda fallback.** `server/lambda.ts` re-exports the handler ([server/lambda.ts:L1](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/lambda.ts#L1)). The README describes the Terraform stack as unused and kept for fallback ([README.md:L139](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L139)).
+
+## Contracts
+
+- Mobile clients receive a `success` plus `data` envelope, and errors use `success: false` ([docs/MOBILE_INTEGRATION.md:L21-L37](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/MOBILE_INTEGRATION.md#L21-L37)).
+- Location submissions accept an optional `X-Idempotency-Key` for safe retransmission ([docs/MOBILE_INTEGRATION.md:L78](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/MOBILE_INTEGRATION.md#L78)).
+- Event shapes and routing keys come from `@jeffrey-keyser/message-contracts` ([server/services/EventPublisher.ts:L2](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/EventPublisher.ts#L2)).

@@ -1,37 +1,36 @@
 ---
-title: Prompt Registry — Overview
-description: REST API for storing and retrieving prompt templates, deployed on the Beelink homelab behind Cloudflare Tunnel.
+title: "Prompt Registry Overview"
+description: "Overview of the Prompt Registry API: what it stores, what is confirmed about its users, and how a request moves through it."
 ---
 
 # Prompt Registry
 
-Lightweight prompt-storage service. Exposes CRUD over HTTP for prompt templates, snippets, and ADR text keyed by string namespaces. Backed by PostgreSQL, fronted by Swagger UI, optionally fans out change events via RabbitMQ.
+Prompt Registry is an API-only Express service for storing, retrieving, updating, and deleting prompt templates and snippets by string key. It exposes REST endpoints under `/api/v1/prompts`, serves Swagger UI at `/api-docs`, and persists data in PostgreSQL ([README.md:L3](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/README.md#L3), [CLAUDE.md:L84](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L84), [CLAUDE.md:L216](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L216)). An optional RabbitMQ publisher exists, but the source states it currently has no active subscribers ([server/services/promptEventPublisher.ts:L4-L12](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/services/promptEventPublisher.ts#L4-L12)).
 
 ## At a glance
 
-- **Runtime**: Express 5 + TypeScript on Node 20+ ([server/package.json:25-26](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/package.json#L25-L26), [server/package.json:62](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/package.json#L62))
-- **Storage**: PostgreSQL via native `pg` and the `@jeffrey-keyser/database-base-config` package ([CLAUDE.md:147](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L147))
-- **Public surface**: `https://prompt-api.jeffreykeyser.net` via Cloudflare Tunnel ([CLAUDE.md:13](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L13))
-- **Auth**: None — disabled by design; rate-limited per IP ([server/app.ts:71-73](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/app.ts#L71-L73), [server/middleware/rateLimiting.ts:31-46](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/middleware/rateLimiting.ts#L31-L46))
-- **Versioning**: URL-prefix and `Accept-Version` header, current version v1 ([CLAUDE.md:55-65](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L55-L65))
-- **Events**: Optional RabbitMQ topic exchange `prompt.events` ([server/services/promptEventPublisher.ts:4-29](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/services/promptEventPublisher.ts#L4-L29))
-- **Deploy**: systemd unit `prompt-registry.service` on the Beelink homelab ([prompt-registry.service:1-16](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/prompt-registry.service#L1-L16))
+- **Runtime**: Express 5 application. The server package declares Node `>=20.0.0` ([server/package.json:L25](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/package.json#L25), [server/package.json:L62](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/package.json#L62)), while the root package declares `>=18.0.0` ([package.json:L41-L43](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/package.json#L41-L43)).
+- **Storage**: PostgreSQL through a pool created by `@jeffrey-keyser/database-base-config` ([server/db/connection.ts:L1-L4](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/db/connection.ts#L1-L4)).
+- **Access**: No authentication. Authentication is set to disabled in the server config ([server/app.ts:L74-L76](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/app.ts#L74-L76)). Per-IP rate limits are 100 reads and 20 writes per minute ([server/middleware/rateLimiting.ts:L28-L46](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/middleware/rateLimiting.ts#L28-L46)).
+- **Versioning**: URL prefix `/api/v1/`. Unsupported path versions return 404 ([server/app.ts:L141](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/app.ts#L141), [server/middleware/versioning.ts:L88-L97](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/middleware/versioning.ts#L88-L97)).
+- **Deployment**: Documented as a systemd unit on the Beelink homelab behind Cloudflare Tunnel ([CLAUDE.md:L9](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L9), [prompt-registry.service:L9-L10](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/prompt-registry.service#L9-L10)). Whether it is live is not verifiable from this snapshot.
+- **Events**: Optional topic exchange `prompt.events`, active only when `AMQP_URL` is set ([server/services/promptEventPublisher.ts:L17](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/services/promptEventPublisher.ts#L17), [server/services/promptEventPublisher.ts:L29-L33](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/services/promptEventPublisher.ts#L29-L33)).
 
 ## Who uses it
 
-Consumers are personal Jeffrey-Keyser ecosystem agents and tools that read prompt templates at runtime instead of vendoring them. ADRs live under the `adrs/` namespace key prefix ([README.md:334](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/README.md#L334)).
+Confirmed in source: the API is documented for direct HTTP use with curl and Swagger UI ([README.md:L29](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/README.md#L29), [CLAUDE.md:L130](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L130)). No named downstream client is confirmed by this snapshot. Agent-style consumers that fetch prompts at runtime are plausible given the `adrs/` key convention ([README.md:L337](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/README.md#L337)), but they are unknown here. See [Services and Dependencies](../services-and-dependencies/).
 
-## How work flows through it
+## Main flow
 
-1. Client (curl, Swagger UI, or downstream agent) hits a `/api/v1/prompts` endpoint ([CLAUDE.md:46-50](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L46-L50)).
-2. Rate limit + version negotiation middleware run, then the v1 router dispatches to a route handler ([server/app.ts:117-138](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/app.ts#L117-L138)).
-3. Route delegates to the DAL, which executes parameterized SQL against `prompt_registry.prompts` ([server/dal/prompts.ts:11-29](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/dal/prompts.ts#L11-L29)).
-4. On mutation, the event publisher emits a `prompt.created|updated|deleted` event to RabbitMQ when `AMQP_URL` is configured ([server/types/events.ts:1-10](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/types/events.ts#L1-L10), [server/services/promptEventPublisher.ts:15-29](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/services/promptEventPublisher.ts#L15-L29)).
+1. A client calls a versioned prompt endpoint such as `GET /api/v1/prompts/{key}` ([CLAUDE.md:L163-L168](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L163-L168)).
+2. Custom middleware runs before routing: rate limiter, legacy redirect, version negotiation, and version validation ([server/app.ts:L120-L142](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/app.ts#L120-L142)).
+3. The route calls the data access layer, which runs parameterized SQL ([server/dal/prompts.ts:L11-L19](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/dal/prompts.ts#L11-L19)).
+4. Create and update run inside a transaction that also writes a version row ([server/dal/prompts.ts:L127-L169](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/dal/prompts.ts#L127-L169)). A best-effort event is published after commit ([server/dal/prompts.ts:L170](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/dal/prompts.ts#L170)).
 
 ## Wiki pages
 
-- [Architecture](./architecture/) — module layout, request pipeline, DAL.
-- [Iteration Loop](./iteration-loop/) — how a change moves from edit to deploy.
-- [Services and Dependencies](./services-and-dependencies/) — inbound/outbound integrations.
-- [Operations](./operations/) — start command, systemd, logs, health, tunnel.
-- [Glossary](./glossary/) — repo-specific terms.
+- [Architecture](../architecture/): components, contracts, and request pipeline.
+- [Iteration Loop](../iteration-loop/): contributor workflow, tests, CI, and deploy steps.
+- [Services and Dependencies](../services-and-dependencies/): what the service depends on and who is confirmed to call it.
+- [Operations](../operations/): start, deploy, health, and observability.
+- [Glossary](../glossary/): project-specific terms.

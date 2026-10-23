@@ -1,79 +1,66 @@
 ---
-title: Logos — Operations
-description: Deploy path, systemd unit, port, secrets, health probe, logging, and on-call notes for the Logos service.
+title: "Logos — Operations"
+description: "How Logos is started, deployed, health-checked and observed, separating documented runtime from verified facts."
 ---
 
 # Operations
 
-Logos is a deployable HTTP service, not a library. It runs on the Beelink homelab box behind a Cloudflare Tunnel.
+Logos is a deployable HTTP service, not a library. Its entry point is `dist/bin/www.js` ([package.json:L9](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L9)).
 
-## Runtime
+**Everything on this page is documented by source files.** Nothing here was checked against a live host.
 
-| Item | Value |
-|---|---|
-| Entry | `dist/bin/www.js` ([logos.service:9](https://github.com/Jeffrey-Keyser/logos/blob/main/logos.service#L9)) |
-| Port | **3070** ([logos.service:19](https://github.com/Jeffrey-Keyser/logos/blob/main/logos.service#L19), [README.md:426](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L426)) |
-| Domain | `logos.jeffreykeyser.net` ([README.md:426](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L426)) |
-| Systemd unit | `logos.service` (user unit at `~/.config/systemd/user/logos.service`) ([logos.service](https://github.com/Jeffrey-Keyser/logos/blob/main/logos.service), [README.md:424](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L424)) |
-| Working dir | `/home/jkeyser/logos` ([logos.service:8](https://github.com/Jeffrey-Keyser/logos/blob/main/logos.service#L8)) |
-| Restart policy | `on-failure`, RestartSec=2, StartLimitBurst=5 ([logos.service:12-15](https://github.com/Jeffrey-Keyser/logos/blob/main/logos.service#L12-L15)) |
-| Env file | `/home/jkeyser/logos/.env` populated from Solo Vault at deploy ([logos.service:21](https://github.com/Jeffrey-Keyser/logos/blob/main/logos.service#L21), [README.md:432](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L432)) |
+## Start and stop
 
-## Start / stop
+- **Locally.** Use `npm run dev`. To run the compiled build, use `npm run build && npm start` ([package.json:L7-L9](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L7-L9)).
+- **On the host, via the `logos.service` unit.** The unit ([logos.service:L7-L20](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/logos.service#L7-L20)):
+  - runs from `/home/jkeyser/logos`;
+  - sets `PORT=3070` and `NODE_ENV=production`;
+  - points `TRANSFORMERS_CACHE` at the models directory;
+  - loads `.env`;
+  - uses `Restart=on-failure`.
+- **Restart command.** The deploy script restarts the service with `systemctl --user restart logos` ([deploy.sh:L136-L137](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L136-L137)).
+- **Shutdown.** On SIGTERM the process stops the worker and drains the bus best-effort, then closes the HTTP server ([src/bin/www.ts:L62-L80](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/www.ts#L62-L80)). Systemd allows 15s for this ([logos.service:L10](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/logos.service#L10)).
+- **Startup failures.** If the embedding warmup fails, the process exits ([src/bin/www.ts:L12-L13](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/www.ts#L12-L13), [src/bin/www.ts:L81-L84](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/www.ts#L81-L84)).
 
-```bash
-systemctl --user start logos
-systemctl --user restart logos
-journalctl --user -u logos -f
-```
+## Deploy
 
-`ExecStop` sends SIGTERM with a 15s timeout; the process drains the ingest worker, closes the RabbitMQ consumer/publisher, then closes the HTTP server ([logos.service:10-11](https://github.com/Jeffrey-Keyser/logos/blob/main/logos.service#L10-L11), [src/bin/www.ts:62-82](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L62-L82)).
+`deploy.sh` runs these steps in order ([deploy.sh:L87-L152](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L87-L152)):
 
-## Deploy path
+1. `git pull origin main`.
+2. Pull secrets with `solo-vault pull`. If that fails, fall back to Vault over HTTP. If that also fails, keep the existing `.env`.
+3. `npm ci --include=dev`.
+4. `prepare:models`.
+5. `build`.
+6. `migrate`.
+7. `seed:prompts`.
+8. `register-cron`. A failure here is non-fatal.
+9. Restart the service.
+10. Poll `curl http://localhost:3070/health` up to 20 times.
 
-Auto-deploy is driven by `beelink-deploy` on push to `main`. The hook invokes `deploy.sh` which:
+Secret keys written into `.env` are `DATABASE_PASSWORD`, `LOGOS_SERVICE_TOKEN`, `LOGOS_STRUCT_TOKEN`, `RABBITMQ_URL` and optionally `CRON_API_KEY` ([deploy.sh:L68-L82](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L68-L82)).
 
-1. Exports `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` so `systemctl --user` works under the deploy daemon ([deploy.sh:4-7](https://github.com/Jeffrey-Keyser/logos/blob/main/deploy.sh#L4-L7)).
-2. Pulls secret values from Solo Vault (`SOLO_VAULT_URL`, default `http://localhost:3015`) into `.env` ([deploy.sh:10-11](https://github.com/Jeffrey-Keyser/logos/blob/main/deploy.sh#L10-L11)).
-3. Runs `npm ci`, `npm run build`, `npm run migrate`, then `systemctl --user restart logos` ([README.md:430](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L430)).
+**Public hostname.** The CLI defaults to `https://logos.jeffreykeyser.net` ([src/bin/logos.ts:L5](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/logos.ts#L5)). A code comment mentions a cloudflared edge in front of Logos ([src/query/synthesize.ts:L29-L37](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/synthesize.ts#L29-L37)). The tunnel configuration itself is not in the provided source.
 
-Pre-deploy one-time setup includes `npm run prepare:models` to fetch the 130MB `bge-small-en-v1.5` ONNX file into `~/logos/models/` ([README.md:454-455](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L454-L455)).
+## Health and status
 
-## Cloudflare Tunnel
+| Endpoint | Auth | Checks | Source |
+|---|---|---|---|
+| `GET /health` | none | Liveness only. Returns `{status:"ok"}` with no database or model check. | [src/routes/health.ts:L7-L13](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/health.ts#L7-L13) |
+| `GET /ready` | none | Runs `SELECT 1` and an embedding probe. Returns 503 on failure. | [src/routes/health.ts:L22-L53](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/health.ts#L22-L53) |
+| `GET /v1/_status` | bearer token | Reports version, uptime, model and latest migration. | [src/routes/v1/status.ts:L14-L30](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/status.ts#L14-L30) |
 
-Add to `~/.cloudflared/config.yml`:
+**The deploy smoke test only hits `/health`.** A passing deploy therefore does not prove that the database or embeddings are ready. Check `/ready` for that.
 
-```yaml
-ingress:
-  - hostname: logos.jeffreykeyser.net
-    service: http://localhost:3070
-```
+## Observability
 
-([README.md:436-443](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L436-L443))
-
-## Health probe
-
-`GET /health` is unauthenticated and returns `{status, db, embed, took_ms}`. The embedding model is warmed (one dummy embed) before `app.listen()` so a healthy `/health` implies ONNX is loaded ([src/app.ts:42-50](https://github.com/Jeffrey-Keyser/logos/blob/main/src/app.ts#L42-L50), [src/bin/www.ts:12-14](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L12-L14), [README.md:416](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L416)).
-
-## Logging
-
-Structured request logging via `express-server-factory`'s `dev` logger, with `/health` filtered out to keep journals quiet ([src/app.ts:32-36](https://github.com/Jeffrey-Keyser/logos/blob/main/src/app.ts#L32-L36)). Errors are logged with method + path context ([src/app.ts:55-64](https://github.com/Jeffrey-Keyser/logos/blob/main/src/app.ts#L55-L64)). Read with `journalctl --user -u logos`.
-
-## Resilience
-
-The RabbitMQ client connects after the HTTP listener is up; if the broker is unreachable the process logs `[bus] initial connect failed; HTTP up, bus disabled` and continues serving HTTP. The bus reconnects on its own schedule ([src/bin/www.ts:26-40](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L26-L40)).
-
-## Secrets
-
-Solo Vault namespace `logos` holds `service-token`, `struct-token`, `rabbitmq-*`, `db-password`. Real values are pulled into `~/logos/.env` at deploy time; `.env.example` lists keys ([README.md:30](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L30), [README.md:92](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L92), [README.md:432](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L432)).
-
-## Auth model
-
-Single bearer token on `/v1/*` ([src/app.ts:50](https://github.com/Jeffrey-Keyser/logos/blob/main/src/app.ts#L50)). The browser-only `/proposals` route uses a `?t=<token>` query-token middleware inside the router ([src/app.ts:52-53](https://github.com/Jeffrey-Keyser/logos/blob/main/src/app.ts#L52-L53)). `/health` is open ([README.md:416](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L416)).
-
-## On-call cheatsheet
-
-- HTTP 500s — check `journalctl --user -u logos -n 200` for the request-error log lines emitted by `app.ts` ([src/app.ts:57-61](https://github.com/Jeffrey-Keyser/logos/blob/main/src/app.ts#L57-L61)).
-- Ingest stuck — look at `ingest_job.status` and `last_error` columns; the worker uses `SELECT ... FOR UPDATE SKIP LOCKED` so manual `UPDATE` to `failed` is safe ([README.md:220-222](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L220-L222)).
-- Embedding warmup slow — cold load is ~3.1s on the N150, then ~50ms steady-state; `/health` will block until warmup returns ([README.md:508-513](https://github.com/Jeffrey-Keyser/logos/blob/main/README.md#L508-L513), [src/bin/www.ts:12](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L12)).
-- Bus down — non-fatal; HTTP continues. Reconnects on its own ([src/bin/www.ts:36-40](https://github.com/Jeffrey-Keyser/logos/blob/main/src/bin/www.ts#L36-L40)).
+- **Request logs.** Logs use Morgan's `dev` format, and `/health` and `/ready` are skipped ([src/app.ts:L33-L37](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/app.ts#L33-L37)). Errors are logged with the request method and path ([src/app.ts:L56-L64](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/app.ts#L56-L64)).
+- **Console prefixes:**
+  - `[bus]` for connect, reconnect and publish drops ([src/bus/rabbit.ts:L207-L228](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bus/rabbit.ts#L207-L228)).
+  - `[ingest]` for worker jobs ([src/worker/ingest.ts:L293](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/worker/ingest.ts#L293)).
+  - `[cron]` for RSS, digest and reembed summaries ([src/cron/rss-poll.ts:L123-L125](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/cron/rss-poll.ts#L123-L125)).
+- **Where logs go.** Logs go to stdout. Reading them through the user journal is likely but not confirmed.
+- **Domain audit data:**
+  - `ingest_job.status`, `attempts` and `last_error` record job progress ([src/db/repos/ingest-job.ts:L11-L23](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/db/repos/ingest-job.ts#L11-L23)).
+  - `query_log` rows record outcome, latency, context scope and caller. They are written fire-and-forget ([src/query/run.ts:L94-L121](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/run.ts#L94-L121)).
+  - The daily digest lists empty-hub questions from the past 24h ([src/cron/digest.ts:L77-L93](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/cron/digest.ts#L77-L93)).
+- **Metrics.** No metrics exporter is visible in the provided excerpts.

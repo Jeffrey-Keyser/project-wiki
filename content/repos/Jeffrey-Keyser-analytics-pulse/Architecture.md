@@ -1,88 +1,57 @@
 ---
-title: Architecture
-description: Internal layout of the Analytics-Pulse API, dashboard, tracking SDK, datastore, and the AWS surfaces that host them.
+title: "Architecture"
+description: "Components and contracts of Analytics-Pulse: the Express API, admin client, tracking library, data layer, background jobs, and the external services they touch."
 ---
 
 # Architecture
 
-Analytics-Pulse is a three-surface system (tracker → API → dashboard) backed by Postgres and a handful of in-process cron jobs. The API is the only stateful actor; the tracker and dashboard are stateless clients.
+Analytics-Pulse has three deliverables: a tracking library used on customer sites, an Express API, and a React admin client ([docs/ARCHITECTURE.md:L7-L11](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L7-L11)). The API holds the state. The tracker and client call it over HTTP.
 
 ## Component map
 
 ```mermaid
 flowchart LR
-  subgraph Browser["Visitor browser"]
-    Snippet["@analytics-pulse/tracking-library"]
+  subgraph Site ["Customer website"]
+    Tracker["Tracking library"]
   end
-
-  subgraph CDN["CloudFront + S3"]
-    Dash["React dashboard (client/)"]
+  subgraph Admin ["Admin dashboard"]
+    Client["React client in client src"]
   end
-
-  subgraph Lambda["AWS Lambda (server/)"]
-    Routes["Express routes\n/api/v1/*"]
-    Mw["Middleware\nauth, versioning, rate-limit"]
-    Svc["Services\naggregation, cache, email, geolocation"]
-    DAL["DAL\n(events, projects, goals, ...)"]
-    Cron["In-process cron\nnode-cron"]
+  subgraph API ["Express API in server"]
+    V1["Routes under api v1"]
+    Jobs["Background jobs in server cron"]
   end
-
-  subgraph Data["AWS managed"]
-    PG[("PostgreSQL\npartitioned events + daily rollups")]
-    Redis[("Redis\nioredis cache")]
-    SES[("AWS SES\nemail reports")]
-  end
-
-  Pay["pay.jeffreykeyser.net\n(external auth)"]
-  GH["GitHub Issues\n(error reporting)"]
-
-  Snippet -- "POST /api/v1/track/*" --> Routes
-  Dash -- "JWT-authed /api/v1/*" --> Routes
-  Routes --> Mw --> Svc --> DAL --> PG
-  Svc --> Redis
-  Cron --> DAL
-  Cron --> SES
-  Mw -- "validate token" --> Pay
-  Svc -- "file issues" --> GH
+  Pay["Pay auth service external"]
+  PG["PostgreSQL events and analytics_daily"]
+  Redis["Redis cache when REDIS_URL is set"]
+  SES["AWS SES dependency"]
+  GH["GitHub issues documented"]
+  Tracker -- "POST track events with API key" --> V1
+  Client -- "JWT requests to projects routes" --> V1
+  V1 -- "validates sessions and tokens" --> Pay
+  V1 -- "reads and writes" --> PG
+  Jobs -- "aggregation and partition upkeep" --> PG
+  Jobs -- "email reports" --> SES
+  V1 -- "optional cache" --> Redis
+  V1 -- "error reporting" --> GH
 ```
+
+The diagram shows configured or documented paths. Whether SES, Redis, and GitHub calls run in a given environment is not confirmed by these excerpts.
 
 ## Role contracts
 
-### `server/app.ts` — composition root
+**Composition root (`server/app.ts`).** The app is built with `createServerlessAppSync` from `express-server-factory`, covering CORS, sessions, Pay auth, health, Swagger, and routes ([server/app.ts:L1-L5](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L1-L5), [server/app.ts:L139-L197](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L139-L197)). Sessions use a `user_sessions` table with a 24-hour TTL ([server/app.ts:L164-L170](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L164-L170)). CLAUDE.md describes wrapping with serverless-http for Lambda ([CLAUDE.md:L222](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L222)); the handler file is not in these excerpts.
 
-The Express app is assembled by `createServerlessAppSync` from `@jeffrey-keyser/express-server-factory`, wiring CORS, sessions, Pay auth, Swagger, and the v1 router in one config block ([server/app.ts:1-5](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L1-L5), [server/app.ts:99-247](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L99-L247)). Cron jobs auto-start at import time ([server/app.ts:34-36](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L34-L36)).
+**Public and authenticated routes.** The Pay middleware bypasses auth for health, diagnostics, track, errors, unsubscribe, Swagger, and root ([server/app.ts:L90-L108](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L90-L108)). The v1 router mounts public routes for tracking, errors, unsubscribe, and diagnostics, user-authenticated project routes, and admin-only aggregation, partitions, and performance ([server/routes/versions/v1/index.ts:L73-L149](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/versions/v1/index.ts#L73-L149)).
 
-### `server/routes/versions/v1/index.ts` — API surface
+**Versioning.** Version negotiation runs before legacy redirect and version validation for version 1 ([server/app.ts:L264-L270](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L264-L270)). CLAUDE.md documents the `API-Version` header and 301 redirects from `/v1/*` ([CLAUDE.md:L168-L175](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L168-L175)).
 
-All public traffic flows through `/api/v1/*`. The router splits routes into three tiers — public (API-key or no auth) for `/track`, `/errors`, `/unsubscribe`, `/diagnostics`; user-authed for projects/analytics/goals; admin-only for `/aggregation`, `/partitions`, `/performance` ([server/routes/versions/v1/index.ts:73-149](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/routes/versions/v1/index.ts#L73-L149)).
+**Data access.** DAL classes extend `BaseDal` and use raw SQL with transaction support ([CLAUDE.md:L219-L221](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L219-L221)). The domain layer is a placeholder for future work ([server/domain/entities/index.ts:L1-L3](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/domain/entities/index.ts#L1-L3)). Individual DAL and service files are not in these excerpts.
 
-### `server/middleware/versioning.ts` — version negotiation
+**Background jobs.** Jobs start from `startBackgroundJobs` unless the environment is `test` and each job's flag gates it ([server/app.ts:L48-L79](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L48-L79)). Flags default to enabled unless set to `false` ([server/config/env.ts:L142-L152](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/config/env.ts#L142-L152)). Runtime status is served at the runtime diagnostics route ([server/routes/diagnostics.ts:L120-L122](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/diagnostics.ts#L120-L122)).
 
-Adds the `API-Version` response header, redirects legacy `/v1/*` to `/api/v1/*` (301), and rejects unsupported versions ([server/app.ts:217-223](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L217-L223)).
+**Admin client.** Data access goes through RTK Query slices exported from `client/src/reducers` ([client/src/reducers/index.ts:L1-L6](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/client/src/reducers/index.ts#L1-L6)). Containers manage state and components render UI ([CLAUDE.md:L226](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L226)).
 
-### `server/services/*` — business logic
+**Tracking library.** The package exports `AnalyticsPulse`, `Sender`, `EventQueue`, and `SessionManager` ([tracking-library/src/index.ts:L7-L10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/tracking-library/src/index.ts#L7-L10)). Rollup builds UMD, ESM, and CJS outputs ([tracking-library/rollup.config.js:L22-L30](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/tracking-library/rollup.config.js#L22-L30)).
 
-One file per domain capability: `aggregation.ts` rolls up daily metrics, `cache.ts` wraps `ioredis` with an in-memory fallback, `goalTracking.ts` evaluates goal completions, `emailReporting.ts` builds and dispatches scheduled reports via SES, `errorReporting.ts` opens GitHub Issues for runtime errors, `geolocation.ts` resolves IPs with `geoip-lite`, `userAgent.ts` parses UA strings, `apiKeys.ts` generates and validates bcrypt-hashed keys ([README.md:62-71](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L62-L71), [server/package.json:17-44](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/package.json#L17-L44)).
-
-### `server/dal/*` — data access
-
-DAL classes extend a `BaseDal` from `@jeffrey-keyser/database-base-config`, exposing parameterised SQL and `withTransaction` helpers. Tables include `events` (partitioned monthly), `analytics_daily` (pre-computed rollups), `projects`, `api_keys`, `sessions`, `goals`, `campaigns`, `email_preferences`, `email_reports`, `error_reports`, `project_settings`, `diagnostics`, `system` ([CLAUDE.md](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/CLAUDE.md), [README.md:67-71](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L67-L71)).
-
-### `server/cron/*` — scheduled jobs
-
-Three jobs auto-register on app import:
-- `dailyAggregation.ts` — runs `0 1 * * *` UTC and rolls up the previous day's events ([server/cron/dailyAggregation.ts:32-36](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/cron/dailyAggregation.ts#L32-L36)).
-- `partitionMaintenance.ts` — creates next-month and drops stale partitions ([server/app.ts:35](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L35)).
-- `emailReporting.ts` — dispatches daily / weekly / monthly reports per project preferences ([server/app.ts:36](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L36)).
-
-### `client/src` — React dashboard
-
-Smart `containers/` own state, dumb `components/` render UI; data fetching goes through RTK Query slices in `client/src/reducers/`. Auth state is managed by `@jeffrey-keyser/pay-auth-integration/client/react` ([README.md:632-641](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L632-L641), [client/package.json:7-25](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/client/package.json#L7-L25)).
-
-### `tracking-library/` — browser SDK
-
-Rollup-built ESM / CJS / UMD bundles published as `@analytics-pulse/tracking-library`. Posts events to `/api/v1/track/event` or `/api/v1/track/batch`, authenticated by an `ap_*` API key ([tracking-library/package.json:1-10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/tracking-library/package.json#L1-L10), [README.md:108-135](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L108-L135)).
-
-### `terraform/` — infrastructure
-
-Modules under `terraform/modules/`, environment-specific config under `terraform/accounts/us-east-1/`. Provisions Lambda, ECR, S3, CloudFront, Route 53, ACM, CloudWatch, IAM, VPC ([README.md:1022-1043](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1022-L1043)).
+**Infrastructure.** Terraform lives in `terraform/`, with legacy modules and a planned move to an external module ([CLAUDE.md:L233-L236](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L233-L236)). Terraform deployment is manual ([CLAUDE.md:L240](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L240)).

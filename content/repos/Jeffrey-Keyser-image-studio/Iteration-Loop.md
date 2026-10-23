@@ -1,40 +1,43 @@
 ---
-title: image-studio — Iteration Loop
-description: Local edit → server/client build + Vitest → push to main → beelink-deploy webhook → deploy.sh → diagnostics/deploy verification.
+title: "image-studio — Iteration Loop"
+description: "Contributor workflow for image-studio: local dev, tests and lint, the agents verify gate, push-to-main deploy, and deploy verification, grounded in repo scripts."
 ---
 
 # Iteration Loop
 
-Single-repo loop: edit, run Vitest on both halves, push to `main`, let the homelab webhook do the rest.
+Work happens in one repository. Contributors run the server and client locally, run tests, pass the agent verification gate, and push to `main`. The Beelink deploy script then builds and restarts services.
 
 ```mermaid
 sequenceDiagram
-  participant Dev as Developer
-  participant Repo as main branch
-  participant Hook as beelink-deploy webhook
-  participant Beelink as deploy.sh on Beelink
-  participant API as Express (images-api)
+  participant Dev as "Developer"
+  participant Repo as "GitHub main"
+  participant Hook as "beelink-deploy webhook"
+  participant Deploy as "deploy.sh"
+  participant API as "Backend deploy endpoint"
 
-  Dev->>Dev: npm run dev (server :3001) + (client :3002)
-  Dev->>Dev: vitest server + client
-  Dev->>Dev: agents:verify (pay-auth pin, build, test)
-  Dev->>Repo: git push origin main
-  Repo->>Hook: webhook fires
-  Hook->>Beelink: ./deploy.sh
-  Beelink->>Beelink: build server, build client, stamp build-info.json
-  Beelink->>API: systemctl restart image-studio + image-studio-frontend
-  Beelink->>API: poll /api/v1/diagnostics/deploy
-  API-->>Beelink: status=ok, build.buildSha matches HEAD
+  Dev->>Dev: run tests and agents verify
+  Dev->>Repo: push to main
+  Repo->>Hook: push event
+  Hook->>Deploy: run deploy script
+  Deploy->>Deploy: pull build server and client
+  Deploy->>Deploy: run migrations and stamp build info
+  Deploy->>Deploy: restart systemd services
+  Deploy->>API: poll deploy endpoint up to 15 times
+  API-->>Deploy: status and buildSha
+  Deploy->>Deploy: CORS check and verdict
 ```
 
 ## Steps
 
-1. **Local dev.** `cd server && npm run dev` boots Express on port 3001; `cd client && npm run dev` boots Vite on port 3002. AWS credentials and a `.env` are required for full functionality ([README.md:20-43](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L20-L43)).
-2. **Test.** `npm test` in each workspace runs Vitest. Server adds `test:integration` and `test:docker` variants for containerized integration runs ([server/package.json:11-16](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/package.json#L11-L16)).
-3. **agents:verify gate.** Workers run the four checks between the `<!-- agents:verify -->` markers — pay-auth pin, no private subpath imports, ≤1 `new PayAuth(`, build+test green ([AGENTS.md:30-53](https://github.com/Jeffrey-Keyser/image-studio/blob/main/AGENTS.md#L30-L53)).
-4. **Push to `main`.** Direct push triggers the `beelink-deploy` webhook on the Beelink host ([README.md:124-127](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L124-L127), [CLAUDE.md:62-64](https://github.com/Jeffrey-Keyser/image-studio/blob/main/CLAUDE.md#L62-L64)).
-5. **`deploy.sh`.** `git pull`, `npm install`, `npm run build` for both server and client, then write `dist/build-info.json` with `buildSha` + `builtAt` so the deploy ID does not dirty the worktree ([deploy.sh:1-32](https://github.com/Jeffrey-Keyser/image-studio/blob/main/deploy.sh#L1-L32)).
-6. **systemd restart.** `systemctl restart image-studio` and `image-studio-frontend` ([deploy.sh:34-39](https://github.com/Jeffrey-Keyser/image-studio/blob/main/deploy.sh#L34-L39)).
-7. **Deploy verification.** Polls `GET /api/v1/diagnostics/deploy` (default `http://localhost:3030/...`) up to 15× and only passes when `status === "ok"` and `build.buildSha` matches `HEAD`. Missing `PAY_SERVICE_TOKEN` surfaces as a warning, not a failure ([deploy.sh:42-65](https://github.com/Jeffrey-Keyser/image-studio/blob/main/deploy.sh#L42-L65), [README.md:142-153](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L142-L153)).
+1. **Run locally.** The server's `dev` script runs `ts-node ./bin/www.ts` ([server/package.json:L7](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/package.json#L7)). The client's `dev` script runs Vite ([client/package.json:L29](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/package.json#L29)). Local ports are documented inconsistently. The README says 3001 and CLAUDE says 3030 for the server ([README.md:L34](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L34), [CLAUDE.md:L18](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/CLAUDE.md#L18)). The config default is 3001 ([server/config/env.ts:L90](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/config/env.ts#L90)).
+2. **Test and lint.** The server runs `vitest run` and has integration and Docker variants ([server/package.json:L11-L16](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/package.json#L11-L16)). Its `lint` script runs ESLint ([server/package.json:L10](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/package.json#L10)). The client runs `vitest --run` ([client/package.json:L32](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/package.json#L32)). The explorations database tests run in Docker via `server/scripts/test-explorations.sh` ([README.md:L264-L268](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L264-L268)).
+3. **Agent verification gate.** AGENTS.md defines four checks: the pay-auth version pin, no private subpath imports, at most one `new PayAuth(`, and green build and test ([AGENTS.md:L35-L52](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/AGENTS.md#L35-L52)). The same file requires a non-empty `GITHUB_TOKEN` for the GitHub Packages registry ([AGENTS.md:L23](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/AGENTS.md#L23)).
+4. **Push to `main`.** The README and CLAUDE document a push-to-`main` trigger through the `beelink-deploy` webhook ([README.md:L197](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L197), [CLAUDE.md:L58](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/CLAUDE.md#L58)). The webhook configuration is not in the excerpts.
+5. **Deploy script.** `deploy.sh` runs `git pull --ff-only origin main` and records the commit SHA ([deploy.sh:L8-L11](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L8-L11)). It then runs `npm ci` and `npm run build` for the server ([deploy.sh:L16-L17](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L16-L17)). It applies migrations through `scripts/run-migrations.js`, whose contents are not in the excerpts ([deploy.sh:L20](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L20)). It writes `build-info.json` ([deploy.sh:L24-L26](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L24-L26)) and builds the client ([deploy.sh:L32-L33](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L32-L33)).
+6. **Restart and verify.** The script restarts `image-studio` and `image-studio-frontend` ([deploy.sh:L38-L39](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L38-L39)). It polls the deploy endpoint up to 15 times ([deploy.sh:L45-L55](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L45-L55)). It passes only when `status` is `ok` and `buildSha` matches the commit ([deploy.sh:L57](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L57)). Then it runs the CORS check ([deploy.sh:L59](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L59)). A missing `PAY_SERVICE_TOKEN` only prints a warning ([deploy.sh:L61-L63](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L61-L63)).
 
-Manual rerun is identical: `./deploy.sh` from the Beelink host ([README.md:136-140](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L136-L140)).
+## Unknowns
+
+- **CI.** No CI workflow file appears in the excerpts. Any pipeline that runs tests before deploy is unknown.
+- **Ports.** The deploy script's default verify URL uses port 3030 ([deploy.sh:L45](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L45)), but a comment in the same script says 3001 ([deploy.sh:L42-L43](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L42-L43)).
+- **Manual rerun.** The README says `./deploy.sh` is the manual path ([README.md:L210](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L210)).

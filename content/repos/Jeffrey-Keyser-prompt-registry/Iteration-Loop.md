@@ -1,39 +1,40 @@
 ---
-title: Iteration Loop
-description: How a change moves from local edit to running on the homelab.
+title: "Iteration Loop"
+description: "Contributor workflow for Prompt Registry: local setup, database deploy, tests, lint, build, CI on pull requests, and the homelab deploy script."
 ---
 
 # Iteration loop
 
-The loop is short because there's no cloud infra and no auth surface to coordinate.
+This page describes the workflow implied by the scripts and CI config in this snapshot. Two deploy paths are documented, and this page notes where they differ.
 
 ```mermaid
 sequenceDiagram
-  participant Dev as Developer
-  participant Local as Local server (npm run dev)
-  participant CI as GitHub Actions
-  participant Box as Beelink homelab
-  participant CF as Cloudflare Tunnel
-
-  Dev->>Local: edit server/** + run npm run dev
-  Local-->>Dev: Swagger at /api-docs, hot ts-node reload
-  Dev->>Dev: npm test, npm run lint
-  Dev->>CI: open PR to main
-  CI-->>Dev: install + lint + tests on PR
-  Dev->>Box: merge to main, pull, npm run build
-  Dev->>Box: sudo systemctl restart prompt-registry
-  Box->>CF: app listens on PORT 3001
-  CF-->>Dev: live at prompt-api.jeffreykeyser.net
+  participant D as "Developer"
+  participant L as "Local dev server"
+  participant CI as "GitHub Actions"
+  participant H as "Homelab host"
+  D->>L: cd server and npm run dev
+  D->>L: npm test and npm run lint
+  D->>CI: Open pull request to main
+  CI->>CI: Install and run node-build action
+  D->>H: Merge then run deploy.sh
+  H->>H: Build then restart systemd unit
+  H-->>D: Health gate on /health
 ```
 
 ## Steps
 
-1. **Edit & run locally.** `cd server && npm run dev` boots ts-node against `bin/www.ts`, reading `.env` ([CLAUDE.md:19-22](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L19-L22), [server/package.json:7](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/package.json#L7)).
-2. **Apply schema changes.** New SQL goes under `server/db/schema/` and is applied via `./deploy.sh` or the `db-deploy` CLI ([CLAUDE.md:36-43](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L36-L43)).
-3. **Test.** `npm test`, `npm run test:watch`, or `npm run test:coverage`; suites live in `server/tests/__tests__/` ([CLAUDE.md:29-32](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L29-L32)).
-4. **Lint and typecheck.** `npm run lint` (ESLint v9 flat config) and `npm run build` (tsc) ([server/package.json:8-10](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/server/package.json#L8-L10)).
-5. **Open a PR.** CI runs the node-build composite action against `main/server` on every PR to `main` ([.github/workflows/ci-cd-pipeline.yml:9-40](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/.github/workflows/ci-cd-pipeline.yml#L9-L40)).
-6. **Merge and deploy.** Pull on the homelab, `npm run build`, then `sudo systemctl restart prompt-registry`; Cloudflare Tunnel keeps the public URL pointed at it ([CLAUDE.md:218-220](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L218-L220), [prompt-registry.service:6-13](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/prompt-registry.service#L6-L13)).
-7. **Observe.** `sudo journalctl -u prompt-registry -f` for live logs ([CLAUDE.md:15-17](https://github.com/Jeffrey-Keyser/prompt-registry/blob/main/CLAUDE.md#L15-L17)).
+1. **Environment.** Create `server/.env` from `.env.example` ([README.md:L171-L176](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/README.md#L171-L176), [CLAUDE.md:L29](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L29)). The example file is not in this snapshot. An optional Nix shell pins Node 24 ([docs/nix-development.md:L3-L7](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/docs/nix-development.md#L3-L7)).
+2. **Database.** Run `cd server/db && ./deploy.sh`. It applies `db/schema` and related SQL directories ([server/db/deploy.sh:L13-L27](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/db/deploy.sh#L13-L27)). It also creates a `user_sessions` table, a template artifact since no session code is wired in `app.ts` ([server/db/deploy.sh:L30-L33](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/db/deploy.sh#L30-L33)).
+3. **Run.** `cd server && npm run dev` runs `ts-node ./bin/www.ts` ([server/package.json:L7](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/package.json#L7)).
+4. **Test.** `npm test`, `npm run test:watch`, and `npm run test:coverage` run Jest ([server/package.json:L11-L13](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/package.json#L11-L13)). Jest loads `tests/setup.ts` ([server/jest.config.js:L20](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/jest.config.js#L20)).
+5. **Lint and build.** `npm run lint` uses ESLint with the flat config ([server/package.json:L10](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/package.json#L10), [server/eslint.config.js:L8-L48](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/eslint.config.js#L8-L48)). `npm run build` runs `tsc` ([server/package.json:L8](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/server/package.json#L8)).
+6. **Shell scripts.** New scripts must be committed with the executable bit ([CLAUDE.md:L271-L287](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L271-L287)).
+7. **Pull request.** CI runs on pull requests to `main`. The backend job uses Node 20 and `npm ci` in `main/server` ([.github/workflows/ci-cd-pipeline.yml:L3-L7](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/.github/workflows/ci-cd-pipeline.yml#L3-L7), [.github/workflows/ci-cd-pipeline.yml:L9-L39](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/.github/workflows/ci-cd-pipeline.yml#L9-L39)). The workflow has no deploy job. The composite action's internal steps are not in this snapshot, so the claimed install, lint, and test coverage is documented in [CLAUDE.md:L154](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L154) only.
+8. **Deploy.** The repo's `deploy.sh` pulls `main`, runs `npm ci --include=dev` and `npm run build` in `server`, stops the unit, frees the port, and starts it ([deploy.sh:L17-L34](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/deploy.sh#L17-L34)). The CLAUDE.md process is a manual build followed by `systemctl restart` ([CLAUDE.md:L253-L256](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L253-L256)). Which path the homelab uses is not verifiable here.
+9. **Health gate.** `deploy.sh` polls the health URL for up to 45 seconds and prints the unit journal on failure ([deploy.sh:L36-L49](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/deploy.sh#L36-L49)).
 
-There is no canary, no blue/green, no staging environment in repo — a single systemd unit is the deployment target.
+## Notes
+
+- Pushes to `main` or `develop` trigger the workflow, but the backend job only runs for pull requests ([.github/workflows/ci-cd-pipeline.yml:L5-L12](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/.github/workflows/ci-cd-pipeline.yml#L5-L12)).
+- The README's Terraform and AWS deploy sections are template-era. CLAUDE.md states no AWS or Terraform is required ([CLAUDE.md:L155](https://github.com/Jeffrey-Keyser/prompt-registry/blob/b7f7231f81a8c395e85de5d77c5d0f477e443daa/CLAUDE.md#L155)).

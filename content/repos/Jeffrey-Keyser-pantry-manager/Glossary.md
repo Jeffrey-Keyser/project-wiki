@@ -1,30 +1,38 @@
 ---
-title: Glossary
-description: Repo-specific terms used in Pantry Manager.
+title: "Glossary"
+description: "Project-specific Pantry Manager terms, each tied to the source that defines it."
 ---
 
 # Glossary
 
-**Product** — Catalog entity; a unique purchasable SKU with name, category, default unit, optional barcode. Defined by `pantry.products` table and the `Product` interface ([src/dal/products.ts:3-11](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/dal/products.ts#L3-L11), [migrations/1710600000000_initial-pantry-schema.ts:8-18](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/migrations/1710600000000_initial-pantry-schema.ts#L8-L18)).
+**Product** — A named catalog entry with optional category, default unit, and barcode. The DAL type and create path live in ([src/dal/products.ts:L4-L22](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/products.ts#L4-L22)). Product names are matched case-insensitively during receipt parsing ([src/dal/receipts.ts:L122-L126](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/receipts.ts#L122-L126)).
 
-**Pantry item** — A specific user's current stock of a product: quantity, unit, purchase date, expiry, reorder threshold. Joins `pantry.products` via `product_id` and scopes by `user_id` ([migrations/1710600000000_initial-pantry-schema.ts:24-41](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/migrations/1710600000000_initial-pantry-schema.ts#L24-L41)).
+**Pantry item** — A user's stock record for a product, with quantity, unit, purchase time, expiry, and reorder threshold ([src/dal/pantry-items.ts:L4-L19](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/pantry-items.ts#L4-L19)).
 
-**Purchase history** — Time-series record of purchases per product per user; backbone for cycle-time analysis driving nudges ([migrations/1710600000000_initial-pantry-schema.ts:44-50](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/migrations/1710600000000_initial-pantry-schema.ts#L44-L50)).
+**Purchase history** — Per-user purchase rows keyed by product. Nudge logic reads these rows ([src/dal/receipts.ts:L141-L155](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/receipts.ts#L141-L155)).
 
-**Low-stock** — Pantry items where `quantity <= reorder_threshold`. Surfaced via `GET /api/v1/pantry-items/low-stock` ([README.md:36](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L36)).
+**Low stock** — Pantry items where `quantity <= reorder_threshold` ([src/dal/pantry-items.ts:L148-L163](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/pantry-items.ts#L148-L163)).
 
-**Nudge** — Reorder suggestion derived from purchase cadence. Each nudge has an avg-days-between-purchases, days-overdue, confidence score, and a data source of either `category_prior` or `personal_history` ([src/dal/nudges.ts:7-17](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/dal/nudges.ts#L7-L17)).
+**Receipt lineage** — The receipt, receipt run, and run-ingredient identifiers that every inventory write must include. Aliases such as `run_id` are accepted ([src/dal/inventoryLineage.ts:L6-L10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/inventoryLineage.ts#L6-L10), [src/dal/inventoryLineage.ts:L47-L60](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/inventoryLineage.ts#L47-L60)).
 
-**Confidence score** — Numeric weighting of nudge trust based on observed cycle count; ≥5 cycles = 0.9 in the current scoring step ([src/dal/nudges.ts:39-40](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/dal/nudges.ts#L39-L40)).
+**Receipt-required** — The error and 422 code returned when lineage is missing ([src/dal/inventoryLineage.ts:L1-L4](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/inventoryLineage.ts#L1-L4), [src/routes/versions/v1/products.ts:L17-L19](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/routes/versions/v1/products.ts#L17-L19)).
 
-**Non-perishable categories** — Whitelist (`household`, `pantry`, `dry-goods`, `dairy-alt`, `beverages`) used to gate which products are eligible for cycle-based nudges ([src/dal/nudges.ts:3](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/dal/nudges.ts#L3)).
+**Authority report** — A count of rows missing any lineage field, flagged `authoritative` only when the count is zero ([src/dal/authority.ts:L4](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/authority.ts#L4), [src/dal/inventoryLineage.ts:L114-L119](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/inventoryLineage.ts#L114-L119)).
 
-**Default cycle days** — Fallback expected reorder interval (14 days) when no personal history exists ([src/dal/nudges.ts:5](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/dal/nudges.ts#L5)).
+**Nudge** — An overdue reorder suggestion with cycle length, days overdue, confidence, and data source ([src/dal/nudges.ts:L7-L17](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/nudges.ts#L7-L17), [src/dal/nudges.ts:L119](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/nudges.ts#L119)).
 
-**Receipt parse** — Multer-uploaded receipt file shipped to Taggun OCR; line items above confidence threshold 0.7 become products + purchase rows ([src/dal/receipts.ts:4-37](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/dal/receipts.ts#L4-L37)).
+**Confidence score** — Nudge trust, which is 0.9 at five or more cycles, 0.75 at four, 0.6 at three, and 0 otherwise ([src/dal/nudges.ts:L39-L44](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/nudges.ts#L39-L44)).
 
-**pay_uuid** — External user identifier from the pay-auth service; upserted into `pantry.users` and mapped to a local integer `id` by the user-resolution middleware ([src/app.ts:28-44](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/app.ts#L28-L44)).
+**Category frequency** — A per-category median interval with a `low`, `medium`, or `high` confidence label. It requires at least three intervals ([src/dal/nudges.ts:L169](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/nudges.ts#L169), [src/dal/nudges.ts:L226-L229](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/nudges.ts#L226-L229)).
 
-**Seed from Ping** — Backfill path that hydrates products and purchase history from Ping transactions; lives in `src/dal/seed-from-ping.ts` and supports the line-item capture roadmap ([README.md:10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L10)).
+**Non-perishable categories** — The allowlist of categories eligible for cycle-based nudges ([src/dal/nudges.ts:L3](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/nudges.ts#L3)).
 
-**API key (PANTRY_MANAGER_API_KEY)** — Service-wide shared secret required on every non-public request via `X-API-Key` header or `Authorization: Bearer`; boot fails if unset ([src/middleware/api-key-auth.ts:11-19](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/middleware/api-key-auth.ts#L11-L19), [src/config/env.ts:52-55](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/config/env.ts#L52-L55)).
+**Default cycle days** — The 14-day fallback interval when no better data exists ([src/dal/nudges.ts:L5](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/nudges.ts#L5)).
+
+**Receipt parse** — Upload an image to `/receipts/parse`, send it to Taggun, and keep lines with confidence at least 0.7 ([src/dal/receipts.ts:L55](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/receipts.ts#L55), [src/routes/versions/v1/receipts.ts:L10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/routes/versions/v1/receipts.ts#L10)).
+
+**pay_uuid** — The external Pay user ID, upserted into `pantry.users` to produce a local integer `id` ([src/app.ts:L27-L43](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/app.ts#L27-L43)).
+
+**Seed from Ping** — The admin-triggered import of Ping grocery expenses, deduplicated per product per day ([src/dal/seed-from-ping.ts:L72-L80](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/dal/seed-from-ping.ts#L72-L80)).
+
+**API key** — `PANTRY_MANAGER_API_KEY`, the shared secret for non-public requests ([src/middleware/api-key-auth.ts:L15](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/middleware/api-key-auth.ts#L15)).

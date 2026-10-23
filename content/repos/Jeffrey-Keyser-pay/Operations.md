@@ -1,42 +1,45 @@
 ---
-title: Operations
-description: Deploy, runtime, observability, and on-call notes for the Pay backend.
+title: "Operations"
+description: "How Pay is started, deployed, tested, and checked for health, with documented versus verified runtime details and observability settings."
 ---
 
 # Operations
 
+Pay is a private Express service, not a library. Its `server` package is marked private and exposes start, build, and test scripts ([server/package.json:2-11](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L2-L11)).
+
+## Commands
+
+- **Dev start:** `npm start` (nodemon with `ts-node ./bin/www.ts`) ([server/package.json:9](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L9)).
+- **Production start:** `npm run start:prod` runs build then `node dist/src/bin/www.js` ([server/package.json:10](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L10)). The tsconfig sets `outDir` to `./dist` with `rootDir` `./` ([server/tsconfig.json:6-7](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/tsconfig.json#L6-L7)), so the compiled entry path is unverified.
+- **Deploy:** `./deploy.sh` ([deploy.sh:1-23](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L1-L23)).
+- **Tests:** `npm test` (Jest), `npm run test:integration` and `npm run test:docker` (Vitest and Docker Compose) ([server/package.json:11-15](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L11-L15)).
+- **Checks:** `npm run lint` and `npm run build` ([server/package.json:8](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L8), [server/package.json:16](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L16)).
+
 ## Deploy target
 
-Pay runs on a VPS as a systemd-managed Node process, **not** a Lambda in the live path ([CLAUDE.md:594-610](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L594-L610)).
+- The documented target is a systemd service named `pay` on a VPS ([README.md:184-185](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L184-L185), [deploy.sh:22](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L22)).
+- `deploy.sh` pulls `main`, installs dev dependencies, builds, runs `migrate:local`, and restarts `pay` ([deploy.sh:5-22](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L5-L22)).
+- **Port:** unknown. `www.ts` reads `PORT` and falls back to `80` ([server/bin/www.ts:21](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/bin/www.ts#L21)), while the env schema defaults to `3000` ([server/config/env.ts:44-47](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L44-L47)). `deploy.sh` frees TCP 3017 ([deploy.sh:20](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L20)), but the unit file is not in this snapshot, so the live port is not verified.
 
-- **Service unit**: `pay.service`, executes `node dist/bin/www.js` ([CLAUDE.md:596-599](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L596-L599)).
-- **Deploy command**: `./deploy.sh` — `git pull origin main`, `npm install --include=dev`, `npm run build`, kill TCP 3017, `sudo systemctl restart pay` ([deploy.sh:1-17](https://github.com/Jeffrey-Keyser/pay/blob/main/deploy.sh#L1-L17)).
-- **Remote trigger**: `ssh <server> "cd /home/jkeyser/pay && ./deploy.sh"` ([CLAUDE.md:602-610](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L602-L610)).
+## Health checks
 
-## Runtime
-
-- **Entry**: `server/bin/www.ts` boots `tracing.ts` first then mounts the Express `app` on `PORT` (default `80` in code; `deploy.sh` reserves TCP **3017** as the actual systemd port) ([server/bin/www.ts:10-33](https://github.com/Jeffrey-Keyser/pay/blob/main/server/bin/www.ts#L10-L33), [deploy.sh:14](https://github.com/Jeffrey-Keyser/pay/blob/main/deploy.sh#L14)).
-- **Process model**: single Node 20 process, ESM ([server/package.json:5](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L5), [CONTRIBUTING.md:9-13](https://github.com/Jeffrey-Keyser/pay/blob/main/CONTRIBUTING.md#L9-L13)).
-- **Backing services**: PostgreSQL + Redis; SMTP, S3, Stripe configurable via env ([CONTRIBUTING.md:59-83](https://github.com/Jeffrey-Keyser/pay/blob/main/CONTRIBUTING.md#L59-L83)).
-- **Adapter selection** is environment-driven (`PAYMENT_PROVIDER`, `EMAIL_PROVIDER`, `STORAGE_PROVIDER`, `CACHE_PROVIDER`) ([CLAUDE.md:284-303](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L284-L303)).
-- **Migrations** run on deploy host: `npm run migrate` (idempotent), `migrate:mark-baseline` once for existing DBs ([CLAUDE.md:401-413](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L401-L413)).
+- `GET /ping` returns `pong` ([server/routes/index.ts:54-56](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/index.ts#L54-L56)).
+- `GET /health` runs `SELECT version()` and reports memory and event-loop lag; failure returns an error response ([server/routes/index.ts:80-108](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/index.ts#L80-L108)).
+- `GET /health/redis` writes and reads a temporary key ([server/routes/index.ts:139-176](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/index.ts#L139-L176)).
+- The same index router is mounted under `/api/v1` ([server/routes/v1/index.ts:36-37](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/v1/index.ts#L36-L37)).
 
 ## Observability
 
-- **Logs**: pino structured logging (`pino`, `pino-http`); systemd journal collects stdout ([server/package.json:70-71](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L70-L71), [server/app.ts:7-9](https://github.com/Jeffrey-Keyser/pay/blob/main/server/app.ts#L7-L9)).
-- **Tracing**: OpenTelemetry SDK with auto-instrumentations and OTLP/HTTP exporter — loaded before any instrumented module ([server/bin/www.ts:3-10](https://github.com/Jeffrey-Keyser/pay/blob/main/server/bin/www.ts#L3-L10), [server/package.json:47-50](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L47-L50)).
-- **Correlation IDs**: every request gets one via `correlationIdMiddleware`; included in every error response ([CLAUDE.md:758-773](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L758-L773), [server/app.ts:2](https://github.com/Jeffrey-Keyser/pay/blob/main/server/app.ts#L2)).
-- **Error mapping**: `HttpErrorMapper` from `@jeffrey-keyser/api-errors`, includes stack/context in dev only ([server/app.ts:45-52](https://github.com/Jeffrey-Keyser/pay/blob/main/server/app.ts#L45-L52)).
-- **GitHub auto-issues**: `githubErrorMiddleware` opens issues on uncaught errors ([server/app.ts:3](https://github.com/Jeffrey-Keyser/pay/blob/main/server/app.ts#L3)).
-- **Health / docs**: Swagger UI mounted at `/api-docs` ([README.md:140-143](https://github.com/Jeffrey-Keyser/pay/blob/main/README.md#L140-L143)).
+- **Logs:** pino-http logs requests ([server/app.ts:148](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/app.ts#L148)). Log destination is not in the excerpts.
+- **Tracing:** tracing loads first in `www.ts` ([server/bin/www.ts:10](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/bin/www.ts#L10)), but is off by default ([server/config/env.ts:241-244](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L241-L244)). The exporter defaults to console ([server/config/env.ts:245-248](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L245-L248)).
+- **Correlation IDs:** attached to requests and included in error bodies ([server/app.ts:139](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/app.ts#L139), [server/app.ts:230](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/app.ts#L230)).
+- **Error stacks:** included only in development ([server/app.ts:46-48](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/app.ts#L46-L48)).
 
-## Rollback / on-call
+## Rollback
 
-- **Code rollback**: revert the merge on main, rerun `./deploy.sh` ([deploy.sh:5-16](https://github.com/Jeffrey-Keyser/pay/blob/main/deploy.sh#L5-L16)).
-- **DB rollback**: `npm run migrate:down` (one step) or `migrate:redo` ([server/package.json:19-22](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L19-L22)).
-- **Token revocation**: `POST /users/admin/revokeToken` blacklists JWTs via Redis ([CLAUDE.md:480-489](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L480-L489)).
-- **Stripe payments outage**: set `PAYMENT_PROVIDER=mock` is local-only; in prod, must keep Stripe healthy or implement alternate provider ([CONTRIBUTING.md:78-83](https://github.com/Jeffrey-Keyser/pay/blob/main/CONTRIBUTING.md#L78-L83)).
+- **Database:** `npm run migrate:down` rolls back the last migration ([server/package.json:21](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L21)).
+- **Code:** no rollback script is in the snapshot. Reverting on `main` and rerunning `deploy.sh` is the implied path ([deploy.sh:5](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L5)).
 
-## Legacy infra (cold path)
+## Documented versus verified
 
-Terraform + GitHub Actions workflows for AWS Lambda + API Gateway + ECR + CloudFront still exist (`lambda-push.yml`, `ci-cd-pipeline.yml`, `terraform_deploy.yml`) and could be re-enabled, but the VPS path is the source of truth ([CLAUDE.md:619-630](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L619-L630), [README.md:156-164](https://github.com/Jeffrey-Keyser/pay/blob/main/README.md#L156-L164)).
+Legacy AWS Lambda and Terraform are documented as a fallback ([README.md:187-195](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L187-L195)). Their files are not in this snapshot, so they are not verified as deployed.

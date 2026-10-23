@@ -1,50 +1,55 @@
 ---
-title: Iteration Loop
-description: How code changes move from idea to merged + deployed inside feedback-registry — branch, test, CI, beelink-deploy webhook.
+title: "Iteration Loop"
+description: "Contributor workflow for Feedback Registry: local server and client commands, the CI jobs that run on pull requests and main, and the deploy trigger."
 ---
 
 # Iteration Loop
 
-The repo follows the standard Jeffrey-Keyser ecosystem cycle: feature branch → PR → CI checks (lint, unit tests, build) → merge to `main` → `beelink-deploy` webhook pulls and restarts the systemd unit on the homelab. There is no Lambda-based deploy in CI even though the repo was bootstrapped from `ServerlessWebTemplate` ([README.md:41-49](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L41-L49), [.github/workflows/ci-cd-pipeline.yml:9-10](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/.github/workflows/ci-cd-pipeline.yml#L9-L10)).
+The server has explicit npm scripts for development, build, lint and tests. CI runs backend and frontend test jobs on pull requests, and a push to `main` calls the homelab deploy webhook ([server/package.json:L6-L18](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/package.json#L6-L18), [.github/workflows/ci-cd-pipeline.yml:L14-L15](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L14-L15)).
 
-## Cycle
+## Local server loop
+
+Run commands from `server/`:
+
+- `npm run dev` runs `ts-node ./bin/www.ts` ([server/package.json:L8](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/package.json#L8)).
+- `npm run build` runs `tsc` and `npm run lint` runs ESLint over TypeScript files ([server/package.json:L9](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/package.json#L9), [server/package.json:L11](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/package.json#L11)).
+- `npm test` runs Jest. `npm run test:unit` excludes the integration directory ([server/package.json:L12-L13](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/package.json#L12-L13), [server/jest.unit.config.cjs:L3-L7](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/jest.unit.config.cjs#L3-L7)).
+- `npm run test:incidents` builds and runs the incident test script ([server/package.json:L14](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/package.json#L14)). The runtime-incidents guide says it needs a disposable database URL and refuses databases with existing feedback or incident tables ([docs/runtime-incidents.md:L143-L150](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/docs/runtime-incidents.md#L143-L150)).
+
+Client commands run from `client/`: `npm run dev`, `npm run build`, `npm test` (Vitest run mode) and `npm run coverage` ([client/package.json:L34-L38](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/client/package.json#L34-L38)).
+
+## Sequence
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant Dev as Developer
-  participant Repo as feedback-registry (git)
-  participant CI as GitHub Actions
-  participant Hook as beelink-deploy webhook
-  participant Box as Beelink homelab
-  participant API as systemd: feedback-registry
-
-  Dev->>Dev: npm run dev (server :3001)
-  Dev->>Dev: npm test (jest) + npm run lint
-  Dev->>Repo: push feature branch + open PR
-  Repo->>CI: ci-cd-pipeline.yml on PR
-  CI->>CI: test-backend (node 20)
-  CI->>CI: test-frontend (node 20)
+  participant Dev as "Developer"
+  participant Repo as "GitHub repository"
+  participant CI as "GitHub Actions CI"
+  participant Hook as "beelink-deploy webhook"
+  participant Host as "Homelab service unit"
+  Dev->>Dev: run build lint and test in server
+  Dev->>Repo: push branch and open pull request
+  Repo->>CI: pull request triggers test-backend
+  Repo->>CI: pull request triggers test-frontend
   Dev->>Repo: merge to main
-  Repo->>CI: ci-cd-pipeline.yml on main
-  CI->>Hook: curl -H Bearer trigger {service, ref}
-  Hook->>Box: git pull + npm ci + build
-  Hook->>API: systemctl restart feedback-registry
-  API-->>Dev: /health green
+  Repo->>CI: push to main triggers deploy-backend
+  CI->>Hook: POST service and ref
+  Hook->>Host: pull and restart unit
+  CI->>CI: qa-regression after deploy
 ```
 
-## Step references
+## CI details
 
-1. **Local dev**: `cd server && npm run dev` runs `ts-node ./bin/www.ts`, listening on `config.PORT` (default 3001). Tests via `npm test` (Jest + Supertest); lint via `npm run lint` (ESLint 9 flat config) ([server/package.json:7-15](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/package.json#L7-L15), [server/bin/www.ts:1-23](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/bin/www.ts#L1-L23)).
-2. **Branch + PR**: standard GitHub flow. The repo also accepts a `thrash` maintenance action whose contract is "small, low-risk PR — improve docs, fix obvious quality issues, verify lint + tests + build before opening" ([README.md:17-25](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L17-L25)).
-3. **CI checks**: `.github/workflows/ci-cd-pipeline.yml` runs `test-backend` and `test-frontend` jobs on Node 20, each checking out the shared `@jeffrey-keyser/github-actions` repo first ([.github/workflows/ci-cd-pipeline.yml:16-66](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/.github/workflows/ci-cd-pipeline.yml#L16-L66)).
-4. **Merge to main**: triggers the `deploy-backend` job that POSTs `{"service":"feedback-registry","ref":"<sha>"}` to the `beelink-deploy` webhook with `BEELINK_DEPLOY_TOKEN` ([.github/workflows/ci-cd-pipeline.yml:73-85](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/.github/workflows/ci-cd-pipeline.yml#L73-L85)).
-5. **Homelab pull + restart**: the webhook (managed outside this repo on the Beelink) pulls the new ref and restarts the systemd unit; the comment in CI explicitly says "Deployment is handled by beelink-deploy webhook service (not GitHub Actions)" ([.github/workflows/ci-cd-pipeline.yml:9-10](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/.github/workflows/ci-cd-pipeline.yml#L9-L10)).
-6. **Widget release** (separate flow): `publish-feedback-widget.yml` publishes `@jeffrey-keyser/feedback-widget` when the package version bumps ([.github/workflows/publish-feedback-widget.yml](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/.github/workflows/publish-feedback-widget.yml)).
-7. **Terraform changes**: `terraform_deploy.yml` is manual `workflow_dispatch`; infra is not auto-applied on merge ([.github/workflows/terraform_deploy.yml](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/.github/workflows/terraform_deploy.yml), [CLAUDE.md:289-294](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/CLAUDE.md#L289-L294)).
+- Backend and frontend tests run only for pull requests, on Node 20, using a composite action from a private actions repository ([.github/workflows/ci-cd-pipeline.yml:L15-L16](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L15-L16), [.github/workflows/ci-cd-pipeline.yml:L34-L38](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L34-L38)). The composite action's internal commands are not in the excerpts.
+- The deploy job posts the service name and commit SHA to the webhook ([.github/workflows/ci-cd-pipeline.yml:L80-L85](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L80-L85)). The workflow comment says the webhook pulls and restarts the service ([.github/workflows/ci-cd-pipeline.yml:L9-L10](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L9-L10)).
+- A QA regression job runs after deploy against configured URLs ([.github/workflows/ci-cd-pipeline.yml:L88-L108](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L88-L108)). The script it runs is not in these sources.
 
-## Practical notes
+## Other workflows
 
-- DB migrations live under `server/db` and are applied with `./deploy.sh` or `npx db-deploy …` against the Postgres schema `feedback` — run as part of the change cycle when the slice touches schema ([CLAUDE.md:95-112](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/CLAUDE.md#L95-L112), [README.md:354-359](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/README.md#L354-L359)).
-- Pre-merge expectations: `npm run lint` + `npm test` must pass; type checking is implicit via `tsc` build in CI ([server/package.json:7-15](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/server/package.json#L7-L15)).
-- Auth changes that touch Pay integration should be tested against the live Pay service URL — there is no local Pay mock ([CLAUDE.md:223-229](https://github.com/Jeffrey-Keyser/feedback-registry/blob/main/CLAUDE.md#L223-L229)).
+- The widget publishes to GitHub Packages on tags matching `feedback-widget-v*` ([.github/workflows/publish-feedback-widget.yml:L5-L6](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/publish-feedback-widget.yml#L5-L6)).
+- Terraform deployment is manual through `workflow_dispatch` ([.github/workflows/terraform_deploy.yml:L3-L4](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/terraform_deploy.yml#L3-L4)).
+
+## Contributor checklist
+
+Run the server build, lint and tests before opening a pull request. Schema changes need the database tooling referenced in the Operations page; the CLAUDE.md file documents `db-deploy` commands ([CLAUDE.md:L99-L108](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/CLAUDE.md#L99-L108)).

@@ -1,61 +1,59 @@
 ---
-title: image-studio — Architecture
-description: Express backend, React SPA, Pay auth bridge, Postgres + S3, and AI Proxy as the external generator.
+title: "image-studio — Architecture"
+description: "Components and contracts of the Express API, service layer, React SPA, Pay auth, PostgreSQL, S3, AI Proxy and Solo Vault as shown by current source."
 ---
 
 # Architecture
 
-Two deployable surfaces in one repo: an Express API (`server/`) and a Vite-built React SPA (`client/`). Image generation itself is offloaded to the AI Proxy and runs in the browser ([CLAUDE.md:3-5](https://github.com/Jeffrey-Keyser/image-studio/blob/main/CLAUDE.md#L3-L5)).
+The repository has two deployable surfaces: an Express API in `server/` and a Vite-built React SPA in `client/` ([README.md:L240-L241](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L240-L241)). The API is assembled in one `app.ts` with `createServerlessAppSync` ([server/app.ts:L315-L321](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L315-L321)).
 
 ```mermaid
 flowchart LR
-  Browser["React SPA (client/)"]
-  API["Express API (server/app.ts)"]
-  PayAuth["pay-auth-integration<br/>→ pay.jeffreykeyser.net"]
-  AIP["AI Proxy<br/>api.ai-proxy.jeffreykeyser.net"]
-  PG[("Postgres<br/>image_studio schema")]
-  S3[("AWS S3<br/>image-studio-jkeyser")]
+  browser["React SPA client"]
+  api["Express API server app"]
+  pay["Pay auth service"]
+  vault["Solo Vault"]
+  proxy["AI Proxy"]
+  db["PostgreSQL image_studio"]
+  s3["S3 image bucket"]
+  nano["NanoClaw gateway"]
+  svc["Service callers"]
 
-  Browser -- "/auth/*, /api/v1/*" --> API
-  Browser -- "POST /v1/images<br/>(user-held API key)" --> AIP
-  API -- "session verify" --> PayAuth
-  API -- "metadata + sessions" --> PG
-  API -- "file bytes" --> S3
+  browser -- "session and API calls" --> api
+  api -- "session auth" --> pay
+  api -- "fetch key" --> vault
+  api -- "submit and poll jobs" --> proxy
+  api -- "metadata and sessions" --> db
+  api -- "image bytes" --> s3
+  api -- "import notices" --> nano
+  svc -- "POST import" --> api
 ```
 
-## Roles
+## Server components
 
-### Server entrypoint — `server/app.ts`
+- **Bootstrap (`server/app.ts`).** Pay auth runs with a public-route list. That list exempts the service-token import route and storyboard and exploration service routes from session auth ([server/app.ts:L92-L110](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L92-L110)). Sessions live in `image_studio.user_sessions` ([server/app.ts:L209-L213](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L209-L213)). The rate limiter allows 200 requests per 60 s and skips `/auth` ([server/app.ts:L184-L190](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L184-L190)).
+- **Error bridge.** `bridgeDomainErrors` re-creates api-errors instances as express-server-factory errors so status mapping works ([server/app.ts:L157-L168](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L157-L168)).
+- **Startup (`server/bin/www.ts`).** Orphaned generation jobs are recovered and the exploration worker starts before listening ([server/bin/www.ts:L16-L18](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/bin/www.ts#L16-L18)).
+- **Generation service.** Submits to AI Proxy `/v1/image`, polls every 4 s, and gives up after 150 attempts ([server/services/generationService.ts:L33-L34](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/generationService.ts#L33-L34), [server/services/generationService.ts:L163](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/generationService.ts#L163)).
+- **Solo Vault client.** Fetches and caches the AI Proxy key and rejects values without the expected prefix ([server/services/soloVault.ts:L11-L18](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/soloVault.ts#L11-L18), [server/services/soloVault.ts:L43-L45](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/soloVault.ts#L43-L45)).
+- **Exploration worker.** Keeps at most two active candidate jobs and ticks every 2 s ([server/services/explorationWorker.ts:L10-L12](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/explorationWorker.ts#L10-L12), [server/services/explorationWorker.ts:L229](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/explorationWorker.ts#L229)).
+- **Import notifier.** Sends debounced notices to NanoClaw only when enabled ([server/services/importNotifier.ts:L88-L89](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/importNotifier.ts#L88-L89)).
 
-Builds a single Express app via `createServerlessAppSync` from `@jeffrey-keyser/express-server-factory`. Wires Pay auth middleware, Postgres session store, rate limiter, Swagger, and three top-level routers: `/`, `/api/v1`, `/auth` ([server/app.ts:171-265](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L171-L265)). Also bridges `@jeffrey-keyser/api-errors` `DomainError` to the ESF flavor so `instanceof` checks in the HTTP mapper succeed ([server/app.ts:147-168](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L147-L168)).
+## Route contracts (`/api/v1`)
 
-### v1 router — `server/routes/versions/v1/`
+- **Generate:** submit, status, job list, file, and save ([server/routes/versions/v1/generate.ts:L15](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/generate.ts#L15), [server/routes/versions/v1/generate.ts:L110](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/generate.ts#L110), [server/routes/versions/v1/generate.ts:L177](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/generate.ts#L177)).
+- **Images and history:** library CRUD, versions, thumbnails, and generation history ([server/routes/versions/v1/images.ts:L150-L170](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/images.ts#L150-L170), [server/routes/versions/v1/images.ts:L312-L339](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/images.ts#L312-L339)).
+- **Import:** service-token ingest of JSON or multipart images, capped at 10 MB and limited to five MIME types ([server/routes/versions/v1/import.ts:L19](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/import.ts#L19), [server/routes/versions/v1/import.ts:L26-L32](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/import.ts#L26-L32)).
+- **Staging, storyboards, explorations:** mounted under `/api/v1` ([server/routes/versions/v1/index.ts:L43-L52](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/index.ts#L43-L52)).
+- **Errors:** catalog-backed bodies use `success`, `code`, and `error` ([server/routes/errorCatalog.ts:L61-L65](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/errorCatalog.ts#L61-L65)). Many routes still return ad hoc error bodies.
 
-Mounts `images`, `generations`, `import`, `staging`, and `diagnostics` sub-routers. The `images` router owns CRUD + per-version streaming; `generations` owns prompt-history; `staging` exposes the batch review surface ([README.md:56-96](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L56-L96)).
+## Client
 
-### Services layer — `server/services/`
+- Routes cover the image list, studio, image detail, storyboards, explorations, and staging batch review ([client/src/App.tsx:L27-L41](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/src/App.tsx#L27-L41)).
+- RTK Query slices cover diagnostics, users, image, generations, and feedback ([client/src/reducers/index.ts:L1-L5](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/src/reducers/index.ts#L1-L5)).
+- Requests resolve against `VITE_API_URL` ([client/src/services/explorations.ts:L2](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/src/services/explorations.ts#L2)).
 
-- `imagesService.ts` and `generationService.ts` — domain orchestration over the DAL and S3.
-- `s3.ts` — `@aws-sdk/client-s3` wrapper for upload/stream/delete keyed by bucket from `S3_BUCKET` ([README.md:99-108](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L99-L108)).
-- `userResolution.ts` — bridges Pay user identity into a local user row.
-- `soloVault.ts` — per-user namespace helper.
+## External dependencies and unknowns
 
-### Auth bridge — `pay-auth-integration`
-
-A single `setupPayAuth({ payUrl, publicRoutes, ... })` call provides the middleware injected as `auth.provider` and a router mounted at `/auth` ([server/app.ts:84-119](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L84-L119), [server/app.ts:221-265](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L221-L265)). AGENTS.md hard-pins to `^6.10.1` and forbids private subpath imports ([AGENTS.md:6-17](https://github.com/Jeffrey-Keyser/image-studio/blob/main/AGENTS.md#L6-L17)).
-
-### Client shell — `client/src/App.tsx`
-
-`BrowserRouter` with `AuthContainer` gating, `Layout` chrome, and routes for image list, studio, image detail, and staging-batch review. Uses `usePayAuth()` from `@jeffrey-keyser/pay-auth-integration/client/react` for session state ([client/src/App.tsx:1-46](https://github.com/Jeffrey-Keyser/image-studio/blob/main/client/src/App.tsx#L1-L46)).
-
-### Client data layer — `client/src/reducers/`
-
-RTK Query API slices: `images.api.ts`, `image.api.ts`, `generations.api.ts`, `diagnostics.api.ts`, `users.api.ts`, `feedback.api.ts`. AI Proxy is called from container code, not these slices — backend slices only see image metadata and history ([client/package.json:5-27](https://github.com/Jeffrey-Keyser/image-studio/blob/main/client/package.json#L5-L27)).
-
-### Persistence — `server/db/` + `image_studio` schema
-
-PostgreSQL is the single source of truth for sessions (`user_sessions`), image metadata, versions, and generation history. Connection pool lives in `server/db/connection.ts` and is shared with `connect-session-sequelize` and the health check ([server/app.ts:60-63](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L60-L63), [server/app.ts:198-217](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L198-L217)).
-
-### Storage — AWS S3
-
-Image bytes live in `S3_BUCKET` (default `image-studio-jkeyser`). The `:id/versions/:version/file` routes stream from S3 rather than caching local copies ([README.md:65-67](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L65-L67), [README.md:99-108](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L99-L108)).
+- PostgreSQL is reached through a shared `pg` pool ([server/app.ts:L61](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L61)). The `db/connection` module is not in the excerpts.
+- Endpoint defaults come from config: AI Proxy is `https://ai-proxy-api.jeffreykeyser.net` by default ([server/config/env.ts:L135](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/config/env.ts#L135)). README and CLAUDE name `api.ai-proxy.jeffreykeyser.net` ([README.md:L3](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L3)). The deployed value is unknown.

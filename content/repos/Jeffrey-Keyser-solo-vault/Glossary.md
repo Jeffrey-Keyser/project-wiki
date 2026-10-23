@@ -1,39 +1,60 @@
 ---
-title: Glossary
-description: Repo-specific terms used throughout Solo Vault.
+title: "Glossary"
+description: "Project-specific Solo Vault terms with source citations."
 ---
 
 # Glossary
 
 ## API key
-The credential string Solo Vault accepts in `Authorization: Bearer …`. Format: `sv_<project>_<random>.<secret>`. The prefix (`sv_<project>_<random>`) is the `key_id` stored in the database; the `.<secret>` suffix is hashed (SHA-256) and matched at auth time. Keys are scoped by `project`, optionally by `environment`, and carry permissions from the set `read | write | delete | admin` ([CLAUDE.md:60-79](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/CLAUDE.md#L60-L79), [server/middleware/api-key-auth.ts:1-60](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/middleware/api-key-auth.ts#L1-L60)).
+A Bearer credential of the form `sv_<project>_<random>.<secret>`. The prefix is stored as `key_id`, and the full key is hashed with SHA-256 ([server/dal/api-keys.ts:L17-L26](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/dal/api-keys.ts#L17-L26), [CLAUDE.md:L69-L70](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/CLAUDE.md#L69-L70)).
+
+## Permission
+One of `read`, `write`, `delete`, or `admin` ([server/types/index.ts:L74](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/types/index.ts#L74)). An `admin` permission passes every permission check ([server/dal/api-keys.ts:L198-L205](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/dal/api-keys.ts#L198-L205)).
+
+## Admin key
+A key with `project` set to null and the `admin` permission. Only those keys pass `requireAdmin` ([server/middleware/api-key-auth.ts:L216-L234](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/middleware/api-key-auth.ts#L216-L234)).
 
 ## Bootstrap admin key
-A one-time, env-supplied key (`BOOTSTRAP_ADMIN_KEY`) that the middleware accepts as a synthetic admin to mint the first real API key on a fresh deployment. Should be removed from the environment afterward ([server/middleware/api-key-auth.ts:55-60](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/middleware/api-key-auth.ts#L55-L60), [CLAUDE.md:71-74](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/CLAUDE.md#L71-L74)).
+An environment-supplied key, `BOOTSTRAP_ADMIN_KEY`, that the middleware accepts as a synthetic admin ([server/middleware/api-key-auth.ts:L55-L69](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/middleware/api-key-auth.ts#L55-L69)). The documented practice is to remove it after the first real admin key is created ([CLAUDE.md:L78-L81](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/CLAUDE.md#L78-L81)).
 
-## Project / Environment
-Solo Vault's two-level namespacing. A `secret` is uniquely identified by `(project, environment, key)` in URLs like `/v1/secrets/:project/:env/:key`. API keys may be scoped to a single project, a single environment within that project, or left unscoped (admin) ([README.md:75-89](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/README.md#L75-L89), [CLAUDE.md:64-68](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/CLAUDE.md#L64-L68)).
+## Project and environment
+Two-level namespacing for secrets. API keys can be scoped to a project and, optionally, an environment ([server/dal/api-keys.ts:L210-L229](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/dal/api-keys.ts#L210-L229)). The CLI falls back to `defaultEnvironment` or `development` ([cli/src/lib/config.ts:L98-L100](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/lib/config.ts#L98-L100)).
 
 ## EncryptionService
-The class wrapping AES-256-GCM encrypt/decrypt for secret values. Each call generates a fresh 16-byte IV and stores it with the ciphertext and GCM auth tag. The key is derived once at construction via `crypto.scryptSync(VAULT_ENCRYPTION_KEY, "solo-vault-salt", 32)` ([server/services/encryption.ts:1-39](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/services/encryption.ts#L1-L39)).
+The AES-256-GCM wrapper. Each call generates a 16-byte IV and returns the ciphertext, IV, and auth tag ([server/services/encryption.ts:L25-L39](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/services/encryption.ts#L25-L39)). Its key is derived from `VAULT_ENCRYPTION_KEY` with a fixed salt ([server/services/encryption.ts:L6](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/services/encryption.ts#L6)).
 
 ## Vault schema
-The Postgres schema (default name `vault`, override via `DATABASE_SCHEMA`) that owns every table: `secrets`, `api_keys`, `audit_log`, plus rotation/webhook/policy tables added by numbered migrations under `server/db/migrations/` ([CLAUDE.md:46-50](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/CLAUDE.md#L46-L50), [server/db/schema](https://github.com/Jeffrey-Keyser/solo-vault/tree/main/server/db/schema)).
+The PostgreSQL schema that holds Solo Vault tables. Its default name is `vault` ([server/config/env.ts:L99](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/config/env.ts#L99), [server/db/schema/001_create_vault_schema.sql:L5](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/db/schema/001_create_vault_schema.sql#L5)).
 
-## schemaReady / assertSchemaReady
-A startup guard that validates the live DB schema against expectations before the app accepts traffic. Runs on Lambda cold start (or local startup) and exits the process on mismatch — exposed as the exported `schemaReady` promise that `bin/www.ts` awaits ([server/app.ts:28-38](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/app.ts#L28-L38), [server/db/schema-check.ts](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/db/schema-check.ts)).
+## assertSchemaReady
+The startup check that compares live columns to the expected list and fails on drift ([server/db/schema-check.ts:L97-L110](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/db/schema-check.ts#L97-L110)).
 
-## DAL (Data Access Layer)
-Convention name for `server/dal/*.ts` modules. Each file owns CRUD against one logical table family (`secrets`, `api-keys`, `audit`, `rotation`, `rotation-policies`, `expiry-alerts`, `webhooks`, `secrets-health`). Routes call DAL functions; nothing else talks to `pg` directly ([server/dal](https://github.com/Jeffrey-Keyser/solo-vault/tree/main/server/dal)).
+## Rotation policy
+A row that attaches a 5-field cron `schedule` to a secret. The provider type is limited to `generic` ([server/types/index.ts:L193-L206](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/types/index.ts#L193-L206), [server/routes/rotation-policies.ts:L77-L83](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/routes/rotation-policies.ts#L77-L83)). The design document describes a different interval-based model, so the source takes precedence ([ROTATION_DESIGN.md:L107-L121](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/ROTATION_DESIGN.md#L107-L121)).
 
-## Rotation policy / Rotation history
-A `rotation_policy` row defines how often a secret rotates and what generator to use; the scheduler (`rotation-scheduler.ts`) enqueues due rotations into `rotation-queue.ts`, which writes a `rotation_history` entry on each execution ([server/services](https://github.com/Jeffrey-Keyser/solo-vault/tree/main/server/services), [server/db/migrations/008_create_rotation_history_table.sql](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/db/migrations/008_create_rotation_history_table.sql), [server/db/migrations/009_create_rotation_policies_table.sql](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/db/migrations/009_create_rotation_policies_table.sql)).
+## Rotation queue
+An in-memory queue. It skips duplicate jobs for a policy and rotates each secret to a random value ([server/services/rotation-queue.ts:L19-L25](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/services/rotation-queue.ts#L19-L25), [server/services/rotation-queue.ts:L62-L69](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/services/rotation-queue.ts#L62-L69)).
+
+## Rotation history
+A row written for each rotation attempt, with method, status, and hashes ([server/dal/rotation.ts:L71-L84](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/dal/rotation.ts#L71-L84)).
+
+## Expiry alert
+A Telegram-style message for a secret nearing expiry. Thresholds are 14, 7, and 1 days ([server/dal/expiry-alerts.ts:L7](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/dal/expiry-alerts.ts#L7), [server/services/expiry-check.ts:L16-L26](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/services/expiry-check.ts#L16-L26)).
+
+## NanoClaw IPC
+The hardcoded file path to which expiry alerts are appended as JSON lines ([server/services/expiry-check.ts:L5](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/services/expiry-check.ts#L5), [server/services/expiry-check.ts:L31-L39](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/services/expiry-check.ts#L31-L39)).
 
 ## Webhook
-An outbound HTTPS subscription registered via `/v1/webhooks`; `webhook-delivery.ts` posts JSON payloads to subscriber URLs on rotation/expiry events ([server/services/webhook-delivery.ts](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/services/webhook-delivery.ts), [server/routes/webhooks.ts](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/server/routes/webhooks.ts)).
+A subscription with a URL, event list, and secret, managed by admin routes ([server/routes/webhooks.ts:L45-L81](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/routes/webhooks.ts#L45-L81)). Delivery is signed with `X-Webhook-Signature` ([server/services/webhook-delivery.ts:L63](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/services/webhook-delivery.ts#L63)).
+
+## Bulk get
+`POST /v1/secrets/bulk`, documented as returning many decrypted values at once ([README.md:L83](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/README.md#L83), [CLAUDE.md:L98](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/CLAUDE.md#L98)). The CLI uses it for `pull` ([cli/src/commands/pull.ts:L21-L22](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/commands/pull.ts#L21-L22)).
 
 ## `.solo-vault.json`
-Per-project CLI config — sets `project` and `defaultEnvironment` so CLI calls don't need `--project`/`--env` flags every time. Created by `solo-vault init` ([README.md:260-267](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/README.md#L260-L267)).
+The project config file. It sets `project` and `defaultEnvironment`, and the CLI searches upward for it ([cli/src/lib/config.ts:L8](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/lib/config.ts#L8), [cli/src/lib/config.ts:L28-L41](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/lib/config.ts#L28-L41)).
 
-## Bulk pull
-`POST /v1/secrets/bulk` — single request returning multiple decrypted secrets, used by the CLI's `pull` command to materialize an `.env` file and by ecosystem services at deploy/boot ([README.md:83](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/README.md#L83), [cli/src/commands/pull.ts](https://github.com/Jeffrey-Keyser/solo-vault/blob/main/cli/src/commands/pull.ts)).
+## Global CLI config
+`~/.solo-vault/config.json`, which holds the API URL and key. Environment variables take precedence ([cli/src/lib/config.ts:L6-L7](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/lib/config.ts#L6-L7), [cli/src/lib/config.ts:L51-L59](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/lib/config.ts#L51-L59)).
+
+## rotate-key
+A CLI command that reads and rewrites every secret, so the server re-encrypts them under a new key. Operators must update `VAULT_ENCRYPTION_KEY` only after success ([cli/src/commands/rotate-key.ts:L76-L96](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/commands/rotate-key.ts#L76-L96), [cli/src/commands/rotate-key.ts:L121-L143](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/cli/src/commands/rotate-key.ts#L121-L143)).

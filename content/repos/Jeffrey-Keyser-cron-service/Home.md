@@ -1,41 +1,41 @@
 ---
-title: cron-service Overview
-description: Lightweight cron scheduler that publishes job-trigger messages to RabbitMQ on schedule, with a Postgres-backed job catalog and admin UI.
+title: "cron-service Overview"
+description: "Overview of cron-service, a publisher-only scheduler that sends RabbitMQ messages on cron schedules and records job and run state in PostgreSQL."
 ---
 
 # cron-service
 
-`cron-service` is a lightweight scheduler that fires cron jobs by **publishing messages to RabbitMQ** — it does no work itself. Subscriber services in the wider ecosystem consume those messages and do the actual job ([README.md:1-3](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L1-L3)).
-
-Job definitions and run history live in PostgreSQL; an Express HTTP API and static SPA in `public/` provide CRUD plus manual triggers ([README.md:5-12](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L5-L12), [src/index.ts:49-55](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L49-L55)).
+cron-service is a scheduler that publishes messages to RabbitMQ on cron schedules. The README describes it as publisher-only, with subscriber services doing the actual work ([README.md:3](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/README.md#L3)). It stores job definitions and run records in PostgreSQL and exposes a JSON API and a static UI ([src/index.ts:49](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L49), [src/index.ts:52-55](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L52-L55)).
 
 ## At a glance
 
-- **Language / runtime**: TypeScript on Node, compiled with `tsc` to `dist/` ([package.json:6-12](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L6-L12)).
-- **Web framework**: Express 5 ([package.json:21](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L21)).
-- **Scheduler**: `node-cron` in-process timers, one `ScheduledTask` per enabled job ([src/services/scheduler.ts:1-40](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L1-L40)).
-- **Persistence**: PostgreSQL via `pg` pool — tables `cron_jobs`, `cron_job_runs` ([schema.sql:3-30](https://github.com/Jeffrey-Keyser/cron-service/blob/main/schema.sql#L3-L30), [src/services/db.ts:1-14](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/db.ts#L1-L14)).
-- **Transport out**: RabbitMQ via `amqplib`, publishes to `cron.jobs` exchange or custom exchange ([src/services/rabbit.ts:24-49](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/rabbit.ts#L24-L49), [src/services/scheduler.ts:64-84](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L64-L84)).
-- **Auth**: static `CRON_API_KEY` Bearer token required for mutating routes; reads are unauthenticated ([README.md:53-66](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L53-L66), [src/middleware/auth.ts:12-29](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/middleware/auth.ts#L12-L29)).
-- **Default port**: `3016` ([README.md:39](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L39)).
-- **Deploy**: systemd unit `cron-service.service` runs `node dist/index.js` as user `jkeyser` ([cron-service.service:1-15](https://github.com/Jeffrey-Keyser/cron-service/blob/main/cron-service.service#L1-L15)).
+- **Runtime**: TypeScript compiled with `tsc` into `dist/`, started with `node dist/index.js` ([package.json:5-8](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L5-L8)).
+- **HTTP**: Express 5 app on `PORT`, defaulting to 3016 ([src/index.ts:25](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L25), [package.json:21](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L21)).
+- **Scheduling**: in-process `node-cron` tasks, one per enabled job ([src/services/scheduler.ts:64-78](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L64-L78)).
+- **Storage**: PostgreSQL tables `cron_jobs`, `cron_job_runs`, and `cron_job_run_stages` ([schema.sql:3-52](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/schema.sql#L3-L52)).
+- **Output**: RabbitMQ publishing through `amqplib` ([src/services/rabbit.ts:80-90](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/rabbit.ts#L80-L90)).
+- **Auth**: a static `CRON_API_KEY` bearer token guards mutating routes; reads are open ([src/middleware/auth.ts:12-28](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/middleware/auth.ts#L12-L28), [README.md:55](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/README.md#L55)).
+- **Lifecycle**: a successful publish is recorded as dispatch success and awaiting downstream, not as completed work ([src/services/scheduler.ts:317-338](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L317-L338)).
 
 ## Who uses it
 
-- **Other services in the Jeffrey-Keyser ecosystem** that subscribe to `cron.jobs` topic keys or custom exchanges declared per job ([src/services/scheduler.ts:64-84](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L64-L84)).
-- **Operators**, via the SPA at `/` (served from `public/index.html`) and the JSON API ([src/index.ts:49-55](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L49-L55), [README.md:68-93](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L68-L93)).
+- **Operators** use the UI served from `public/` and the JSON API. The UI source is not among the provided excerpts, so its contents are unknown here ([src/index.ts:49](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L49), [src/index.ts:118](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L118)).
+- **API clients** that hold `CRON_API_KEY` create, update, delete, and trigger jobs ([README.md:57-64](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/README.md#L57-L64)).
+- **Downstream services** receive published messages. Which services actually subscribe is unknown from this source; see the Services page.
+- **Seed scripts** in `scripts/` provision two jobs against a local instance on port 3016 ([scripts/seed-flights-job.sh:3-4](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/scripts/seed-flights-job.sh#L3-L4), [scripts/seed-flights-purge-job.sh:3-4](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/scripts/seed-flights-purge-job.sh#L3-L4)).
 
-## How work moves through it
+## Main flow
 
-1. Operator (or API client with the bearer key) POSTs to `/api/jobs` with `name`, `schedule`, `queue`, optional `exchange` and `payload` ([README.md:96-106](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L96-L106)).
-2. Row lands in `cron_jobs`; an upsert on `(name, schedule)` makes creation idempotent ([src/routes/jobs.ts:78-104](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/jobs.ts#L78-L104), [schema.sql:42-49](https://github.com/Jeffrey-Keyser/cron-service/blob/main/schema.sql#L42-L49)).
-3. `Scheduler` registers a `node-cron` task that, on trigger, builds a `CronJobTriggered` message and publishes through `rabbit.publishCronEvent` ([src/services/scheduler.ts:25-84](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L25-L84)).
-4. Each run is recorded in `cron_job_runs`; failures retry per job config with exponential backoff, then optionally email-alert ([src/services/scheduler.ts:64-114](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L64-L114)).
+1. A client posts a job. The route requires a bearer key, validates name, schedule, and queue, and upserts on `(name, schedule)` ([src/routes/jobs.ts:60-86](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/jobs.ts#L60-L86)).
+2. A newly inserted, enabled job is scheduled immediately ([src/routes/jobs.ts:88-91](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/jobs.ts#L88-L91)). On boot, enabled jobs are loaded first ([src/index.ts:152-153](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L152-L153)).
+3. Each execution creates a run with a correlation ID and a `scheduled` stage ([src/services/scheduler.ts:168-170](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L168-L170)).
+4. The event is published, then the run moves to `awaiting-downstream` ([src/services/scheduler.ts:184-226](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L184-L226)).
+5. A completion or receipt is recorded later with the correlation ID ([src/routes/runs.ts:91-122](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/runs.ts#L91-L122)). Runs still pending after the timeout are marked failed by a sweep ([src/services/scheduler.ts:112-136](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L112-L136)).
 
 ## Wiki pages
 
-- [Architecture](./architecture/)
-- [Iteration Loop](./iteration-loop/)
-- [Services and Dependencies](./services-and-dependencies/)
-- [Operations](./operations/)
-- [Glossary](./glossary/)
+- [Architecture](../architecture/)
+- [Iteration Loop](../iteration-loop/)
+- [Services and Dependencies](../services-and-dependencies/)
+- [Operations](../operations/)
+- [Glossary](../glossary/)

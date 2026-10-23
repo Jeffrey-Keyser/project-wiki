@@ -1,6 +1,6 @@
 ---
-title: Services and Dependencies
-description: Inbound and outbound integrations for the Pay backend.
+title: "Services and Dependencies"
+description: "Outbound dependencies of the Pay server and its known, documented, and unverified consumers, with source citations."
 ---
 
 # Services and Dependencies
@@ -8,37 +8,39 @@ description: Inbound and outbound integrations for the Pay backend.
 ## Depends on
 
 ### Runtime services
-- **PostgreSQL** — primary store, two schemas (`contact`, `billing`); accessed via `pg` ([server/package.json:69](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L69), [CLAUDE.md:386-413](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L386-L413)).
-- **Redis** — JWT blacklist, session storage, rate-limiting, generic cache via `ioredis` ([server/package.json:65](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L65), [CLAUDE.md:264-282](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L264-L282)).
-- **Stripe** — payment provider; default `PaymentProvider` implementation ([server/package.json:72](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L72), [CLAUDE.md:144-160](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L144-L160)).
-- **SMTP server** — outbound email via Nodemailer; can be swapped for mock or console ([server/package.json:68](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L68), [CONTRIBUTING.md:240-249](https://github.com/Jeffrey-Keyser/pay/blob/main/CONTRIBUTING.md#L240-L249)).
-- **AWS S3** — `@aws-sdk/client-s3` for file storage; swappable to local filesystem ([server/package.json:38-39](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L38-L39), [CLAUDE.md:251-258](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L251-L258)).
-- **AMQP / RabbitMQ** — event bus via `amqplib` ([server/package.json:51](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L51)).
-- **OpenTelemetry collector (OTLP/HTTP)** — exporter target for traces ([server/package.json:48-50](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L48-L50)).
+
+- **PostgreSQL** is configured through `DB_*` settings, and `DATABASE_URL` overrides them in test setups ([server/config/env.ts:9-20](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L9-L20), [server/config/env.ts:87-101](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L87-L101)). The `pg` client is a dependency ([server/package.json:72](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L72)).
+- **Redis** is configured with `REDIS_HOST` and `REDIS_PORT` ([server/config/env.ts:164-171](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L164-L171)) and is used by the health route ([server/routes/index.ts:146](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/index.ts#L146)).
+- **Stripe** is the default payment provider. The server creates a client when `STRIPE_SECRET_KEY` is set ([server/routes/webhooks.ts:16-20](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/webhooks.ts#L16-L20), [server/config/env.ts:78-80](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L78-L80)).
+- **SMTP** is used by the Nodemailer path, configured by `SMTP_*` variables ([server/config/env.ts:119-138](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L119-L138), [server/package.json:71](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L71)).
+- **AWS S3** is available through `@aws-sdk/client-s3` and `S3_EXPORTS_BUCKET` ([server/package.json:41](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L41), [server/config/env.ts:35-38](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L35-L38)).
+- **AMQP** is conditional on `RABBITMQ_URL` ([server/config/env.ts:223-225](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L223-L225), [server/package.json:54](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L54)).
+- **OTLP collector** is used only when `OTEL_ENABLED` is true; it defaults to false ([server/config/env.ts:241-253](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/config/env.ts#L241-L253)).
+- **GitHub issue creation** runs only when `GITHUB_ERROR_ISSUES_ENABLED` is set ([server/app.ts:200-208](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/app.ts#L200-L208)).
 
 ### First-party packages
-- `@jeffrey-keyser/pay-domain-core` — domain services ([server/package.json:46](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L46)).
-- `@jeffrey-keyser/pay-api-types` — shared DTOs/types ([server/package.json:44](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L44)).
-- `@jeffrey-keyser/api-errors` — typed errors, `HttpErrorMapper`, correlation IDs ([server/package.json:40](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L40)).
-- `@jeffrey-keyser/database-base-config` — shared migration toolchain ([server/package.json:41](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L41), [CLAUDE.md:386-413](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L386-L413)).
-- `@jeffrey-keyser/pay-auth-integration` — server middleware + react components consumed by downstream apps ([server/package.json:45](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L45)).
-- `@jeffrey-keyser/message-contracts` — typed event payloads for the bus ([server/package.json:43](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L43)).
-- `@jeffrey-keyser/github-error-issues` — middleware that opens GitHub issues on errors ([server/package.json:42](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L42), [server/app.ts:3](https://github.com/Jeffrey-Keyser/pay/blob/main/server/app.ts#L3)).
 
-### Framework / lib
-- Express 5, body-parser, cookie-parser, cors, helmet equivalents, express-session, express-rate-limit, swagger-jsdoc, jsonwebtoken, bcrypt, pino + pino-http ([server/package.json:53-75](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L53-L75)).
+- `@jeffrey-keyser/pay-domain-core` provides domain services ([server/package.json:49](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L49)).
+- `@jeffrey-keyser/pay-api-types` provides shared DTOs ([server/package.json:47](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L47)).
+- `@jeffrey-keyser/api-errors` provides typed errors and correlation IDs ([server/app.ts:2](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/app.ts#L2)).
+- `@jeffrey-keyser/pay-auth-integration` is listed as a server dependency ([server/package.json:48](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L48)). This is a dependency of Pay, not evidence of a consumer.
+- `@jeffrey-keyser/database-base-config` supplies the migration toolchain ([server/package.json:44](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L44)).
 
 ## Consumed by
 
-- **ServerlessWebTemplate** — primary downstream consumer; uses Pay for auth + payments ([CLAUDE.md:7-9](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L7-L9)).
-- **`@jeffrey-keyser/pay-auth-integration`** — published SDK whose server middleware and React widgets proxy through this backend; lives in its own repo but pins to Pay's API ([CLAUDE.md:443-471](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L443-L471)).
-- **Personal web apps** — any app calling `/api/v1/users/*`, `/api/v1/payment/*`, `/api/v1/apps/*` ([CLAUDE.md:53-75](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L53-L75)).
-- **Swagger UI** at `/api-docs` — human + automation consumers ([README.md:140-143](https://github.com/Jeffrey-Keyser/pay/blob/main/README.md#L140-L143)).
-- **Admin token holders** — generated via `POST /users/admin/generateToken` for system integration and Swagger automation ([CLAUDE.md:480-501](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L480-L501)).
+**Confirmed in this snapshot:** no inbound caller code is in the excerpts, so no caller is confirmed from source.
+
+**Documented, not verified:**
+
+- **ServerlessWebTemplate** uses Pay types and `pay-auth-integration` runtime code ([README.md:29-30](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L29-L30), [CLAUDE.md:7](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CLAUDE.md#L7)).
+- **Swagger UI** at `/api-docs` is served by this server ([server/app.ts:158-166](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/app.ts#L158-L166)).
+- **Service account clients** may call `/api/v1/auth/service-token` ([docs/service-auth.md:15-18](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/service-auth.md#L15-L18), [server/routes/v1/index.ts:42-43](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/routes/v1/index.ts#L42-L43)).
+
+**Expected, unknown:** other personal web apps calling `/api/v1` user, payment, and app routes ([README.md:3](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L3)). No concrete list is in the snapshot.
 
 ## Cross-repo wiki
 
-- `pay-domain-core` — [https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay-domain-core/](https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay-domain-core/)
-- `pay-api-types` — [https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay-api-types/](https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay-api-types/)
-- `pay-auth-integration` — [https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay-auth-integration/](https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay-auth-integration/)
-- `database-base-config` — [https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-database-base-config/](https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-database-base-config/)
+- `pay-domain-core`: [pay-domain-core source](https://github.com/Jeffrey-Keyser/pay-domain-core)
+- `pay-api-types`: [pay-api-types source](https://github.com/Jeffrey-Keyser/pay-api-types)
+- `pay-auth-integration`: [https://wiki.jeffreykeyser.net/repos/jeffrey-keyser-pay-auth-integration/home/](/repos/jeffrey-keyser-pay-auth-integration/home/)
+- `database-base-config`: [database-base-config source](https://github.com/Jeffrey-Keyser/database-base-config)

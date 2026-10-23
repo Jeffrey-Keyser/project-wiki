@@ -1,73 +1,56 @@
 ---
-title: Operations
-description: How cron-service is started, monitored, and recovered in production.
+title: "Operations"
+description: "How to start, check, and observe cron-service, with documented versus verified runtime behavior. cron-service is a long-running service, not a library."
 ---
 
 # Operations
 
-## Start command
+cron-service is a long-running service, not a library. Its package entry point is `dist/index.js` ([package.json:5](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L5)). Nothing here was run for this page. Statements below come from source reading or the README, and are labeled as such.
 
-Production: `node dist/index.js` (compiled output from `tsc`). Dev: `npm run dev` (`ts-node src/index.ts`) ([package.json:7-10](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L7-L10), [cron-service.service:9](https://github.com/Jeffrey-Keyser/cron-service/blob/main/cron-service.service#L9)).
+## Commands
 
-Boot sequence (in `main()`):
-1. `validateEnv()` — fail-fast if `DATABASE_URL`, `RABBITMQ_URL`, or `CRON_API_KEY` is missing ([src/validate-env.ts:1-11](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/validate-env.ts#L1-L11)).
-2. `db.query('SELECT 1')` — verify Postgres.
-3. `rabbit.connect()` — open channel and assert `CronExchange`.
-4. `scheduler.loadJobs()` — load every `enabled = true` row and register a `node-cron` task.
-5. `app.listen(PORT)` — bind HTTP (`PORT` env, default `3016`) ([src/index.ts:139-162](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L139-L162), [README.md:39](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L39)).
+- **Build:** `npm run build` (`tsc`) ([package.json:7](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L7)).
+- **Start:** `npm start` runs `node dist/index.js` after a build ([package.json:8](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L8)).
+- **Dev:** `npm run dev` runs `ts-node src/index.ts` ([package.json:9](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L9)).
+- **Test:** `npm test` builds and runs two compiled test files ([package.json:11](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L11)).
 
-If any step throws, `log.fatal` is emitted and the process exits 1 ([src/index.ts:156-160](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L156-L160)).
+Required environment variables are `DATABASE_URL`, `RABBITMQ_URL`, and `CRON_API_KEY` ([src/validate-env.ts:1](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/validate-env.ts#L1)). Optional variables cover SMTP and alerts ([README.md:44-50](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/README.md#L44-L50)).
 
-## Systemd unit
+## Boot sequence
 
-```ini
-[Unit]
-After=network.target postgresql.service rabbitmq-server.service
+`main()` runs these steps in order ([src/index.ts:142-165](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L142-L165)):
 
-[Service]
-Type=simple
-User=jkeyser
-WorkingDirectory=/home/jkeyser/cron-service
-ExecStart=/usr/bin/node dist/index.js
-Restart=always
-RestartSec=5
-Environment=NODE_ENV=production
-```
+1. Test the database with `SELECT 1`.
+2. Connect to RabbitMQ and assert the shared exchange.
+3. Load enabled jobs into the scheduler.
+4. Start the downstream reconciler.
+5. Listen on `PORT`.
 
-Source: [cron-service.service:1-15](https://github.com/Jeffrey-Keyser/cron-service/blob/main/cron-service.service#L1-L15). Install with `sudo cp cron-service.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now cron-service` ([README.md:142-149](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L142-L149)).
+Any thrown error logs `fatal` and exits with code 1.
 
-Auto-restart is unconditional with 5s backoff — there is no in-app supervisor beyond that.
+## Systemd
 
-## Port and surface
+The unit file runs `node dist/index.js` as user `jkeyser` from `/home/jkeyser/cron-service` with `Restart=always` and `RestartSec=5` ([cron-service.service:5-12](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/cron-service.service#L5-L12)). The README documents copying the unit into `/etc/systemd/system` and enabling it ([README.md:209-214](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/README.md#L209-L214)). Whether that host is running now is unknown.
 
-- Default HTTP port: `3016` ([README.md:39](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L39)).
-- `GET /` — SPA from `public/index.html` ([src/index.ts:49-117](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L49-L117)).
-- `GET /api/health` and `GET /health` — same handler, returns 200/503 ([src/index.ts:109-110](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L109-L110)).
+## Health
 
-## Health probe
-
-`/api/health` returns JSON with:
-- `checks.database.{status,latency,error}` — from `SELECT 1`
-- `checks.rabbitmq.{status,connectionState}` — from `rabbit.status` (`connected` / `reconnecting` / `disconnected`)
-- `checks.scheduler.scheduledJobs` — count of in-memory tasks
-- `checks.system.{uptime,memory,nodeVersion,platform}`
-
-Source: [src/index.ts:62-107](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L62-L107). Status `503` is returned when the DB ping fails; RabbitMQ disconnect does **not** flip the top-level status, only the nested check ([src/index.ts:80-106](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L80-L106)).
+- `GET /api/health` and `GET /health` run the same handler ([src/index.ts:112-113](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L112-L113)).
+- The response is 503 only when the database check fails ([src/index.ts:80](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L80), [src/index.ts:109](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L109)). A RabbitMQ disconnect appears only in the nested check ([src/index.ts:90](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L90)).
+- `checks.scheduler.downstreamReconciliation` reports the last sweep, reconciled counts, and the last error ([src/index.ts:93](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L93), [src/services/scheduler.ts:14-22](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L14-L22)).
 
 ## Observability
 
-- **Logs**: `pino` (`createLogger(scope)` in `src/lib/logger.ts`) — scopes seen: `server`, `http`, `scheduler`, `rabbit`. `http` middleware emits one line per `/api/*` request with method, path, status, durationMs, IP ([src/index.ts:30-47](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L30-L47)).
-- **Run history**: every execution writes to `cron_job_runs`, queryable via `GET /api/runs` (paginated, filterable by `status`) ([src/routes/runs.ts:6-30](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/runs.ts#L6-L30)).
-- **Job health**: each `cron_jobs` row tracks `consecutive_failures`, `last_error`, and `last_success_at` — updated atomically at the end of each run ([src/services/scheduler.ts:130-147](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L130-L147), [schema.sql:15-17](https://github.com/Jeffrey-Keyser/cron-service/blob/main/schema.sql#L15-L17)).
-- **Alerts**: failure email goes to the per-job `alert_email` if set, else `ALERT_EMAIL`, else stdout ([src/services/email.ts:17-32](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/email.ts#L17-L32)).
+- **Logs.** Pino child loggers use the scopes `server`, `http`, `scheduler`, and `rabbit` ([src/index.ts:20](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L20), [src/index.ts:30](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L30), [src/services/scheduler.ts:10](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L10), [src/services/rabbit.ts:5](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/rabbit.ts#L5)). The HTTP log line covers `/api` requests ([src/index.ts:35-44](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L35-L44)). Logs carry `correlationId` ([src/services/scheduler.ts:225](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L225)).
+- **Runs.** `GET /api/runs` filters by status, dispatch and downstream status, stage, and correlation ID ([src/routes/runs.ts:40-77](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/runs.ts#L40-L77)). Each run includes its stages ([src/routes/runs.ts:48-51](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/runs.ts#L48-L51)).
+- **Alerts.** Failures send mail to the job's `alert_email`, then `ALERT_EMAIL`, then stdout ([src/services/email.ts:17-23](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/email.ts#L17-L23), [src/services/scheduler.ts:267-272](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L267-L272)).
 
-## Failure modes & recovery
+## Failure handling
 
-- **RabbitMQ disconnect** — automatic reconnect with exponential backoff, max 10 attempts. After exhaustion the adapter goes `disconnected` and stops retrying; in-flight scheduled triggers will fail and be recorded as failed runs ([src/services/rabbit.ts:38-75](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/rabbit.ts#L38-L75)).
-- **Postgres outage** — `executeJob` throws, scheduler logs `Job failed`, no run row written (insert itself fails); systemd does not restart on this since the process is still alive.
-- **Per-job retries** — `max_retries`, `retry_delay_ms`, `backoff_multiplier` on `cron_jobs` drive in-run retries; default is no retry (`max_retries = 0`) ([src/services/scheduler.ts:91-103](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L91-L103), [schema.sql:11-13](https://github.com/Jeffrey-Keyser/cron-service/blob/main/schema.sql#L11-L13)).
-- **Graceful shutdown** — `SIGTERM` / `SIGINT` stop all scheduled tasks, close RabbitMQ, close DB pool, then `process.exit(0)` ([src/index.ts:119-137](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L119-L137)).
+- **RabbitMQ.** Reconnects with backoff up to 10 attempts, then logs fatal and sets `disconnected` ([src/services/rabbit.ts:51-62](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/rabbit.ts#L51-L62)).
+- **Publish retries.** Governed by `max_retries`, `retry_delay_ms`, and `backoff_multiplier` ([src/services/scheduler.ts:239-256](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L239-L256)).
+- **Stale downstream runs.** Dispatched runs pending beyond the timeout are marked failed with a timeout receipt. Defaults are 24 hours and 5 minutes ([src/services/scheduler.ts:11-12](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L11-L12), [src/services/scheduler.ts:112-136](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L112-L136)). The env vars are `CRON_DOWNSTREAM_TIMEOUT_MS` and `CRON_DOWNSTREAM_RECONCILE_INTERVAL_MS` ([src/services/scheduler.ts:102-103](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L102-L103)).
+- **Shutdown.** SIGTERM and SIGINT stop tasks, close RabbitMQ and the pool, then exit 0 ([src/index.ts:122-140](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L122-L140)).
 
 ## Secrets
 
-`CRON_API_KEY` lives in Solo Vault under `cron-service/production/CRON_API_KEY` per the README; it must be present at boot or the process exits ([README.md:66](https://github.com/Jeffrey-Keyser/cron-service/blob/main/README.md#L66), [src/validate-env.ts:1-11](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/validate-env.ts#L1-L11)).
+The README says the production key is stored in a vault under a named path ([README.md:66](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/README.md#L66)). Startup fails if the key is absent ([src/validate-env.ts:1-10](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/validate-env.ts#L1-L10)).

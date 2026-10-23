@@ -1,66 +1,52 @@
 ---
-title: Operations
-description: Deployment, runtime, observability, and on-call notes for Analytics-Pulse.
+title: "Operations"
+description: "Start, deploy, test, and health commands for Analytics-Pulse, plus observability, what is verified from source, and what is documented only."
 ---
 
 # Operations
 
-## Deployable surfaces
+Analytics-Pulse is a deployed service, not a pure library. The API and admin client run as services, and the tracking package is a library consumed through npm. Environment-specific deployment shape is unknown from these excerpts ([docs/ARCHITECTURE.md:L90](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L90)).
 
-This repo ships three artifacts:
-1. A Docker-imaged Lambda function (server), built from `Dockerfile_Server` and pushed to ECR ([README.md:1031-1033](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1031-L1033)).
-2. A static React bundle (client) synced to S3 and fronted by CloudFront ([README.md:1034-1035](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1034-L1035)).
-3. An npm package (`@analytics-pulse/tracking-library`) for browser embedding ([tracking-library/package.json:1-10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/tracking-library/package.json#L1-L10)).
+## Start
 
-## Initial deploy
+- **API, development:** `cd server && npm run dev` runs `ts-node ./bin/www.ts` ([server/package.json:L7](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/package.json#L7)). The port is `PORT`, defaulting to 3001 ([server/config/env.ts:L73](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/config/env.ts#L73)).
+- **API, production script:** `node ./dist/bin/www.js` after `tsc` build ([server/package.json:L6, L8](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/package.json#L6-L8)).
+- **Client, development:** `cd client && npm run dev` runs Vite on port 3002 ([client/package.json:L33](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/client/package.json#L33), [client/vite.config.js:L7](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/client/vite.config.js#L7)).
 
-`./scripts/new-service-auto.sh <service-name> <domain>` is the end-to-end path: prerequisite checks, project setup, Terraform init + targeted ECR apply, Docker image build + push, full Terraform apply, env-file updates, commit + push to trigger CI/CD. Target: <10 minutes ([README.md:238-291](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L238-L291)). Supports `--yes` / `-y` for non-interactive runs ([README.md:60-72 of CLAUDE.md](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/CLAUDE.md)).
+Local bring-up order is database bootstrap, then server, then client ([docs/OPERATIONS.md:L9-L28](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L9-L28)).
 
-Requires `GITHUB_TOKEN` and configured AWS CLI; OIDC is the default AWS-auth mode and is configured by Terraform itself ([README.md:353-380](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L353-L380)).
+## Database lifecycle
 
-## CI/CD
+Run from `server`: `npm run db:status`, `npm run db:migrate`, and `npm run db:rollback -- 1` ([docs/OPERATIONS.md:L34-L39](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L34-L39)). The destructive reset is `db/teardown.sh` ([docs/OPERATIONS.md:L44](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L44)).
 
-Push to GitHub triggers workflows that:
-- Build the server Docker image and push to ECR
-- Update the Lambda function with the new image
-- Build the client and sync to S3
-- Invalidate the CloudFront distribution
+## Deploy
 
-Terraform itself runs manually via `workflow_dispatch` — never on a normal merge ([README.md:1041-1042](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1041-L1042)).
+- The documented path is `./scripts/new-service-auto.sh <service-name> <domain>` with `GITHUB_TOKEN` set ([CLAUDE.md:L9-L11](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L9-L11)).
+- Pushes are documented to trigger image build, Lambda update, client sync, and CloudFront invalidation ([CLAUDE.md:L354-L359](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L354-L359)).
+- Terraform runs manually ([CLAUDE.md:L240](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CLAUDE.md#L240)).
 
-GitHub Actions uses OIDC and assumes a role identified by the repo variable `AWS_ROLE_ARN`; if OIDC fails, see the troubleshooting matrix in CLAUDE.md ([CLAUDE.md](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/CLAUDE.md), [README.md:353-380](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L353-L380)).
+The CI workflow files are not in the excerpts. Their contents are unverified.
 
-## Runtime
+## Tests and checks
 
-### Server (Lambda)
-- Entry point is `server/app.ts`, which exports the Express app wrapped by `createServerlessAppSync` for Lambda ([server/app.ts:245-247](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L245-L247)).
-- Local dev: `cd server && npm run dev` (uses `ts-node ./bin/www.ts`) on port `config.PORT` (default 3001) ([server/package.json:7](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/package.json#L7), [README.md:594-597](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L594-L597)).
-- Production start (container): `node ./dist/bin/www.js` ([server/package.json:6](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/package.json#L6)).
-- Health probe: `GET /health` exposed by `express-server-factory`, includes a `database` check against the connection pool ([server/app.ts:96-157](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L96-L157)).
-- Swagger UI at `/api-docs` for live API exploration ([README.md:401-407](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L401-L407)).
-- Sessions live in the Postgres `user_sessions` table with a 24-hour TTL ([server/app.ts:122-141](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L122-L141)).
+- Server: `npm test`, `npm run lint` ([server/package.json:L10-L11](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/package.json#L10-L11)).
+- Client: `npm run test`, `npm run typecheck`, `npm run build` ([client/package.json:L35-L38](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/client/package.json#L35-L38)).
+- Tracking library: `npm test`, `npm run build` ([tracking-library/package.json:L13-L20](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/tracking-library/package.json#L13-L20)).
 
-### Client
-- `cd client && npm run dev` for Vite dev server (default port 3002 in Docker) ([client/package.json:33](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/client/package.json#L33), [README.md:838-845](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L838-L845)).
-- Production: static files in `client/dist/` synced to S3, distributed by CloudFront.
+## Health and diagnostics
 
-### Scheduled jobs (in-process)
-- `dailyAggregation` — `0 1 * * *` UTC, rolls up the previous day for every active project ([server/cron/dailyAggregation.ts:32-36](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/cron/dailyAggregation.ts#L32-L36)).
-- `partitionMaintenance` — provisions next-month event partitions, drops stale ones ([server/app.ts:35](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L35)).
-- `emailReporting` — dispatches daily / weekly / monthly digests via SES ([server/app.ts:36](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L36)).
+- **`GET /health`** is the infrastructure probe, with a database check ([server/app.ts:L189-L197](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L189-L197)). It is public ([server/app.ts:L91](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L91)).
+- **`GET /api/v1/diagnostics/runtime`** reports background job state ([server/routes/diagnostics.ts:L120-L122](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/diagnostics.ts#L120-L122)). Operators see last start, success, failure, and failure counts there ([docs/OPERATIONS.md:L70-L73](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L70-L73)).
+- **`GET /api/v1/diagnostics/detailed`** returns deeper diagnostics ([server/routes/diagnostics.ts:L93](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/diagnostics.ts#L93)).
 
-Because Lambda freezes between invocations, these jobs rely on Lambda being warm; in practice they're triggered by the same in-process scheduler, which means cold-start gaps can drop a tick. (No `systemd` unit — Lambda manages lifecycle.)
+## Scheduled jobs
 
-## Observability
+Documented schedules are daily aggregation at `0 1 * * *`, partition maintenance at `0 2 * * *`, and email reports at 09:00 daily, weekly on Monday, and monthly on the 1st ([docs/OPERATIONS.md:L79-L83](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L79-L83)). Each has an enable flag ([server/config/env.ts:L142-L152](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/config/env.ts#L142-L152)). The partition job runs daily at 02:00 UTC according to the partition strategy ([docs/PARTITION_STRATEGY.md:L68-L75](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/PARTITION_STRATEGY.md#L68-L75)).
 
-- **Logs:** stdout/stderr ship to CloudWatch via the Lambda runtime; the boot banner in `server/app.ts:18-26` is the first line to look for in incident triage ([server/app.ts:18-26](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L18-L26)).
-- **Diagnostics endpoint:** `GET /api/v1/diagnostics/detailed` exposes system state (mounted at [server/routes/versions/v1/index.ts:89](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/routes/versions/v1/index.ts#L89)).
-- **Performance endpoints** (admin only): `/api/v1/performance`, `/performance/queries`, `/performance/cache`, `/performance/database` ([server/routes/versions/v1/index.ts:147-149](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/routes/versions/v1/index.ts#L147-L149)).
-- **Partition health:** `/api/v1/partitions/health` and `/partitions/list` for spot-checking the partition rotation ([server/routes/versions/v1/index.ts:143-145](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/routes/versions/v1/index.ts#L143-L145)).
-- **Error reporting:** runtime errors land in GitHub Issues for the repo via the error-reporting service ([server/package.json:37](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/package.json#L37)).
+## Verified versus documented
 
-## On-call / runbook hints
+- **Verified from source:** route mounts, health check, runtime route, job schedules, and env defaults.
+- **Documented only:** CloudWatch log shipping, Lambda cold-start behavior, backups, and the Redis and SES deployments. The excerpts do not confirm these ([docs/OPERATIONS.md:L103-L105](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L103-L105)).
+- **Unknown:** production port and domain, and which runtime hosts the server.
 
-- Tracking 5xx? Check Pay auth at boot — `setupPayAuth` throws fatally if Pay is unreachable, so failed boots usually mean Pay is down or `PAY_SERVICE_URL` is wrong ([server/app.ts:39-93](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L39-L93)).
-- Aggregation missing? The daily cron is idempotent — admin `/api/v1/aggregation/daily/all` re-runs it ([server/routes/versions/v1/index.ts:141](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/routes/versions/v1/index.ts#L141)).
-- Rate limits: tracking endpoints cap at 10,000 req/hour per API key; batch capped at 100 events / 100KB ([README.md:557-561](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L557-L561)).
+Related pages: [Architecture](../architecture/), [Services and Dependencies](../services-and-dependencies/).

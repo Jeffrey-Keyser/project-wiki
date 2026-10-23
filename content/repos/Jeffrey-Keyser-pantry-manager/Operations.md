@@ -1,51 +1,46 @@
 ---
-title: Operations
-description: Deploy, runtime, logging, and health for the Pantry Manager service.
+title: "Operations"
+description: "Start, build, test, migrate, deploy, health, and logging for Pantry Manager, with documented versus source-verified runtime facts called out."
 ---
 
 # Operations
 
-## Runtime surface
+Pantry Manager is a deployed Express service, not a library. Its package is private, exposes `start`, and has a binary entrypoint ([package.json:L4](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L4), [package.json:L9](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L9)).
 
-- **Process** — Node 20+, single Express instance; compiled entry `dist/bin/www.js` ([package.json:9](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/package.json#L9), [package.json:37-40](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/package.json#L37-L40))
-- **Port** — 3052 (configurable via `PORT`) ([src/config/env.ts:24](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/config/env.ts#L24), [pantry-manager.service:18](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/pantry-manager.service#L18))
-- **Public URL** — `https://pantry-manager.jeffreykeyser.net` ([README.md:57](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L57))
+## Commands
 
-## systemd unit
-
-User-level unit `pantry-manager.service`:
-
-- `ExecStart=/usr/bin/node /home/jkeyser/pantry-manager/dist/bin/www.js` ([pantry-manager.service:8](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/pantry-manager.service#L8))
-- `Restart=always`, `RestartSec=5`, burst 5/60s ([pantry-manager.service:11-13](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/pantry-manager.service#L11-L13))
-- `NODE_ENV=production`, `EnvironmentFile=/home/jkeyser/pantry-manager/.env` for secrets incl. `PANTRY_MANAGER_API_KEY` ([pantry-manager.service:17-20](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/pantry-manager.service#L17-L20))
-- Graceful stop via `SIGTERM`, 15s timeout ([pantry-manager.service:9-10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/pantry-manager.service#L9-L10))
-
-`SIGTERM` is handled in-process by closing the HTTP listener before exit ([src/bin/www.ts:33-39](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/bin/www.ts#L33-L39)).
+- `npm install` (documented in [README.md:L41](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L41)).
+- `npm run dev` runs `ts-node src/bin/www.ts` ([package.json:L7](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L7)).
+- `npm run build` runs `tsc`, which outputs to `dist` ([package.json:L8](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L8), [tsconfig.json:L6-L7](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/tsconfig.json#L6-L7)).
+- `npm start` runs `node dist/bin/www.js` ([package.json:L9](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L9)).
+- `npm test` runs `vitest run` ([package.json:L10](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L10)).
+- `npm run migrate` and `npm run migrate:down` run the migration helpers ([package.json:L11-L12](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/package.json#L11-L12)).
 
 ## Deploy
 
-```bash
-npm run build
-systemctl --user restart pantry-manager
-```
+The README documents `npm run build` followed by `systemctl --user restart pantry-manager` ([README.md:L51-L54](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L51-L54)). The unit file in the repo runs `dist/bin/www.js` with `Restart=always` and a 15-second stop timeout ([pantry-manager.service:L8](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/pantry-manager.service#L8), [pantry-manager.service:L10-L12](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/pantry-manager.service#L10-L12)).
 
-([README.md:51-56](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L51-L56))
+The unit sets `NODE_ENV=production` and `PORT=3052`, and loads `.env` ([pantry-manager.service:L17-L20](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/pantry-manager.service#L17-L20)). The README gives the public URL as `https://pantry-manager.jeffreykeyser.net` ([README.md:L57](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/README.md#L57)).
 
-Migrations run separately: `npm run migrate` (forward) / `npm run migrate:down` (rollback) ([README.md:44-45](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/README.md#L44-L45)).
+## Health
 
-## Health probe
+`GET /health` is enabled with a database check and service name ([src/app.ts:L90-L98](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/app.ts#L90-L98)). It is exempt from API key checks ([src/middleware/api-key-auth.ts:L4](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/middleware/api-key-auth.ts#L4)).
 
-`GET /health` — wired by `express-server-factory` with a database probe via `createDatabaseHealthCheck(pool)` ([src/app.ts:25](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/app.ts#L25), [src/app.ts:90-98](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/app.ts#L90-L98)). Path is whitelisted by API-key auth so monitors don't need credentials ([src/middleware/api-key-auth.ts:4-7](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/middleware/api-key-auth.ts#L4-L7)).
+## Logging and shutdown
 
-## Logging
+- Boot logs service name, version, environment, and port ([src/app.ts:L18-L23](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/app.ts#L18-L23)).
+- Request logging uses the `dev` format and skips `/health` ([src/app.ts:L69-L72](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/app.ts#L69-L72)).
+- Errors log the method and path. Stack traces are included only in development ([src/app.ts:L106-L115](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/app.ts#L106-L115)).
+- On `SIGTERM`, the server closes and exits ([src/bin/www.ts:L33-L39](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/bin/www.ts#L33-L39)).
 
-- `morgan` "dev" format via server factory; `/health` excluded from access log ([src/app.ts:69-72](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/app.ts#L69-L72))
-- Boot banner logs service name, version, env, port ([src/app.ts:18-23](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/app.ts#L18-L23))
-- Errors logged with method + path context, stack traces only when `NODE_ENV=development` ([src/app.ts:106-115](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/app.ts#L106-L115))
-- New-user provisioning logged when pay-auth creates a `pantry.users` row ([src/app.ts:45-47](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/app.ts#L45-L47))
+The README suggests `journalctl --user` for logs, but the excerpts do not include that; treat it as documented, not verified.
 
-Tail logs with `journalctl --user -u pantry-manager -f`.
+## Environment names
 
-## Required env
+Required: `NODE_ENV`, `PAY_URL`, `PANTRY_MANAGER_API_KEY`, plus database settings. Optional: `TAGGUN_API_KEY`, `PORT` (default 3052), and `PANTRY_ADMIN_KEY` for the admin route ([src/config/env.ts:L10-L14](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/config/env.ts#L10-L14), [src/routes/versions/v1/admin.ts:L12-L13](https://github.com/Jeffrey-Keyser/pantry-manager/blob/9293c1392f52c8565c675c9168034b9f77a54d77/src/routes/versions/v1/admin.ts#L12-L13)). Values are intentionally omitted.
 
-`NODE_ENV`, `PORT`, `PAY_URL`, `TAGGUN_API_KEY`, `PANTRY_MANAGER_API_KEY`, plus database vars (`DATABASE_HOST`/`_NAME`/`_USER`/`_PASSWORD`/`_PORT`, optional `DB_SSLMODE`) ([src/config/env.ts:9-55](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/config/env.ts#L9-L55)). Boot fails closed if `PANTRY_MANAGER_API_KEY` missing ([src/config/env.ts:52-55](https://github.com/Jeffrey-Keyser/pantry-manager/blob/main/src/config/env.ts#L52-L55)).
+## Documented versus verified
+
+- **Verified by source:** port, env validation, health route, SIGTERM handling, and unit file contents.
+- **Documented only:** PostgreSQL 17, the public URL, and the systemd install state.
+- **Unknown:** the running host, reverse proxy, migration state, and whether the Ping default URL is used anywhere.

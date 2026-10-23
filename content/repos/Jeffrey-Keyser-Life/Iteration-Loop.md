@@ -1,44 +1,45 @@
 ---
-title: Iteration Loop
-description: How a change moves from local edit to running production in the Life repo — dev, test, commit, auto-deploy, smoke.
+title: "Iteration Loop"
+description: "Contributor workflow for Life: local dev, the verification scripts, database deploy ordering, and the documented push-to-deploy path."
 ---
 
 # Iteration Loop
 
-Life ships from a single `master` branch into a self-hosted production host. The loop is short: edit locally with both halves running, run tests/typecheck/lint at the root, push to `master`, and the beelink-deploy webhook does the rest ([CLAUDE.md:79-83](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L79-L83)).
+This page covers how a change moves from a local edit to a running host. It separates what the scripts do from what docs describe.
 
 ```mermaid
-sequenceDiagram
-  participant Dev as Developer
-  participant Repo as GitHub master
-  participant Webhook as beelink-deploy
-  participant Host as beelink host
-  participant Systemd as systemd units
-
-  Dev->>Dev: npm run dev (client 3001 + server 3002)
-  Dev->>Dev: npm run lint / typecheck / test
-  Dev->>Repo: git push master
-  Repo->>Webhook: push event (HMAC signed)
-  Webhook->>Host: ./deploy.sh
-  Host->>Host: git pull, build server, build client
-  Host->>Host: server/db/deploy.sh (schema + SPs)
-  Host->>Host: backfill-embeddings.ts
-  Host->>Systemd: restart life-api, life-frontend
-  Dev->>Host: smoke:voice-transcribe (optional)
+flowchart TD
+  E["Edit client or server code"] --> D["npm run dev at repo root"]
+  D --> V["npm run lint typecheck and test"]
+  V --> P["Push to master"]
+  P --> W["Documented webhook runs deploy.sh"]
+  W --> B["Pull build server and client"]
+  B --> Q["Apply database schema and procedures"]
+  Q --> K["Backfill synopsis embeddings"]
+  K --> R["Restart life-api and life-frontend"]
+  R --> S["Optional voice transcribe smoke test"]
 ```
 
-## The cycle, step by step
+## Local loop
 
-1. **Run both halves locally.** `npm run dev` at the repo root concurrently starts `dev:server` and `dev:client` ([package.json:8-10](https://github.com/Jeffrey-Keyser/Life/blob/master/package.json#L8-L10)). Defaults: client on 3001, server on 3002, API docs at `/api-docs`, debug dashboard at `/debug` ([README.md:51-56](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L51-L56)).
-2. **Edit.** Server code under `server/` (routes thin, services fat). Client code under `client/src/` (RTK Query slices in `reducers/`, screens in `containers/`, components in `components/`). New endpoints get a route, a service, a stored procedure, then an RTK Query slice on the client ([CLAUDE.md:171-176](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L171-L176)).
-3. **Local verification.** Root scripts run both workspaces in series: `npm run lint`, `npm run typecheck`, `npm test`, optional `npm run e2e` for Playwright ([package.json:14-27](https://github.com/Jeffrey-Keyser/Life/blob/master/package.json#L14-L27)).
-4. **Push to `master`.** This is the only release branch. Pushes trigger the deploy webhook ([CLAUDE.md:79-83](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L79-L83)). To bypass auto-deploy, include `[skip deploy]` or `[no deploy]` in the commit message ([CLAUDE.md:83](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L83)).
-5. **`deploy.sh` runs on the beelink host.** It unsets `NODE_ENV` so dev deps install, pulls, builds the server, prepares the local embedding model, builds the client with production `VITE_*` values, runs DB deploy, runs the idempotent synopsis embedding backfill, then restarts both systemd units ([deploy.sh:4-37](https://github.com/Jeffrey-Keyser/Life/blob/master/deploy.sh#L4-L37)).
-6. **DB changes apply in order.** `server/db/deploy.sh` applies `schema/`, then `migrations/` (append-only), then `stored_procedures/` (re-applyable) ([docs/DEPLOYMENT.md:77-85](https://github.com/Jeffrey-Keyser/Life/blob/master/docs/DEPLOYMENT.md#L77-L85)).
-7. **Smoke test.** The `smoke:voice-transcribe` script exercises the full transcription path against production; non-zero exit codes distinguish failure from config errors ([docs/DEPLOYMENT.md:49-65](https://github.com/Jeffrey-Keyser/Life/blob/master/docs/DEPLOYMENT.md#L49-L65), [server/package.json:18](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L18)).
+1. **Run both halves.** `npm run dev` starts the server and client concurrently ([package.json:8-10](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/package.json#L8-L10)). The server dev script uses ts-node ([server/package.json:7](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/package.json#L7)).
+2. **Edit.** Route handlers stay thin, and business logic goes in services ([CLAUDE.md:181-184](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L181-L184)). New endpoints usually also need a stored procedure and a client RTK Query endpoint ([CLAUDE.md:180-186](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L180-L186)).
+3. **Verify.** Root scripts run both workspaces in turn: `lint`, `typecheck`, `test`, `test:coverage`, and `e2e` ([package.json:14-27](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/package.json#L14-L27)).
+4. **Test scope.** Server tests use Jest and match `__tests__` and `.test.ts` files ([server/jest.config.ts:5](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/jest.config.ts#L5)). Client tests use Vitest with jsdom ([client/vite.config.ts:25-28](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/vite.config.ts#L25-L28)). Client tests must cover logic, not DOM rendering ([CLAUDE.md:45](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L45)).
+5. **E2E.** Playwright starts the client dev server on port 4001 unless one is already running locally ([playwright.config.ts:4](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/playwright.config.ts#L4), [playwright.config.ts:24-27](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/playwright.config.ts#L24-L27)).
 
-## Notes on the loop
+## Push and deploy
 
-- There is no PR-required branch protection encoded here; the canonical path is `git push master` → webhook ([CLAUDE.md:79-83](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L79-L83)).
-- Client tests are intentionally scoped to logic only — DOM/render tests are banned by policy ([CLAUDE.md:42-43](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L42-L43)).
-- The `terraform/` directory exists but is **not** the active production path; treat it as historical until intentionally revived ([docs/DEPLOYMENT.md:73-75](https://github.com/Jeffrey-Keyser/Life/blob/master/docs/DEPLOYMENT.md#L73-L75)).
+- Pushes to `master` are documented to trigger the beelink-deploy webhook, which runs `./deploy.sh` ([CLAUDE.md:79-80](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L79-L80), [docs/DEPLOYMENT.md:24](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L24)). The listener code is not in the attached excerpts, so the webhook is documented, not verified.
+- `[skip deploy]` or `[no deploy]` in a commit message is documented to skip auto-deploy ([CLAUDE.md:82](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L82)).
+- `deploy.sh` is the verified entry point. It unsets `NODE_ENV` so dev dependencies install ([deploy.sh:5](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/deploy.sh#L5)). It pulls, builds the server, prepares the embedding model, and builds the client with production `VITE_*` values ([deploy.sh:8-21](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/deploy.sh#L8-L21)).
+- Database changes apply in order: `schema/`, then `migrations/`, then `stored_procedures/` ([docs/DEPLOYMENT.md:79-85](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L79-L85)). `deploy.sh` runs this step and then the synopsis backfill ([deploy.sh:24-31](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/deploy.sh#L24-L31)).
+- The script restarts `life-api` and `life-frontend` last ([deploy.sh:34-36](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/deploy.sh#L34-L36)).
+
+CLAUDE.md lists a backfill-free deploy order and a frontend-only redeploy ([CLAUDE.md:90-103](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L90-L103)). `deploy.sh` is the newer and authoritative sequence, so treat CLAUDE.md as a secondary source here.
+
+## After deploy
+
+Run the voice smoke test against production. It exits 0 on success, 1 on transcription failure, and 2 on configuration error ([docs/DEPLOYMENT.md:53-65](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L53-L65)). The script is exposed as `smoke:voice-transcribe` ([server/package.json:18](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/package.json#L18)). Its source file is not in the excerpts.
+
+The `terraform/` directory is not the active production path ([docs/DEPLOYMENT.md:73-75](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L73-L75)).

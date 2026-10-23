@@ -1,48 +1,50 @@
 ---
-title: image-studio — Operations
-description: Self-hosted Beelink deploy via systemd + Cloudflare Tunnel, with /health and /api/v1/diagnostics/deploy as the on-call signal.
+title: "image-studio — Operations"
+description: "Start, deploy, test and health commands for image-studio, with documented versus verified runtime facts and known port and hostname conflicts."
 ---
 
 # Operations
 
-## Runtime topology
+image-studio is a deployed web service, not a library. It has a server (`server/`) and a client (`client/`). Documented production topology comes from the README and CLAUDE. Verified facts come from scripts and code in the repository.
 
-Self-hosted on a Beelink mini PC. Two systemd units, two ports, one Cloudflare Tunnel split-hostname routing pair ([README.md:124-134](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L124-L134), [CLAUDE.md:52-60](https://github.com/Jeffrey-Keyser/image-studio/blob/main/CLAUDE.md#L52-L60)).
+## Documented topology
 
-| Surface | Unit | Port | Hostname |
-|---|---|---|---|
-| Express API | `image-studio` | 3001 (prod) / 3030 (dev verify) | `images-api.jeffreykeyser.net` |
-| Static SPA | `image-studio-frontend` | 3002 | `images.jeffreykeyser.net` |
+- Backend unit `image-studio` and frontend unit `image-studio-frontend` ([README.md:L199-L200](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L199-L200)).
+- Ingress: `images.jeffreykeyser.net` goes to the frontend, and `images-api.jeffreykeyser.net` goes to the API. There is no same-origin `/api` proxy on the frontend host ([README.md:L201-L205](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L201-L205)).
+- **Port conflict (unknown in production).** README says the backend runs on port 3001 ([README.md:L199](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L199)). CLAUDE says 3030 ([CLAUDE.md:L49](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/CLAUDE.md#L49)). The config default is 3001 ([server/config/env.ts:L90](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/config/env.ts#L90)). The live value is unknown.
 
-Note: `localhost:3030` is the dev-mode default the deploy-verify curl hits; production systemd unit listens on 3001 per README ([deploy.sh:46](https://github.com/Jeffrey-Keyser/image-studio/blob/main/deploy.sh#L46), [README.md:128](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L128)).
+## Commands
 
-## Start commands
+- **Server dev:** `npm install`, then `npm run dev`, which runs `ts-node ./bin/www.ts` ([server/package.json:L7](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/package.json#L7)).
+- **Server build and start:** `npm run build` runs `tsc` to `dist` ([server/package.json:L8](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/package.json#L8), [server/tsconfig.json:L6](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/tsconfig.json#L6)). `npm start` runs `node ./dist/bin/www.js` ([server/package.json:L6](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/package.json#L6)).
+- **Client dev and build:** `npm run dev` runs Vite on port 3002 ([client/package.json:L29](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/package.json#L29), [client/vite.config.js:L10](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/vite.config.js#L10)). `npm run build` runs `vite build` ([client/package.json:L30](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/package.json#L30)).
+- **Tests:** server `npm test` runs `vitest run` ([server/package.json:L11](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/package.json#L11)). Client `npm test` runs `vitest --run` ([client/package.json:L32](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/client/package.json#L32)).
+- **Deploy:** `./deploy.sh` pulls, builds, restarts, and verifies ([deploy.sh:L8-L39](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L8-L39)).
 
-- Server prod: `node ./dist/bin/www.js` ([server/package.json:6](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/package.json#L6)).
-- Server dev: `ts-node ./bin/www.ts` ([server/package.json:7](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/package.json#L7)).
-- Client dev: `vite` ([client/package.json:29](https://github.com/Jeffrey-Keyser/image-studio/blob/main/client/package.json#L29)).
-- Full deploy: `./deploy.sh` ([deploy.sh:1-39](https://github.com/Jeffrey-Keyser/image-studio/blob/main/deploy.sh#L1-L39)).
+## Health and verification
 
-## Required env
+- `GET /health` is a database health check ([server/app.ts:L233-L240](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L233-L240)). `GET /ping` returns `pong` ([server/routes/index.ts:L14-L16](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/index.ts#L14-L16)).
+- `GET /api/v1/diagnostics/deploy` pings the database with `SELECT 1`. It returns `status` (`ok` or `degraded`), build metadata, and `imports.status` ([server/routes/diagnostics.ts:L74-L86](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/diagnostics.ts#L74-L86), [server/routes/diagnostics.ts:L223-L245](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/diagnostics.ts#L223-L245)).
+- `GET /api/v1/diagnostics/detailed` is public and includes the upstream auth probe ([server/app.ts:L95-L96](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L95-L96), [README.md:L155](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L155)).
+- Deploy success requires `status` ok and a matching `buildSha`. A CORS check then runs ([deploy.sh:L57-L59](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/deploy.sh#L57-L59)).
 
-- `DATABASE_HOST/NAME/USER/PASSWORD/PORT` — Postgres connection ([README.md:110-120](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L110-L120)).
-- `S3_BUCKET`, `S3_REGION` — image storage ([README.md:99-108](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L99-L108)).
-- `SESSION_SECRET`, `CORS_ALLOWED_ORIGINS`, `PAY_SERVICE_URL` — wired in `server/app.ts` ([server/app.ts:171-220](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L171-L220)).
-- `PAY_SERVICE_TOKEN` — required only for `/api/v1/import`. If unset the route returns 503 and `imports.status` reports `not_configured` ([server/app.ts:76-81](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L76-L81), [README.md:148-153](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L148-L153)).
-- `GITHUB_TOKEN` — must be present at install time for any directory pulling `@jeffrey-keyser/*` from GitHub Packages ([AGENTS.md:21-27](https://github.com/Jeffrey-Keyser/image-studio/blob/main/AGENTS.md#L21-L27)).
-- `VITE_API_URL` — client must point at `https://images-api.jeffreykeyser.net` in prod; there is no same-origin `/api/*` proxy on the SPA host ([README.md:130-134](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L130-L134)).
+## Configuration
+
+- Database variables: `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_PORT` ([README.md:L185-L191](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L185-L191)).
+- Required fields include `SESSION_SECRET`, `JWT_SECRET`, and `PAY_SERVICE_URL`. The process fails if they are missing or still set to the placeholder ([server/config/env.ts:L149-L173](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/config/env.ts#L149-L173)).
+- `PAY_SERVICE_TOKEN` gates import. Without it, `/api/v1/import` returns 503 ([server/middleware/serviceAuth.ts:L31-L37](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/middleware/serviceAuth.ts#L31-L37)).
+- `SOLO_VAULT_TOKEN` is required for generation ([server/services/soloVault.ts:L16-L18](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/soloVault.ts#L16-L18)).
+- `VITE_API_URL` must point at the API host ([README.md:L205](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/README.md#L205)).
+- Storyboard writes are disabled when `IMAGE_STUDIO_STORYBOARD_WRITES_ENABLED` is `false` ([server/routes/versions/v1/storyboards.ts:L12-L16](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/routes/versions/v1/storyboards.ts#L12-L16)).
 
 ## Observability
 
-- **Liveness:** `GET /health` (lightweight) backed by `createDatabaseHealthCheck(pool)` ([server/app.ts:226-234](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L226-L234), [README.md:86](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L86)).
-- **Deploy gate:** `GET /api/v1/diagnostics/deploy` — `status`, `build.buildSha/builtAt`, `database.{ok,latencyMs}`, `imports.status` ([README.md:142-153](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L142-L153)).
-- **Full probe:** `GET /api/v1/diagnostics/detailed` (public; includes upstream Pay probe) ([README.md:84](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L84), [server/app.ts:95-99](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L95-L99)).
-- **Logs:** `morgan` dev format via ESF preset; `console.error` per-request via `errorHandling.logger` ([server/app.ts:192-194](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L192-L194), [server/app.ts:268-282](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L268-L282)).
-- **Auto-issue on error:** `githubErrorMiddleware({ repo: "Jeffrey-Keyser/image-studio" })` opens GitHub issues for unhandled errors ([server/app.ts:301-303](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L301-L303)).
+- Generation state changes emit structured JSON log lines ([server/services/generationService.ts:L60-L71](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/services/generationService.ts#L60-L71)).
+- Unhandled errors are logged with method and path ([server/app.ts:L274-L280](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L274-L280)). A GitHub issue middleware is registered for the repo ([server/app.ts:L308](https://github.com/Jeffrey-Keyser/image-studio/blob/cc09e9afb77781ab37b1237f3341edbe1e5425f9/server/app.ts#L308)).
+- Log shipping and alerting are unknown.
 
-## Failure modes / on-call
+## Documented versus verified
 
-- **Deploy verification fails** → `deploy.sh` exits non-zero. Either backend never came up (15 curl attempts), or `build.buildSha` mismatch ([deploy.sh:42-65](https://github.com/Jeffrey-Keyser/image-studio/blob/main/deploy.sh#L42-L65)).
-- **`imports.status = not_configured`** → `PAY_SERVICE_TOKEN` not set on the host. Not a deploy blocker; only `/api/v1/import` is degraded ([server/app.ts:74-81](https://github.com/Jeffrey-Keyser/image-studio/blob/main/server/app.ts#L74-L81), [README.md:148-153](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L148-L153)).
-- **`401 unauthenticated` from `npm.pkg.github.com`** → `GITHUB_TOKEN` missing during install ([AGENTS.md:24-27](https://github.com/Jeffrey-Keyser/image-studio/blob/main/AGENTS.md#L24-L27)).
-- **API calls to `images.jeffreykeyser.net/api/*`** → return SPA shell HTML, not JSON. Fix `VITE_API_URL` ([README.md:130-134](https://github.com/Jeffrey-Keyser/image-studio/blob/main/README.md#L130-L134)).
+- **Verified in source:** scripts, route paths, health and deploy checks, and config defaults.
+- **Documented only:** the systemd units, Cloudflare routes, webhook, and uptime monitors.
+- **Not verified:** whether the deployed hostnames match the README, and whether AI Proxy is reachable from production.

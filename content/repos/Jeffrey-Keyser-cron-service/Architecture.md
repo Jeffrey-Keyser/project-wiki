@@ -1,53 +1,49 @@
 ---
-title: Architecture
-description: Internal modules of cron-service — Express API, node-cron scheduler, PostgreSQL store, RabbitMQ publisher, bridge proxy.
+title: "Architecture"
+description: "Components and contracts of cron-service: Express routers, the node-cron scheduler, PostgreSQL run ledger, RabbitMQ adapter, and the optional bridge proxy."
 ---
 
 # Architecture
 
-`cron-service` is a single Node process. `src/index.ts` bootstraps env validation, the DB pool, the RabbitMQ connection, the scheduler, and the Express app ([src/index.ts:1-162](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L1-L162)).
+cron-service runs as one Node process. Startup validates environment variables, checks Postgres, connects to RabbitMQ, loads enabled jobs, starts the downstream reconciler, and then listens for HTTP ([src/index.ts:142-160](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L142-L160)).
 
 ```mermaid
 flowchart LR
-  UI[SPA<br/>public/index.html] --> API
-  Client[API client<br/>Bearer CRON_API_KEY] --> API
-  API[Express app<br/>src/index.ts] -->|/api/jobs| JobsRoute[jobs router]
-  API -->|/api/runs| RunsRoute[runs router]
-  API -->|/api/bridge| BridgeRoute[bridge proxy]
-  API -->|/api/message-types| MTRoute[message-types]
-  JobsRoute --> DB[(PostgreSQL<br/>cron_jobs, cron_job_runs)]
-  JobsRoute --> Sched[Scheduler<br/>node-cron tasks]
-  Sched --> DB
-  Sched --> Rabbit[RabbitMQ<br/>cron.jobs exchange]
-  Sched --> Email[Email alerter<br/>nodemailer]
-  BridgeRoute -. HTTP .-> Openclaw[openclaw-bridge<br/>:3099 admin API]
-  Rabbit --> Subs[Subscriber services]
+  Ops["Operator browser or API client"]
+  App["Express app with routers"]
+  Sched["Scheduler with node-cron tasks"]
+  Db["PostgreSQL job and run tables"]
+  Mq["RabbitMQ broker"]
+  Subs["Subscriber services and consumers unknown"]
+  Mail["SMTP alert transport optional"]
+  Bridge["openclaw-bridge admin API optional"]
+  Ops -->|"HTTP JSON with bearer key for writes"| App
+  App -->|"CRUD and run queries"| Db
+  App -->|"create and manual trigger"| Sched
+  Sched -->|"run and stage writes"| Db
+  Sched -->|"publish events"| Mq
+  Sched -->|"failure alerts"| Mail
+  Mq -->|"routing key delivery"| Subs
+  App -->|"api bridge proxy"| Bridge
 ```
 
-## Role contracts
+## Components and contracts
 
-**Bootstrap & HTTP host** — `src/index.ts` wires routers, mounts CORS, request logging, static SPA, error mapper, `/api/health`, and SIGTERM/SIGINT shutdown that stops the scheduler and closes RabbitMQ + DB ([src/index.ts:24-137](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L24-L137)).
+- **HTTP host.** Mounts CORS, JSON parsing, `/api` request logging, static files, the four API routers, the error mapper, health routes, and an SPA fallback ([src/index.ts:27-120](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L27-L120)). Shutdown on SIGTERM or SIGINT stops the scheduler, then closes RabbitMQ and the DB pool ([src/index.ts:122-140](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L122-L140)).
+- **Env validation.** `validateEnv()` exits if `DATABASE_URL`, `RABBITMQ_URL`, or `CRON_API_KEY` is missing ([src/validate-env.ts:1-10](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/validate-env.ts#L1-L10)).
+- **Auth.** `requireApiKey` checks the bearer token with `timingSafeEqual` ([src/middleware/auth.ts:5-28](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/middleware/auth.ts#L5-L28)). It guards job create, update, delete, and trigger, and the two run completion routes ([src/routes/jobs.ts:60](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/jobs.ts#L60), [src/routes/runs.ts:91](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/runs.ts#L91)).
+- **Jobs router.** CRUD over `cron_jobs`. Update accepts retry settings with validation ([src/routes/jobs.ts:97-156](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/jobs.ts#L97-L156)). Job responses add `schedule_human` and `next_run_at` ([src/routes/jobs.ts:241-250](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/jobs.ts#L241-L250)).
+- **Runs router.** Lists runs with filters for status, dispatch and downstream status, stage, and correlation ID. The limit is capped at 100 ([src/routes/runs.ts:37-83](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/runs.ts#L37-L83)).
+- **Scheduler.** Holds a map from job ID to task and runs the publish path with retries ([src/services/scheduler.ts:38-52](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L38-L52), [src/services/scheduler.ts:239-256](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L239-L256)). Once RabbitMQ accepts an event, later persistence failures do not re-publish ([src/services/scheduler.ts:207-223](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L207-L223)).
+- **RabbitMQ adapter.** Asserts the shared exchange from the contracts package at connect time and reconnects with exponential backoff up to 10 attempts ([src/services/rabbit.ts:24-75](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/rabbit.ts#L24-L75)).
+- **Message types route.** `GET /api/message-types` returns `CronTargets` from the contracts package ([src/routes/message-types.ts:6-8](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/message-types.ts#L6-L8)). The contents of that export are not in the provided excerpts.
+- **Bridge proxy.** Forwards three admin routes to `BRIDGE_HOST:BRIDGE_PORT`, defaulting to `localhost:3099`, with a 5 second timeout ([src/routes/bridge.ts:6-7](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/bridge.ts#L6-L7), [src/routes/bridge.ts:13-20](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/routes/bridge.ts#L13-L20)).
+- **Email alerts.** Uses SMTP only when `SMTP_HOST` is set. Otherwise it logs to stdout ([src/services/email.ts:3-15](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/email.ts#L3-L15), [src/services/email.ts:20-23](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/email.ts#L20-L23)).
+- **Schema.** Run lifecycle is an append-only stage ledger in `cron_job_run_stages`, with dispatch and downstream status kept as separate fields on the run ([schema.sql:22-52](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/schema.sql#L22-L52)).
+- **Health.** Reports database ping, RabbitMQ connection state, scheduled job count, and reconciler health ([src/index.ts:82-106](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/index.ts#L82-L106)).
 
-**Env validation** — `validateEnv()` exits the process if `DATABASE_URL`, `RABBITMQ_URL`, or `CRON_API_KEY` is missing; called before any imports that touch them ([src/validate-env.ts:1-11](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/validate-env.ts#L1-L11), [src/index.ts:1-4](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L1-L4)).
+## Contract notes
 
-**Auth middleware** — `requireApiKey` parses `Authorization: Bearer …`, compares against `CRON_API_KEY` with `timingSafeEqual`. Applied to POST/PUT/DELETE on `/api/jobs*` and `POST /api/jobs/:id/trigger` ([src/middleware/auth.ts:5-29](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/middleware/auth.ts#L5-L29), [src/routes/jobs.ts:67-221](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/jobs.ts#L67-L221)).
-
-**Jobs router** — full CRUD over `cron_jobs`. Creation uses `INSERT … ON CONFLICT (name, schedule) DO UPDATE SET name = cron_jobs.name RETURNING *, (xmax = 0) AS inserted` so retries return the existing row instead of erroring ([src/routes/jobs.ts:78-104](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/jobs.ts#L78-L104)). Validates cron expressions through `node-cron` and decorates rows with `cronstrue` human text + `cron-parser` next-run ([src/routes/jobs.ts:240-255](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/jobs.ts#L240-L255)).
-
-**Runs router** — paginated read of `cron_job_runs` joined to `cron_jobs.name`, capped at 100 per request ([src/routes/runs.ts:6-30](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/runs.ts#L6-L30)).
-
-**Scheduler** — singleton in `src/services/scheduler.ts`. Holds a `Map<jobId, ScheduledTask>`; `loadJobs()` reads enabled rows on boot, `scheduleJob` / `unscheduleJob` / `refreshJob` keep the map in sync with DB writes ([src/services/scheduler.ts:12-46](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L12-L46), [src/services/scheduler.ts:149-170](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L149-L170)). `executeJob` inserts a `running` row, calls `attemptPublish` which retries with `retry_delay_ms * backoff_multiplier^retryCount`, then updates the run + job-health columns ([src/services/scheduler.ts:57-147](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/scheduler.ts#L57-L147)).
-
-**RabbitMQ adapter** — single `Channel`, reconnects on `error` / `close` with exponential backoff up to 10 attempts. Asserts the shared `CronExchange` from `@jeffrey-keyser/message-contracts` at connect time ([src/services/rabbit.ts:24-75](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/rabbit.ts#L24-L75)). `publishCronEvent` sends a `CronJobTriggered` message; `publish` is a generic fallback for custom exchanges or direct queues ([src/services/rabbit.ts:80-109](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/rabbit.ts#L80-L109)).
-
-**DB pool** — thin wrapper exporting `query` and `close` over a single `pg.Pool` bound to `DATABASE_URL` ([src/services/db.ts:1-14](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/db.ts#L1-L14)).
-
-**Email alerter** — lazily constructs a nodemailer transport if `SMTP_HOST` is set; logs to stdout instead when SMTP isn't configured ([src/services/email.ts:1-35](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/services/email.ts#L1-L35)).
-
-**Bridge proxy** — `/api/bridge/*` forwards to the `openclaw-bridge` admin API at `BRIDGE_HOST:BRIDGE_PORT` (default `localhost:3099`). Lets the SPA inspect/edit handler config without exposing the bridge directly ([src/routes/bridge.ts:1-64](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/bridge.ts#L1-L64)).
-
-**Message types route** — read-only `GET /api/message-types` returning `CronTargets` from `@jeffrey-keyser/message-contracts` so the UI can list known consumers ([src/routes/message-types.ts:1-10](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/routes/message-types.ts#L1-L10)).
-
-**Domain types** — `CronJob`, `CronJobRun`, `CreateJobInput`, `UpdateJobInput` in `src/models/types.ts` mirror the SQL schema and shape route inputs ([src/models/types.ts:1-55](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/models/types.ts#L1-L55), [schema.sql:3-30](https://github.com/Jeffrey-Keyser/cron-service/blob/main/schema.sql#L3-L30)).
-
-**Logging** — `pino`-backed `createLogger(scope)` from `src/lib/logger.ts` is the single log entry point; HTTP requests are logged with method/path/status/duration in `src/index.ts` ([src/index.ts:30-47](https://github.com/Jeffrey-Keyser/cron-service/blob/main/src/index.ts#L30-L47), [package.json:25](https://github.com/Jeffrey-Keyser/cron-service/blob/main/package.json#L25)).
+- Default-exchange messages use `CronJobTriggered` with `correlation_id` ([src/services/scheduler.ts:192-200](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L192-L200)).
+- Custom-exchange messages carry the raw payload plus `correlation_id` ([src/services/scheduler.ts:184-190](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/src/services/scheduler.ts#L184-L190)).
+- The contracts package is pinned at version 1.19.0. Its source is not among the provided excerpts ([package.json:15](https://github.com/Jeffrey-Keyser/cron-service/blob/8ad749c7ce3502deec7e6699375aabad8f6688b3/package.json#L15)).

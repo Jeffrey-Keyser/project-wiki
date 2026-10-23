@@ -1,138 +1,77 @@
 ---
-title: dev-inbox — Iteration Loop
-description: One slice lifecycle in dev-inbox — from plan emission through tmux worker execution, review, merge, and next-slice continuation.
+title: "Iteration Loop"
+description: "How contributors change dev-inbox: focused tests, make targets, generated contracts, and the daily CI workflow."
 ---
 
-This page traces a single slice from the moment a plan exists through
-merge. The flow is the same whether the run was started by
-`/orchestrate` or by `scripts/manager-standalone.sh` — only the entry
-point differs (see [Operations](../operations/)).
+# Iteration Loop
 
-## Diagram — one slice end to end
+This page covers changing dev-inbox itself. For the runtime pipeline that delivers changes to target repositories, see [Architecture](../architecture/).
+
+## Inner loop
+
+The repository defines four test entry points ([README.md:L256-L268](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L256-L268)):
+
+| Command | What it runs |
+| --- | --- |
+| `make test-short` | Fast Go inner loop |
+| `bash scripts/test-<area>.sh` | Focused shell suite for the area being changed |
+| `npm test` | Bash portion of the suite |
+| `npm run test:all` | Full local suite |
+
+In `package.json`, `npm test` is `bash scripts/run-tests.sh`. `test:all` adds `make test` and `make test-lint` ([package.json:L7-L8](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/package.json#L7-L8)).
+
+Expected practice ([README.md:L280-L284](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L280-L284)):
+
+- Always run the fastest focused checks that cover the changed behavior.
+- Add `make test-short` and `make test-lint` when the scope warrants them.
+- Don't wait on `npm test` or `test:all` unless someone explicitly asks for a full run.
+
+`make test` uses the Go race detector. It bounds parallelism on memory-constrained Linux hosts; inspect the resolved flags with `make print-test-flags` ([README.md:L288-L290](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L288-L290)).
+
+## Local fixtures
+
+Local dev mode tests scripts without a live Agency HQ, NanoClaw, RabbitMQ, or real agent CLIs ([docs/LOCAL-DEV-MODE.md:L3](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/LOCAL-DEV-MODE.md#L3)). It provides three substitutes ([docs/LOCAL-DEV-MODE.md:L21-L23](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/LOCAL-DEV-MODE.md#L21-L23)):
+
+- mock agent CLIs under `scripts/test-fixtures/`;
+- a mock Agency HQ HTTP server;
+- environment overrides.
+
+Run it with `bash scripts/run-tests.sh local-dev` ([docs/LOCAL-DEV-MODE.md:L12](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/LOCAL-DEV-MODE.md#L12)).
+
+## Area-specific checks
+
+- **Forwarded environment variables.** When adding a forwarded variable, append it to `agent_provider_env_exports` ([docs/agent-env-contract.md:L34](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/agent-env-contract.md#L34)). Then run `bash scripts/run-tests.sh agent-cli` ([docs/agent-env-contract.md:L55](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/agent-env-contract.md#L55)).
+- **Harness probes.** A new probe needs a passing case and a failing case in `scripts/test-harness-probe.sh`. Keep probes role-agnostic ([docs/agent-harness-contract.md:L52-L60](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/agent-harness-contract.md#L52-L60)).
+- **Generated contracts.** Generators support `--check` and fail when output is stale:
+  - Event types: rerun `scripts/generate-event-type-contract.sh` ([cmd/event-type-contract-gen/main.go:L16](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/event-type-contract-gen/main.go#L16), [cmd/event-type-contract-gen/main.go:L43-L45](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/event-type-contract-gen/main.go#L43-L45)).
+  - Status contracts follow the same pattern ([cmd/status-contract-gen/main.go:L83-L85](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/status-contract-gen/main.go#L83-L85)).
+- **Go-owned plan-manager behavior.** Many Bash plan-manager tests were ported to, or are covered by, Go tests, so look in Go packages for that coverage ([docs/bash-test-retirement-dispositions.md:L13-L22](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/bash-test-retirement-dispositions.md#L13-L22)).
+
+## CI
+
+The complete suite (Bash, Go race, and lint) runs daily at 06:17 UTC against the latest `main`. It can also be started manually ([README.md:L270-L275](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L270-L275)). Key points:
+
+- It is the authoritative full-suite signal ([README.md:L277-L279](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L277-L279)).
+- Pushes and PRs do **not** trigger it.
+- It is not a prerequisite for a push or merge.
+- A red run means the latest `main` needs triage. It does not invalidate focused verification recorded earlier ([README.md:L284-L286](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L284-L286)).
+
+The CI host is Ubuntu 24.04 with Go from `go.mod` and Node 24. Its gate commands are documented ([docs/ci-testing.md:L3-L14](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/ci-testing.md#L3-L14)).
+
+The Image Studio phone proofs are excluded operator gates unless run explicitly ([docs/ci-testing.md:L17-L21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/ci-testing.md#L17-L21)).
+
+The Tier 4 durability sweep is advisory and disabled by default ([README.md:L290-L291](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L290-L291)).
 
 ```mermaid
-sequenceDiagram
-  autonumber
-  participant M as Manager
-  participant T as tmux session
-  participant W as Worker in worktree
-  participant FS as results tasks dir
-  participant R as Reviewer
-  participant Main as Default branch
-
-  M->>T: ensure_tmux_session plus new worker window
-  M->>W: spawn-worker.sh (git worktree add new branch)
-  W->>W: implement slice, commit on branch
-  W->>FS: write-result.sh writes result.json (completed)
-  W-->>M: tmux wait-for worker signal
-  M->>R: spawn-reviewer.sh in same worktree
-  R->>FS: write-review.sh writes review.json
-  R-->>M: tmux wait-for reviewer signal
-  alt review approved
-    M->>Main: merge branch, push, branch-cleanup
-    M->>FS: dispatch run_complete or continue to next slice
-  else changes requested (attempt under maxRevisions)
-    M->>W: spawn-revision.sh in same worktree
-    W->>FS: revision-N.md plus new commit
-    W-->>R: re-review
-  end
+flowchart TD
+    A["Edit code"] --> B["Run focused test script"]
+    B --> C["make test-short"]
+    C --> D{"Scope warrants more?"}
+    D -->|"yes"| E["make test-lint or make test"]
+    D -->|"no"| F["Commit and push to main"]
+    E --> F
+    F --> G["Daily full test suite workflow"]
+    G --> H{"Suite red?"}
+    H -->|"yes"| I["Triage latest main revision"]
+    H -->|"no"| J["Done"]
 ```
-
-## Stage notes
-
-### 1. Plan exists, slice is queued
-
-The Planner has already written `results/<runId>/plan.json`. That file
-is the canonical task list and is consumed by the Manager to dispatch
-slices
-([CLAUDE.md:21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L21)).
-Manager dispatch obeys a global concurrency budget — at most **12**
-agent CLI processes at once — enforced by
-[`scripts/acquire-slot.sh:22`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/acquire-slot.sh#L22)
-(`MAX_SLOTS="${1:-${DEV_INBOX_MAX_SLOTS:-12}}"`).
-
-### 2. tmux session + worker pane
-
-The Manager ensures one tmux session per run, named
-`dev-inbox-<run-token>` via
-[`tmux_session_name_for_run`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/spawn-common.sh#L293-L296)
-and creates / reuses windows through
-[`ensure_tmux_session`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/spawn-common.sh#L311-L350).
-Each Worker runs in its own window inside that session.
-
-### 3. Worker executes in a fresh worktree
-
-`scripts/spawn-worker.sh` creates an isolated branch and worktree for
-the slice:
-
-```bash
-git worktree add -b "$BRANCH_NAME" "$WORKTREE_DIR" "$WORKTREE_BASE_REF"
-```
-
-([spawn-worker.sh:122](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-worker.sh#L122)).
-The Worker commits inside that worktree; the rest of the orchestrator
-treats the worktree as the durable artifact of the slice
-([CLAUDE.md:8](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L8),
-[CLAUDE.md:26](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L26)).
-
-### 4. Result file emission
-
-On Worker exit, `scripts/write-result.sh` lands the canonical result
-JSON at `results/<runId>/tasks/<taskId>/result.json`. The status is
-derived from the exit code: `completed`, `failed`, `blocked`, or
-`aborted`
-([CLAUDE.md:27](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L27)).
-A `worker_complete` event is appended to
-`dispatch-events.jsonl` so the Manager can wake up
-([CLAUDE.md:48](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L48)).
-
-### 5. Reviewer pass
-
-The Manager spawns a Reviewer agent that re-enters the same worktree
-and writes a structured verdict via `scripts/write-review.sh` at
-`tasks/<taskId>/review.json`
-([CLAUDE.md:33](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L33)).
-
-### 6. Revision loop (bounded)
-
-If the Reviewer requests changes and the per-task `attempt` is below
-the `maxRevisions` budget, the Manager re-launches the Worker in the
-**same** worktree using `scripts/spawn-revision.sh` plus the revision
-prompt template. Each pass writes a fresh
-`tasks/<taskId>/revision-<attempt>.md` artifact and a new commit before
-the Reviewer runs again
-([CLAUDE.md:30-31](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L30-L31)).
-`maxRevisions` is chosen by the Planner alongside the slice itself
-([CLAUDE.md:21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L21)).
-
-### 7. Merge and cleanup
-
-Once a slice's review is approved, the Manager merges the worker
-branch into the default branch, pushes, and the dedicated branch /
-worktree cleanup scripts retire the artifacts:
-
-- [`scripts/worktree-cleanup.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/worktree-cleanup.sh)
-  removes the on-disk worktree once the branch is merged.
-- [`scripts/branch-cleanup.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/branch-cleanup.sh)
-  triages remote `dev-inbox/*` branches: auto-deletes those already on
-  main, prompts Land / Discard / Defer / Skip for the rest
-  ([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)).
-
-### 8. Next slice
-
-Manager dispatch continues until the plan is exhausted. The final
-event in `dispatch-events.jsonl` will be one of `run_complete`,
-`run_failed`, or `run_aborted`
-([CLAUDE.md:48](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L48)),
-matching the canonical liveness markers `startup.json` /
-`failed.json` written by
-[`scripts/lib/run-state.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/run-state.sh)
-([CLAUDE.md:35](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md#L35)).
-
-## What this leaves out
-
-- Failure classification, observer side-channel events, and the
-  partially-rolled-out Go projector backend are summarized in
-  [Architecture → How signals travel](../architecture/#how-signals-travel).
-- Operational entry points and inspection commands live in
-  [Operations](../operations/).

@@ -1,45 +1,51 @@
 ---
-title: Glossary
-description: Switchboard-specific terms and how they map to source files.
+title: "Glossary"
+description: "Switchboard project terms with the source files that define them."
 ---
 
 # Glossary
 
 ### Feature toggle
-A boolean switch resolvable at request time, scoped global / application / user. CRUD in `FeatureToggleService` and persisted via `FeatureToggleDal` ([server/services/FeatureToggleService.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services/FeatureToggleService.ts), [README.md:222-235](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L222-L235)).
+A boolean flag resolved per request. The service handles CRUD, toggling, and batch checks ([FeatureToggleService.ts:L21-L28](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/FeatureToggleService.ts#L21-L28), [FeatureToggleService.ts:L288-L325](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/FeatureToggleService.ts#L288-L325)).
 
 ### Config value
-A typed key (string / number / boolean / json) used for runtime tunables like rate limits and URLs. Managed by `ConfigService` ([server/services/ConfigService.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services/ConfigService.ts), [README.md:238-252](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L238-L252)).
+A typed value stored under a key. The supported types are string, number, boolean, and json ([ConfigService.ts:L19-L24](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/ConfigService.ts#L19-L24), [ConfigService.ts:L258-L294](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/ConfigService.ts#L258-L294)).
 
-### Scope (hierarchical resolution)
-Lookup precedence used when resolving a feature or config: user override > application override > global default. Implemented by `ScopeResolver` ([server/services/ScopeResolver.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services/ScopeResolver.ts), [README.md:196-220](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L196-L220)).
+### Scope
+Resolution priority is user, then application, then global ([ScopeResolver.ts:L17-L20](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/ScopeResolver.ts#L17-L20)).
 
 ### Application
-A consumer of Switchboard identified by an API key (bcrypt-hashed at rest). Each application can scope its own overrides and allowed CORS origins ([server/services/ApplicationService.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services/ApplicationService.ts), [README.md:598-624](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L598-L624)).
+A consumer identified by an API key. Keys are generated as random hex and stored as bcrypt hashes ([ApplicationService.ts:L11-L14](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/ApplicationService.ts#L11-L14), [ApplicationService.ts:L208-L218](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/ApplicationService.ts#L208-L218)).
 
-### Rollout
-Progressive enablement of a feature for a subset of users / apps. Evaluated by `RolloutEvaluator`; example strategies documented in `ROLLOUT_STRATEGIES_EXAMPLES.md` ([server/services/RolloutEvaluator.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services/RolloutEvaluator.ts), [ROLLOUT_STRATEGIES_EXAMPLES.md](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/ROLLOUT_STRATEGIES_EXAMPLES.md)).
+### Rollout strategy
+A rule that enables a feature for part of its audience. The types are percentage, whitelist, blacklist, and gradual ([RolloutEvaluator.ts:L8-L14](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/RolloutEvaluator.ts#L8-L14), [RolloutEvaluator.ts:L45-L60](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/RolloutEvaluator.ts#L45-L60)).
+
+### Bucket
+The 0 to 99 value from SHA-256 of the identifier and feature key, used for percentage rollouts ([RolloutEvaluator.ts:L290-L302](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/RolloutEvaluator.ts#L290-L302)).
 
 ### Hybrid cache
-The default caching strategy: in-memory `lru-cache` (L1, 1–5 ms) backed by Upstash Redis (L2, 20–30 ms) with DB fallback. Configurable via `CACHE_STRATEGY` env var: `hybrid` | `memory` | `upstash` | `none` ([server/services/cache/HybridCacheClient.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services/cache/HybridCacheClient.ts), [CLAUDE.md:330-372](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L330-L372)).
+The L1 in-memory cache backed by L2 Upstash. It is one of four strategies: `memory`, `upstash`, `hybrid`, or `none` ([cache/index.ts:L43-L54](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/cache/index.ts#L43-L54), [HybridCacheClient.ts:L5-L13](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/cache/HybridCacheClient.ts#L5-L13)).
 
 ### EventBus
-Internal pub/sub layer that publishes mutation events (`feature.*`, `config.*`, `application.*`) to Redis and replays via SSE. Buffers the last 1000 events for reconnection ([server/services/EventBus.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/services/EventBus.ts), [CLAUDE.md:227-263](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L227-L263)).
+The service that publishes change events and buffers them for replay. Its buffer is capped at 1000 events for one hour ([EventBus.ts:L7-L19](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/EventBus.ts#L7-L19), [EventBus.ts:L32-L33](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/EventBus.ts#L32-L33)).
 
 ### SSE stream
-`GET /api/v1/realtime/events` — long-lived HTTP response that emits `UpdateEvent` records; clients use the `useRealtimeUpdates` React hook for auto-reconnect ([server/routes/realtime.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/routes/realtime.ts), [CLAUDE.md:265-303](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L265-L303)).
+`GET /api/v1/realtime/events` streams events over Server-Sent Events. It accepts type, application, and entity-key filters ([realtime.ts:L88-L96](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/routes/realtime.ts#L88-L96)).
 
 ### Pay auth
-Switchboard does not own user accounts; admin auth is proxied to `pay.jeffreykeyser.net` via `setupPayAuth` from `@jeffrey-keyser/pay-auth-integration` ([server/app.ts:48-88](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/app.ts#L48-L88), [README.md:598-610](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L598-L610)).
+Admin authentication delegated to the Pay service through `setupPayAuth`. The default URL is `https://pay.jeffreykeyser.net` ([app.ts:L59](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/app.ts#L59), [app.ts:L86](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/app.ts#L86)).
 
-### API key (consumer auth)
-Per-application secret prefixed `sw_live_...`, bcrypt-hashed in Postgres, validated by `apiKeyAuth` middleware on consumer endpoints ([server/middleware/apiKeyAuth.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/middleware/apiKeyAuth.ts), [README.md:42-52](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L42-L52)).
+### API key
+A secret sent as `X-API-Key` or `Authorization: ApiKey`, validated by `apiKeyAuth` ([apiKeyAuth.ts:L5-L10](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/middleware/apiKeyAuth.ts#L5-L10), [apiKeyAuth.ts:L18-L35](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/middleware/apiKeyAuth.ts#L18-L35)).
 
 ### Audit log
-Immutable record of every mutation (who, what, when, before/after). Served at `/api/v1/audit-logs` ([server/dal/AuditLogDal.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/dal/AuditLogDal.ts), [README.md:626-635](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/README.md#L626-L635)).
+A record written on feature mutations when a user ID is supplied ([FeatureToggleService.ts:L73-L80](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/services/FeatureToggleService.ts#L73-L80), [AuditLogDal.ts:L34](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/dal/AuditLogDal.ts#L34)).
 
-### DAL (BaseDal)
-Data Access Layer base class that wraps `pg` with parameterized SQL helpers and a `withTransaction` method. All concrete DALs extend it ([server/dal/BaseDal.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/dal/BaseDal.ts), [CLAUDE.md:469-474](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L469-L474)).
+### DAL
+Data access layer. `BaseDal` wraps the `pg` pool and provides transactions ([BaseDal.ts:L4-L13](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/dal/BaseDal.ts#L4-L13)).
 
 ### API versioning
-URL-prefixed (`/api/v1/`) with `Accept-Version` header support and 301 legacy redirects from `/v1/*`. Middleware in `server/middleware/versioning.ts` ([server/middleware/versioning.ts](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/server/middleware/versioning.ts), [CLAUDE.md:147-186](https://github.com/Jeffrey-Keyser/Switchboard/blob/main/CLAUDE.md#L147-L186)).
+Versioned routes live under `/api/v1`. Legacy `/v1/*` requests get a 301 redirect ([versioning.ts:L58-L62](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/server/middleware/versioning.ts#L58-L62)).
+
+### Beelink deployment
+The documented self-hosted deployment target on a mini-PC, replacing the retired AWS path ([DEPLOYMENT_BEELINK.md:L3-L6](https://github.com/Jeffrey-Keyser/Switchboard/blob/f730264d34f112e64d6ba76a2efcd846c762d5bd/docs/DEPLOYMENT_BEELINK.md#L3-L6)).

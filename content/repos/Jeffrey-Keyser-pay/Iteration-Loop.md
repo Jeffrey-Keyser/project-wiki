@@ -1,42 +1,47 @@
 ---
-title: Iteration Loop
-description: Typical change cycle for a feature or fix in the Pay repo, from edit to merged and deployed.
+title: "Iteration Loop"
+description: "Contributor workflow for Pay: local setup, dev server, tests, lint and build gates, and the VPS deploy script."
 ---
 
 # Iteration Loop
 
+The contributor loop runs from the `server/` directory. The scripts below are the ones defined in the snapshot.
+
 ```mermaid
 sequenceDiagram
-  participant Dev as Developer
-  participant Local as Local server
-  participant CI as Lint + Build + Tests
-  participant PR as GitHub PR
-  participant VPS as VPS (systemd pay.service)
-
-  Dev->>Local: edit code under server/
-  Dev->>Local: npm start (nodemon hot reload)
-  Dev->>Local: npm test / npm run test:integration
-  Dev->>CI: npm run lint && npm run build
-  Dev->>PR: push branch, open PR
-  PR->>PR: review + merge to main
-  Dev->>VPS: ssh + ./deploy.sh
-  VPS->>VPS: git pull, npm install, npm run build
-  VPS->>VPS: systemctl restart pay
+  participant Dev as "Developer"
+  participant Local as "Local server directory"
+  participant Gate as "Lint and build gate"
+  participant Git as "GitHub main branch"
+  participant Host as "VPS host"
+  Dev->>Local: "npm install then npm run migrate"
+  Dev->>Local: "npm start for nodemon hot reload"
+  Dev->>Local: "npm test and npm run test:docker"
+  Dev->>Gate: "npm run lint then npm run build"
+  Dev->>Git: "merge reviewed change to main"
+  Dev->>Host: "run deploy.sh over SSH"
+  Host->>Host: "git pull, npm install, npm run build"
+  Host->>Host: "npm run migrate:local then restart pay"
 ```
 
 ## Steps
 
-1. **Set up locally** — install Node 20, PostgreSQL, Redis; populate `server/.env`; `npm install` and `npm run migrate` ([CONTRIBUTING.md:38-112](https://github.com/Jeffrey-Keyser/pay/blob/main/CONTRIBUTING.md#L38-L112)).
-2. **Hot-reload dev** — `npm start` runs nodemon over `ts-node ./bin/www.ts` ([server/package.json:9](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L9), [CONTRIBUTING.md:129-136](https://github.com/Jeffrey-Keyser/pay/blob/main/CONTRIBUTING.md#L129-L136)).
-3. **Add route or service** — define DTOs in `pay-api-types`, add route under `/server/routes/`, wire via `DomainServiceContainer`, document with Swagger JSDoc ([CLAUDE.md:514-521](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L514-L521)).
-4. **Schema change** — author migration in shared `database-base-config` repo, publish, bump version here, run `npm run migrate` ([CLAUDE.md:425-465](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L425-L465)).
-5. **Test** — unit tests via Jest (`npm test`), integration via Vitest + Testcontainers (`npm run test:integration` or `npm run test:docker`) ([server/package.json:11-14](https://github.com/Jeffrey-Keyser/pay/blob/main/server/package.json#L11-L14), [CLAUDE.md:355-378](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L355-L378)).
-6. **Pre-commit gate** — `npm run lint` then `npm run build` always before commit ([CLAUDE.md:163-166](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L163-L166), [CONTRIBUTING.md:187-197](https://github.com/Jeffrey-Keyser/pay/blob/main/CONTRIBUTING.md#L187-L197)).
-7. **Open PR + merge** — review against main on GitHub.
-8. **Deploy** — `ssh <server> "cd /home/jkeyser/pay && ./deploy.sh"` performs `git pull`, build, kill port 3017, `systemctl restart pay` ([deploy.sh:1-17](https://github.com/Jeffrey-Keyser/pay/blob/main/deploy.sh#L1-L17), [CLAUDE.md:602-610](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L602-L610)).
+1. **Install and configure.** Run `npm install` in `server/`, copy `.env.example` to `.env`, and set database, Redis, JWT, and session values ([CONTRIBUTING.md:42-45](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CONTRIBUTING.md#L42-L45), [CONTRIBUTING.md:53-73](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CONTRIBUTING.md#L53-L73)).
+2. **Migrate.** `npm run migrate` maps to `db-migrate up` ([server/package.json:19](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L19)). The migration guide describes `node-pg-migrate`, but the package script is the source of truth ([docs/MIGRATION_SYSTEM_GUIDE.md:3](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/MIGRATION_SYSTEM_GUIDE.md#L3)).
+3. **Seed (optional).** `npm run seed:apps` is idempotent per the contributor guide ([server/package.json:38](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L38), [CONTRIBUTING.md:118-125](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CONTRIBUTING.md#L118-L125)).
+4. **Run locally.** `npm start` runs nodemon over `ts-node ./bin/www.ts` ([server/package.json:9](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L9)).
+5. **Test.** `npm test` runs Jest on unit paths ([server/jest.config.cjs:6-10](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/jest.config.cjs#L6-L10)). `npm run test:docker` brings up `docker-compose.test.yml` and runs the test runner ([server/package.json:15](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L15)). `npm run test:integration` runs Vitest against `tests/integration` ([server/package.json:14](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L14)).
+6. **Gate before commit.** `npm run lint` and `npm run build` are the documented checks ([CLAUDE.md:170-173](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CLAUDE.md#L170-L173), [server/package.json:8](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L8)).
+7. **Deploy.** `deploy.sh` pulls `main`, installs, builds, applies repo SQL migrations, frees port 3017, and restarts `pay` ([deploy.sh:5-22](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L5-L22)).
 
-## Auxiliary loops
+## CI status
 
-- **Type changes** propagate from `pay-api-types` package, never duplicated in this repo ([README.md:15-33](https://github.com/Jeffrey-Keyser/pay/blob/main/README.md#L15-L33)).
-- **Adapter swap** is driven by env var (`EMAIL_PROVIDER`, `STORAGE_PROVIDER`, `CACHE_PROVIDER`, `PAYMENT_PROVIDER`) — no code change needed ([CLAUDE.md:284-303](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L284-L303)).
-- **Legacy fallback** — AWS Lambda workflows (`lambda-push.yml`, `terraform_deploy.yml`) still exist and could be re-enabled, but the VPS path is live ([CLAUDE.md:619-630](https://github.com/Jeffrey-Keyser/pay/blob/main/CLAUDE.md#L619-L630)).
+Pipeline definitions are not in this snapshot excerpt. The README names GitHub Actions workflows only in the legacy AWS section ([README.md:187-195](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L187-L195)), so the gate is currently manual and documented, not verified as automated.
+
+## Schema changes
+
+`deploy.sh` runs `migrate:local`, which executes `dist/scripts/run-local-migrations.js` ([deploy.sh:12-16](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L12-L16), [server/package.json:28](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L28)). The script is not the same path as `npm run migrate`; contributors should run both when relevant.
+
+## Adding endpoints
+
+Add routes under `server/routes/`, document with Swagger JSDoc, and test both versioned and legacy paths ([CLAUDE.md:69-75](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CLAUDE.md#L69-L75)).

@@ -1,71 +1,80 @@
 ---
-title: Architecture
-description: Internal module layout of the AI Proxy Express server — routers, middleware, controllers, DAL, and provider adapters.
+title: "Architecture"
+description: "Components and contracts of the AI Proxy Express server: middleware pipeline, routers, domain services, DAL and provider adapters."
 ---
 
 # Architecture
 
-The server is a single Express 5 process composed by `@jeffrey-keyser/express-server-factory`. `app.ts` registers routers, middleware, auth, and Swagger; `bin/www.ts` (dev) and `dist/bin/www.js` (prod) boot it ([server/app.ts:1-30](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L1-L30), [server/package.json:6-9](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L6-L9)).
+AI Proxy runs as one Node process. `server/app.ts` builds a `ServerConfig` and passes it to `createExpressApp`. The resulting app is cached and returned by `getExpressApp()` ([server/app.ts:L121](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L121), [server/app.ts:L288-L298](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L288-L298)).
+
+`server/bin/www.ts` performs startup in this order ([server/bin/www.ts:L10-L26](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/bin/www.ts#L10-L26)):
+
+1. Initialise OpenTelemetry.
+2. Import the app.
+3. Call `listen`.
 
 ```mermaid
 flowchart LR
-  Client[Client App<br/>API key or JWT] --> Edge[Cloudflare Tunnel]
-  Edge --> Express[Express app.ts]
-
-  subgraph Middleware
-    CorrId[correlationId]
-    SvcKey[serviceApiKey]
-    PayAuth[Pay JWT / session]
-    AppAuth[applicationAuth]
-    Rate[rateLimit]
-    Cache[responseCache]
-    Usage[usageTracking]
-  end
-
-  Express --> CorrId --> SvcKey --> PayAuth
-  PayAuth --> Routers
-  AppAuth --> Routers
-
-  subgraph Routers
-    R1[applications]
-    R2[chat / chatAsync]
-    R3[transcription / tts]
-    R4[imageGeneration]
-    R5[usage / usageAggregation]
-    R6[diagnostics]
-  end
-
-  Routers --> Controllers
-  Controllers --> Providers[(OpenAI / Anthropic / Gemini SDKs)]
-  Controllers --> DAL[(DAL: Application, RequestLog,<br/>AsyncJob, ResponseCache)]
-  DAL --> PG[(PostgreSQL)]
-  Rate --> PG
-  Cache --> PG
-  Usage --> PG
+  Client["Client app"] --> Edge["Cloudflare Tunnel"]
+  Edge --> Corr["correlationId middleware"]
+  Corr --> SvcKey["serviceApiKey gate"]
+  SvcKey --> Pay["Pay auth middleware"]
+  Pay --> Routes["Routers under /v1, /auth, /internal, /api/v1"]
+  Routes --> AppAuth["applicationAuth"]
+  AppAuth --> Rate["rateLimit"]
+  Rate --> Managed["managedModel"]
+  Managed --> Budget["anthropicBudget"]
+  Budget --> Cache["responseCache"]
+  Cache --> Usage["usageTracking"]
+  Usage --> Ctrl["Controllers and domain services"]
+  Ctrl --> Prov["Provider clients"]
+  Prov --> Ext["OpenAI, Anthropic, Gemini, Meta, OpenRouter, ElevenLabs, TypeSafe"]
+  Ctrl --> DAL["DAL classes"]
+  Cache --> DAL
+  Usage --> DAL
+  DAL --> PG["PostgreSQL"]
 ```
 
-## Role contracts
+## Components
 
-**Entry point / composition.** `app.ts` wires routes, middleware, Pay auth, health checks, Swagger, and error handlers into a `ServerConfig` consumed by `createExpressApp` ([server/app.ts:114-211](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L114-L211)). The app instance is cached and lazily resolved via `getExpressApp` ([server/app.ts:278-290](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L278-L290)).
+**Global middleware.** A correlation-ID middleware runs first, followed by the service API key gate ([server/app.ts:L259-L264](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L259-L264)). After the routes, `githubErrorMiddleware` reports errors against `Jeffrey-Keyser/ai-proxy` ([server/app.ts:L281-L283](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L281-L283)).
 
-**Routers (`server/routes/`).** Thin Express routers declare HTTP shape and JSDoc Swagger annotations, delegating logic to controllers. Mount points are declared in `app.ts` — `/v1/applications`, `/v1/chat`, `/v1/chat/async`, `/v1/transcription`, `/v1/tts`, `/v1/image`, `/v1/diagnostics`, `/v1` (usage), `/api/v1` (usage aggregation) ([server/app.ts:197-210](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L197-L210)). The loopback-only budget status route `GET /internal/anthropic-budget` is defined in `server/routes/anthropicBudget.ts` ([server/routes/anthropicBudget.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/routes/anthropicBudget.ts)).
+**Factory settings.**
+- CORS is enabled and allows the `X-Model-Source` header.
+- The JSON body limit is 10 MB, sized for base64 images.
+- Sessions are stored in PostgreSQL ([server/app.ts:L130-L163](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L130-L163)).
 
-**Controllers (`server/controllers/`).** Provider-call orchestration lives here: `ApplicationsController`, `ChatController`, `ImageGenerationController`, `UsageController`. Controllers translate validated input into provider SDK calls and DAL writes ([server/controllers/ChatController.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/controllers/ChatController.ts)).
+**Pay auth.** `setupPayAuth` proxies authentication to the Pay service. A list of public routes bypasses it, including provider routes that use application keys instead ([server/app.ts:L63-L105](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L63-L105)).
 
-**Middleware (`server/middleware/`).**
-- `correlationId` stamps each request with an ID for log tracing, mounted first ([server/app.ts:250-253](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L250-L253)).
-- `serviceApiKey` enforces a coarse-grained gate via `AI_PROXY_API_KEY`, exempting public routes ([server/app.ts:254-256](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L254-L256)).
-- `applicationAuth` resolves `Authorization: Bearer app_live_…` keys to an `Application` row ([server/middleware/applicationAuth.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/applicationAuth.ts)).
-- `rateLimit` and `responseCache` short-circuit before the provider call ([server/middleware/rateLimit.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/rateLimit.ts), [server/middleware/responseCache.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/responseCache.ts)).
-- `anthropicBudget` short-circuits `/v1/chat` and `/v1/chat/async` with `429 ANTHROPIC_BUDGET_EXHAUSTED` once the monthly (or optional daily) Anthropic spend cap is reached ([server/middleware/anthropicBudget.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/anthropicBudget.ts)).
-- `usageTracking` runs after each request to write a `RequestLog` row ([server/middleware/usageTracking.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/usageTracking.ts)).
+**Routers.** All mount points are declared in one table ([server/app.ts:L203-L219](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L203-L219)). They include:
+- applications, chat, async chat, transcription, TTS, System One, image, usage and diagnostics
+- `/internal/model-consumers`
+- `/internal/anthropic-budget`
 
-**DAL (`server/dal/`).** `ApplicationDal`, `RequestLogDal`, `AsyncJobDal`, `ResponseCacheDal` extend a `BaseDal` from `@jeffrey-keyser/database-base-config` and execute parameterized SQL against the shared `pg.Pool` ([server/dal/ApplicationDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/dal/ApplicationDal.ts), [server/dal/RequestLogDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/dal/RequestLogDal.ts)).
+**Per-route pipelines.**
+- Chat runs application auth, rate limit, `managedModel('chat')`, the budget guard, cache and usage tracking ([server/routes/chat.ts:L351-L360](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/chat.ts#L351-L360)).
+- TTS has no cache step. Instead it tracks character counts manually when the audio stream ends ([server/routes/textToSpeech.ts:L104-L110](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/textToSpeech.ts#L104-L110), [server/routes/textToSpeech.ts:L173-L195](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/textToSpeech.ts#L173-L195)).
 
-**Domain (`server/domain/`).** Entities, value objects, and repository interfaces — the layer that keeps controllers free of raw SQL ([server/domain/README.md](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/domain/README.md)). Domain services such as `AnthropicBudgetService` sum per-request Anthropic cost for the current credit cycle ([server/domain/services/AnthropicBudgetService.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/domain/services/AnthropicBudgetService.ts)).
+**Domain services.** These cover chat completion, usage tracking, rate limiting, async jobs, job cleanup and health checks ([server/domain/services/index.ts:L1-L10](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/domain/services/index.ts#L1-L10)). `AnthropicBudgetService` prices successful `claude-%` rows for the current credit cycle and caches the result for 30 seconds ([server/domain/services/AnthropicBudgetService.ts:L18-L20](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/domain/services/AnthropicBudgetService.ts#L18-L20), [server/domain/services/AnthropicBudgetService.ts:L89-L96](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/domain/services/AnthropicBudgetService.ts#L89-L96)).
 
-**Infrastructure (`server/infrastructure/`).** Provider clients and diagnostics adapters live here, isolating SDK surfaces from controllers ([server/infrastructure/providers](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/infrastructure/providers)).
+**Provider layer.** `ProviderFactory` selects a client per model, so Anthropic-bound models are routed correctly ([server/routes/chat.ts:L37-L40](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/chat.ts#L37-L40)). `AnthropicClient` makes Claude behave like OpenAI for callers ([server/infrastructure/providers/AnthropicClient.ts:L34-L56](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/infrastructure/providers/AnthropicClient.ts#L34-L56)):
+- It removes sampling parameters that Claude 5.x rejects.
+- It maps `reasoning_effort` to Anthropic's effort setting.
+- It translates stop reasons into OpenAI `finish_reason` values.
 
-**Async worker (`server/worker.ts`).** Long-running chat jobs are accepted by `/v1/chat/async` and processed by the worker reading `AsyncJobDal` ([server/routes/chatAsync.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/routes/chatAsync.ts), [server/worker.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/worker.ts)).
+**DAL.** These are raw parameterised SQL classes over a shared `pg` pool:
+- `ApplicationDal` checks bcrypt hashes by scanning every application ([server/dal/ApplicationDal.ts:L54-L79](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/ApplicationDal.ts#L54-L79)).
+- `RequestLogDal` writes the request log and upserts the daily summary in one transaction ([server/dal/RequestLogDal.ts:L31-L100](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/RequestLogDal.ts#L31-L100)).
 
-**Error mapping.** A custom handler block in `app.ts` maps cross-package `UnauthorizedError` / `ForbiddenError` (from `@jeffrey-keyser/api-errors`) to the right HTTP status, working around the `instanceof` boundary between `express-server-factory` and `api-errors` ([server/app.ts:224-247](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L224-L247)). After-stage `githubErrorMiddleware` posts uncaught errors as issues to this repo ([server/app.ts:272-274](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L272-L274)).
+**Worker.** `server/worker.ts` is written as a Lambda handler. It processes chat and image jobs and also handles a `cleanup` action ([server/worker.ts:L1-L14](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/worker.ts#L1-L14), [server/worker.ts:L172-L194](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/worker.ts#L172-L194)). The provided source does not show how it is invoked on the self-hosted deployment.
+
+## Contracts
+
+- **Request ID.** Every response carries `X-Request-ID`. A value sent by the caller is reused ([server/middleware/correlationId.ts:L23-L27](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/correlationId.ts#L23-L27)).
+- **Chat response.** Chat responses include a `metadata` block with `trace_id`, `application_id` and `latency_ms` ([server/controllers/ChatController.ts:L102-L113](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/controllers/ChatController.ts#L102-L113)).
+- **Quota errors.** Exceeding a quota returns `429 RATE_LIMIT_EXCEEDED` with quota details and a reset time at the next UTC midnight ([server/middleware/rateLimit.ts:L65-L81](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/rateLimit.ts#L65-L81)).
+- **Claude budget errors.** The proxy's own guard returns `429 ANTHROPIC_BUDGET_EXHAUSTED` ([server/middleware/anthropicBudget.ts:L22-L33](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/anthropicBudget.ts#L22-L33)). An empty Anthropic credit balance returns `402 PROVIDER_CREDITS_EXHAUSTED` ([server/infrastructure/providers/AnthropicClient.ts:L312-L320](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/infrastructure/providers/AnthropicClient.ts#L312-L320)).
+- **Async chat.** `POST /v1/chat/async` returns `202` with `ticket_id` and `poll_url`. An optional `callback_url` can be supplied ([server/routes/chatAsync.ts:L171-L172](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/chatAsync.ts#L171-L172), [server/routes/chatAsync.ts:L270-L282](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/chatAsync.ts#L270-L282)).
+- **Auth error mapping.** 401 and 403 errors raised by `@jeffrey-keyser/api-errors` are matched by constructor name, because `instanceof` checks fail across the package boundary ([server/app.ts:L233-L255](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L233-L255)).
+
+Related pages: [Services and Dependencies](../services-and-dependencies/), [Glossary](../glossary/).

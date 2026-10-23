@@ -1,53 +1,54 @@
 ---
-title: Iteration Loop
-description: How a change to beelink-deploy ships — local edit, build, commit, push, GitHub webhook fires this same service to deploy itself.
+title: "Iteration Loop"
+description: "Contributor workflow for beelink-deploy: local scripts, the push-to-self-deploy path through the immutable worktree and deploy.sh, and the drain and health check on restart."
 ---
 
 # Iteration Loop
 
-This repo deploys itself. A push to `Jeffrey-Keyser/beelink-deploy` arrives at `/webhook` on the running instance, which then runs its own deploy script — so the loop has a unique "the bridge replaces its own planks while crossing" quality. Hence the 240 s drain on shutdown ([src/index.ts:6](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/index.ts#L6)) and the post-deploy health check at `http://localhost:9000/health` ([config/repos.json:63-68](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/config/repos.json#L63-L68)).
+This repo deploys itself. Its `config/repos.json` entry uses immutable-worktree mode with a release root and a health URL on port 9000 ([config/repos.json:L63-L70](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/config/repos.json#L63-L70)). The running process restarts itself during its own deploy.
+
+## Local checks
+
+- `npm run typecheck`, `npm run lint`, `npm test` and `npm run build` are declared scripts ([package.json:L8-L13](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/package.json#L8-L13)).
+- `npm test` runs `tsx --test tests/*.test.ts` ([package.json:L11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/package.json#L11)). The test files are not in the snapshot.
+- The deployment-log docs list the same four checks ([docs/deployment-logs.md:L147-L148](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/docs/deployment-logs.md#L147-L148)).
+- No CI workflow appears in the excerpts. CI behavior is unknown.
 
 ## Cycle
 
 ```mermaid
 sequenceDiagram
-  participant Dev as Operator
-  participant Local as Local repo
-  participant GH as GitHub
-  participant BD as beelink-deploy (running)
-  participant New as beelink-deploy (new pid)
-  participant TG as Telegram
-
-  Dev->>Local: edit src/*.ts
-  Dev->>Local: npm run typecheck / lint / test
-  Dev->>Local: git commit + push to main
-  Local->>GH: push refs/heads/main
-  GH->>BD: POST /webhook (push event, HMAC)
-  BD->>BD: validateSignature, parsePushEvent
-  BD->>BD: lookup repos["Jeffrey-Keyser/beelink-deploy"]
-  BD->>BD: spawn bash deploy.sh (or default)
-  Note over BD: sudo systemctl restart beelink-deploy
-  BD->>New: systemd respawns process
-  Note over BD: SIGTERM → awaitDeployDrain(240s)
-  New->>New: loadConfig + listen :9000
-  New->>New: pollServiceHealth(http://localhost:9000/health)
-  New->>TG: ✅ beelink-deploy deployed & healthy
+  participant Dev as "Operator"
+  participant GH as "GitHub"
+  participant BD as "beelink-deploy running"
+  participant Dep as "deploy.sh in release"
+  participant SD as "systemd transient unit"
+  Dev->>GH: git push to main
+  GH->>BD: POST webhook with HMAC
+  BD->>BD: validate signature and parse push
+  BD->>Dep: run deploy.sh in release worktree
+  Dep->>Dep: npm ci, build, prune, swap current link
+  Dep->>SD: schedule restart in 5s
+  SD->>BD: systemctl restart
+  BD->>BD: SIGTERM drain up to 240s
+  BD->>BD: new process polls healthUrl
 ```
 
-## Steps, cited
+## Steps
 
-1. **Local checks.** `npm run typecheck`, `npm run lint`, `npm test` are the available verification scripts ([package.json:7-13](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/package.json#L7-L13)). Tests run under `tsx --test` against `tests/*.test.ts`.
-2. **Commit & push.** Standard `git push origin main`; the live remote is configured as a webhook source on GitHub ([README.md:71-78](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L71-L78)).
-3. **Webhook receipt.** Express parses JSON while caching raw bytes for signature verification ([src/server.ts:75-80](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L75-L80)). HMAC check is `timingSafeEqual` against the `GITHUB_WEBHOOK_SECRET` env ([src/github.ts:6-28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/github.ts#L6-L28)).
-4. **Dispatch.** `event === 'push'` routes through `parsePushEvent`. A push to the default branch first publishes a `wiki.update` event carrying the changed files, before any deploy gate ([src/server.ts:247-255](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L247-L255), [src/wiki-push.ts:18-53](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/wiki-push.ts#L18-L53)). `[skip deploy]` / `[no deploy]` in the head commit message then short-circuits the deploy only; `[skip wiki]` opts out of the wiki update ([src/server.ts:231-235](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L231-L235)).
-5. **Deploy run.** `runDeploy` increments the in-flight counter, looks for `deploy.sh`, and otherwise runs the default `git pull / npm ci --production / sudo systemctl restart <service>` sequence ([src/deploy.ts:124-180](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L124-L180)).
-6. **Self-restart drain.** The `systemctl restart` delivers `SIGTERM`; the handler flips `shuttingDown`, calls `awaitDeployDrain(240_000)` and only then exits ([src/index.ts:36-55](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/index.ts#L36-L55), [src/deploy.ts:32-45](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/deploy.ts#L32-L45)).
-7. **Post-deploy notification.** New pid starts, status is recorded to `data/status.json` ([src/status.ts:65-94](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/status.ts#L65-L94)), the `healthUrl` is polled for up to 15 s ([src/healthCheck.ts:11-37](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/healthCheck.ts#L11-L37)), and Telegram is paged with success or warning ([src/server.ts:19-58](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L19-L58)).
+1. **Signature.** The webhook is checked against `GITHUB_WEBHOOK_SECRET` when it is set ([src/server.ts:L156-L161](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L156-L161)).
+2. **Wiki event.** A default-branch push publishes `wiki.update` unless the head commit has `[skip wiki]` ([src/wiki-push.ts:L26-L29](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/wiki-push.ts#L26-L29)).
+3. **Scheduling.** Duplicate revisions join or skip, and runs for one repo are serialized ([src/deploy.ts:L87-L99](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L87-L99)).
+4. **Release prep.** The runner fetches the branch, requires a full SHA, adds a detached worktree and confirms it is clean ([src/deploy.ts:L250-L266](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L250-L266)).
+5. **deploy.sh.** The script checks the expected revision, runs `npm ci --include=dev`, builds, prunes dev dependencies and atomically replaces the `current` link ([deploy.sh:L8-L22](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/deploy.sh#L8-L22)).
+6. **Self-restart.** The script schedules `systemctl restart` five seconds later ([deploy.sh:L24-L32](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/deploy.sh#L24-L32)). The unit runs from `releases/.../current` ([beelink-deploy.service:L8-L9](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/beelink-deploy.service#L8-L9)).
+7. **Drain.** SIGTERM waits up to 240 s for active deploys ([src/index.ts:L40-L56](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L40-L56)).
+8. **Health.** The new process polls `localhost:9000/health` for up to 15 s and notifies Telegram when configured ([src/server.ts:L51-L62](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L51-L62)).
 
 ## Config-only changes
 
-Edits to `config/repos.json` or `config/packages.json` don't require a restart. Send `SIGHUP` or `SIGUSR2` to the process and `reloadRepos()` reads the files and swaps the in-memory map ([src/index.ts:19-34](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/index.ts#L19-L34), [src/config.ts:70-84](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/config.ts#L70-L84)).
+Edits to `repos.json` or `packages.json` need a reload, not a restart. Send SIGHUP or SIGUSR2 ([src/index.ts:L37-L38](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L37-L38)).
 
 ## Manual override
 
-`POST /deploy/:owner/:repo` with header `X-Deploy-Key: $DEPLOY_API_KEY` triggers the same `runDeploy` path without GitHub in the loop ([src/server.ts:273-308](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L273-L308)). Use this when re-deploying after a failed run or when GitHub isn't reachable.
+`POST /deploy/:owner/:repo` with the deploy key triggers a run without GitHub ([src/server.ts:L356-L360](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/server.ts#L356-L360)). Skip a push deploy with `[skip deploy]` ([README.md:L116](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L116)).

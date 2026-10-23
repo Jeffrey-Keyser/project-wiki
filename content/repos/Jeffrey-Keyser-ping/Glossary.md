@@ -1,38 +1,50 @@
 ---
-title: Ping Glossary
-description: Repo-specific terms used in the Ping codebase.
+title: "Ping Glossary"
+description: "Project-specific Ping terms with source citations."
 ---
 
 # Glossary
 
-**Ping** — Both the product name and a discrete location record (GPS sample) ingested via `/api/v1/location-pings` or `/api/v1/pings`. Stored by `PingDal` ([README.md:1-3](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L1-L3), [server/dal/PingDal.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/dal/PingDal.ts)).
+**Ping.** The product name, and also a location record (GPS sample) stored in the pings table through `PingDal` ([README.md:L1-L3](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L1-L3), [server/dal/PingDal.ts:L24-L28](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/PingDal.ts#L24-L28)).
 
-**Zone** — Named geographic region (e.g. "Home", "Gym"). Pings are resolved into zone membership by `ZoneResolutionService`, producing **Visits** ([server/domain/services/ZoneResolutionService.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/domain/services/ZoneResolutionService.ts), [README.md:22-24](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L22-L24)).
+**Ambient signal.** A passive event from everyday routines, such as a Bluetooth connect, that can trigger automation ([README.md:L7](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L7)).
 
-**Visit** — Time-bounded stay inside a zone, with arrival/departure timestamps. Backed by `VisitDal` ([server/dal/VisitDal.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/dal/VisitDal.ts), [README.md:24](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L24)).
+**Passive signal.** One of three integration properties. Examples include a WiFi join, a Bluetooth connect, or a charger plug-in ([README.md:L12](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L12)).
 
-**Drive** — A car trip composed of a `Drive` record plus a sequence of `DriveWaypoint`s. Started automatically by Bluetooth-connect event, tracked live over WebSocket ([server/dal/DriveDal.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/dal/DriveDal.ts), [server/services/DriveWebSocketService.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/services/DriveWebSocketService.ts), [README.md:9-10](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L9-L10)).
+**Compound signal context.** Combining several weak signals into one specific inference, such as leaving home plus car Bluetooth at a given time ([README.md:L16](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L16)).
 
-**Bluetooth event** — Inbound signal that a known Bluetooth peer connected/disconnected; used to infer drive start/end. Route at `/api/v1/bluetooth`, contract from `@jeffrey-keyser/message-contracts` ([server/routes/bluetooth.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/routes/bluetooth.ts), [server/services/EventPublisher.ts:2](https://github.com/Jeffrey-Keyser/ping/blob/main/server/services/EventPublisher.ts#L2)).
+**Zone.** A named geographic area. `ZoneResolutionService` picks the closest zone whose radius contains a point, and prefers the smaller radius on ties ([server/domain/services/ZoneResolutionService.ts:L9-L14](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/domain/services/ZoneResolutionService.ts#L9-L14)).
 
-**Compound signal context** — Composition of multiple ambient signals (WiFi + Bluetooth + time + location) to infer specific context with high confidence ([README.md:11-16](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L11-L16)).
+**Visit.** A stay in a zone with arrival and departure pings. At most one active visit per user is enforced by a partial unique index ([server/dal/VisitDal.ts:L49-L58](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/VisitDal.ts#L49-L58)).
 
-**X-Ping-Key** — HTTP header carrying the API key for Apple Shortcuts authentication; alternative to JWT for the same endpoints ([server/app.ts:165](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L165), [README.md:73](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L73)).
+**Drive.** A car trip recorded by a drive row and optional waypoints. Drives start and end on Bluetooth events and can stream over WebSocket ([docs/DRIVE_TRACKING.md:L7-L13](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/DRIVE_TRACKING.md#L7-L13), [server/dal/DriveDal.ts:L40-L44](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/DriveDal.ts#L40-L44)).
 
-**Pay service / PayAuth** — External auth service at `https://pay.jeffreykeyser.net`. Issues JWT + session cookie. Ping uses one `PayAuth` instance per app via `@jeffrey-keyser/pay-auth-integration` ([server/app.ts:70](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L70), [AGENTS.md:17-18](https://github.com/Jeffrey-Keyser/ping/blob/main/AGENTS.md#L17-L18)).
+**Bluetooth event.** An inbound connect or disconnect report from a Shortcut. The connect route publishes an event and can start a drive ([server/routes/bluetooth.ts:L53-L71](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/bluetooth.ts#L53-L71)).
 
-**PayUser** — User type from `pay-api-types`; Ping resolves it to a local user via `resolveUserData` middleware ([server/middleware/auth.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/middleware/auth.ts), [server/app.ts:42](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L42)).
+**X-Ping-Key.** The header carrying the API key used by Shortcuts. The connectivity route checks presence only ([server/routes/connectivity.ts:L8](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/connectivity.ts#L8), [README.md:L73](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L73)).
 
-**JEFF_USER_ID** — Hard-coded user ID `7`; `EventPublisher` only publishes RabbitMQ events for this account ([server/services/EventPublisher.ts:7](https://github.com/Jeffrey-Keyser/ping/blob/main/server/services/EventPublisher.ts#L7)).
+**X-Idempotency-Key.** An optional client key for safe resends of location captures ([docs/MOBILE_INTEGRATION.md:L78](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/MOBILE_INTEGRATION.md#L78)).
 
-**PingExchange** — RabbitMQ exchange + routing-key registry defined in `@jeffrey-keyser/message-contracts`; covers `BluetoothEvent`, `DriveEvent`, etc. ([server/services/EventPublisher.ts:2](https://github.com/Jeffrey-Keyser/ping/blob/main/server/services/EventPublisher.ts#L2)).
+**Replay completion.** The rule that a keyed capture returns its saved result, and an unfinished one returns HTTP 500 for retry or 409 for reconciliation ([docs/MOBILE_INTEGRATION.md:L345-L351](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/MOBILE_INTEGRATION.md#L345-L351)).
 
-**DAL (Data Access Layer)** — Per-table class extending a shared base, exposing typed methods over raw parameterized SQL plus transaction support ([server/dal](https://github.com/Jeffrey-Keyser/ping/blob/main/server/dal), [CLAUDE.md:341-345](https://github.com/Jeffrey-Keyser/ping/blob/main/CLAUDE.md#L341-L345)).
+**Shortcut link.** An iCloud URL for an installer shortcut, served by `/api/v1/shortcuts/links` ([server/routes/shortcuts.ts:L47-L51](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/shortcuts.ts#L47-L51)).
 
-**Shortcut link** — iCloud sharing URL for a pre-built Apple Shortcut. Served unauthenticated at `/api/v1/shortcuts/links` ([README.md:99-108](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L99-L108), [server/routes/shortcuts.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/routes/shortcuts.ts)).
+**Pay service / PayAuth.** The external auth service at the Pay URL, integrated through `setupPayAuth` ([server/app.ts:L70](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L70), [server/app.ts:L81](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L81)). `AGENTS.md` requires one instance per app ([AGENTS.md:L17](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/AGENTS.md#L17)).
 
-**Analytics Pulse** — External telemetry sink; `telemetryMiddleware` posts endpoint hit counts fire-and-forget ([server/app.ts:283](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L283), [server/services/telemetry.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/services/telemetry.ts)).
+**JEFF_USER_ID.** A hard-coded account ID. The publisher sends events only for this account ([server/services/EventPublisher.ts:L6-L7](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/EventPublisher.ts#L6-L7)).
 
-**beelink-deploy** — Webhook service on the Beelink that pulls `main` and runs `deploy.sh` after each push ([README.md:37](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L37), [deploy.sh:1-29](https://github.com/Jeffrey-Keyser/ping/blob/main/deploy.sh#L1-L29)).
+**PingExchange.** The RabbitMQ exchange name and routing keys from `@jeffrey-keyser/message-contracts` ([server/services/EventPublisher.ts:L69-L73](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/EventPublisher.ts#L69-L73)).
 
-**agents:verify block** — Machine-extracted bash block in `AGENTS.md` between `<!-- agents:verify -->` markers; executed by `postflight-verify.sh` before a coding-agent task is marked done ([AGENTS.md:33-53](https://github.com/Jeffrey-Keyser/ping/blob/main/AGENTS.md#L33-L53)).
+**DAL.** The Data Access Layer. Each class wraps raw parameterized SQL and requires a `userId` ([server/dal/DriveDal.ts:L37-L38](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/DriveDal.ts#L37-L38)).
+
+**Grocery zone provisioning.** A manual CLI that bulk-creates zones for one selected account in a single transaction ([server/scripts/groceryZoneProvisioning.ts:L4-L18](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/scripts/groceryZoneProvisioning.ts#L4-L18)).
+
+**Capture health.** A per-source report showing whether each capture source is still sending data ([server/routes/capture-health.ts:L14-L19](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/capture-health.ts#L14-L19)).
+
+**Runtime incident capture.** Forwarding of backend 5xx responses and browser errors to a shared incident transport, enabled by environment flags ([README.md:L142-L144](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L142-L144)).
+
+**agents:verify block.** The marked bash block in `AGENTS.md` that a coding agent runs before finishing ([AGENTS.md:L33-L35](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/AGENTS.md#L33-L35)).
+
+**beelink-deploy.** The webhook service that runs `deploy.sh` on push to `main` ([README.md:L63](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L63)).
+
+**Analytics Pulse.** The external telemetry endpoint Ping sends fire-and-forget events to ([server/services/telemetry.ts:L11-L13](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/services/telemetry.ts#L11-L13)).

@@ -1,56 +1,67 @@
 ---
-title: Operations
-description: Runtime, deploy, logs, and health probes for the self-hosted AI Proxy service.
+title: "Operations"
+description: "Start, deploy, health and observability for the self-hosted AI Proxy service, separating documented runtime facts from what is verified."
 ---
 
 # Operations
 
-AI Proxy is a deployable HTTP service — not a library. It runs as a long-lived Node process on a homelab box.
+AI Proxy is a deployable HTTP service, not a library. Everything below comes from repository source and docs. Nothing on this page was verified against the live host.
 
-## Runtime
+## Start
 
-- **Start command:** `node ./dist/bin/www.js` (from `server/`) ([server/package.json:6](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/package.json#L6), [CLAUDE.md:184](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L184)).
-- **Process manager:** systemd user unit `ai-proxy` ([CLAUDE.md:182](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L182)).
-- **Port:** `3001`, configurable via `PORT` env var ([CLAUDE.md:180](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L180), [README.md:113](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L113)).
-- **Host:** Beelink ME Mini N150 (Ubuntu Server) since January 2026 ([CLAUDE.md:159-161](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L159-L161)).
-- **Public URL:** `https://ai-proxy.jeffreykeyser.net` via Cloudflare Tunnel ([CLAUDE.md:181](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L181)).
+- **Locally.** Run `npm run dev`. In production the command is `npm start`, which runs `node ./dist/bin/www.js` ([server/package.json:L6-L7](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/package.json#L6-L7)).
+- **systemd unit.** The canonical unit file is `deploy/ai-proxy.service`. It:
+  - runs as `jkeyser` from the `server/` directory;
+  - sets `NODE_ENV=production`;
+  - executes `/usr/bin/node …/dist/bin/www.js`;
+  - restarts on failure after 10 seconds ([deploy/ai-proxy.service:L5-L23](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/deploy/ai-proxy.service#L5-L23)).
+- **Shutdown.** On SIGTERM or SIGINT the server closes and flushes telemetry. If the port is already in use (EADDRINUSE), the process exits with code 1 ([server/bin/www.ts:L28-L52](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/bin/www.ts#L28-L52)).
 
 ## Deploy
 
-The current path is a manual build + restart on the host:
+1. On the host, run `./deploy.sh` from the repo root. Tune it with `HEALTH_URL`, `HEALTH_TIMEOUT_SECS` (default 45), `HEALTH_INTERVAL_SECS` (default 3) and `RESTART_CMD` ([docs/deployment.md:L146-L167](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L146-L167)).
+2. If you need to restart manually: `sudo systemctl restart ai-proxy`.
+3. Check the service: `systemctl status ai-proxy`.
+4. Read logs: `journalctl -u ai-proxy -f` ([CLAUDE.md:L164-L176](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L164-L176)).
 
-```bash
-cd server && npm run build
-systemctl --user restart ai-proxy
-systemctl --user status ai-proxy
-```
+The old wiki described a systemd *user* unit. The current docs and unit file use a system unit, and the AWS deployment path is legacy ([docs/deployment.md:L181](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L181)).
 
-([CLAUDE.md:163-176](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L163-L176))
+## Configuration and secrets
 
-The legacy AWS Lambda/ECR/CloudFront/Terraform path is preserved in `terraform/` and `.github/workflows/` as **reference only**; the service no longer deploys to AWS ([CLAUDE.md:188-189](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L188-L189)).
+**Where values come from.** Configuration is read in this order, and a value that is already set is never overridden ([server/config/env.ts:L46-L72](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L46-L72), [server/config/env.ts:L125](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L125)):
+1. The process environment.
+2. A shared secrets file, read before any other setting.
+3. `server/.env`.
 
-## Configuration
+**Secrets file path.** The code default is `/etc/ai-proxy/secrets.env`; `AI_PROXY_SECRETS_FILE` overrides it ([server/config/env.ts:L35](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L35)). Newer docs say the host points that variable at a file under the service user's `~/.config/ai-proxy/` ([docs/image-model-setup.md:L18-L27](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/image-model-setup.md#L18-L27)).
 
-Env loaded and validated through `server/config/env.ts`; both `DATABASE_*` and legacy `DB_*` variable names are accepted ([CLAUDE.md:313-318](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L313-L318)). Required: `PAY_SERVICE_URL`, `OPENAI_API_KEY`, `SESSION_SECRET`, `JWT_SECRET`, plus DB credentials ([README.md:110-132](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L110-L132)).
+**Missing service key.** If `AI_PROXY_API_KEY` is missing, startup stops with an error naming the secrets path ([docs/deployment.md:L122-L124](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L122-L124)).
 
-The shared secrets file is loaded first in `validateAndLoadConfig`, before any setting is parsed. Settings in that file, such as `ANTHROPIC_REQUEST_TIMEOUT`, apply alongside its provider keys, including when `AI_PROXY_API_KEY` comes from systemd or the process environment. Before this ordering fix, file-only settings were ignored and Anthropic calls kept the default timeout ([server/config/env.ts:120-127](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/config/env.ts#L120-L127), [server/tests/__tests__/unit/config/env.test.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/tests/__tests__/unit/config/env.test.ts)).
-
-`ANTHROPIC_MONTHLY_BUDGET_USD` (default `90`) caps Anthropic spend per credit cycle; an optional daily cap also applies when configured. Once either cap is spent, `/v1/chat` and `/v1/chat/async` return `429 ANTHROPIC_BUDGET_EXHAUSTED`. Loopback callers can read budget status from `GET /internal/anthropic-budget` ([server/config/env.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/config/env.ts), [server/middleware/anthropicBudget.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/anthropicBudget.ts), [server/routes/anthropicBudget.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/routes/anthropicBudget.ts), [docs/anthropic-credit-lane.md](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/docs/anthropic-credit-lane.md)).
-
-The server logs a startup banner with `NODE_ENV`, `PORT`, `ORIGIN_BASE_URL`, and `PAY_SERVICE_URL`, which is the first thing to check in journal output ([server/app.ts:35-42](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L35-L42)).
+**Claude budget variables** ([docs/anthropic-credit-lane.md:L11-L17](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/anthropic-credit-lane.md#L11-L17)):
+- `ANTHROPIC_MONTHLY_BUDGET_USD`, default 90.
+- `ANTHROPIC_DAILY_BUDGET_USD`.
+- `ANTHROPIC_BUDGET_CYCLE_DAY`, which must be 1–28.
 
 ## Health and observability
 
-- **Health probe:** `GET /health` returns service + DB status via `createDatabaseHealthCheck(pool)` ([server/app.ts:111-112](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L111-L112), [server/app.ts:164-173](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L164-L173)).
-- **Detailed diagnostics:** `GET /v1/diagnostics/detailed` is mounted public for system checks ([server/app.ts:74-75](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L74-L75)).
-- **Ping:** `GET /ping` for shallow liveness ([README.md:19](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L19)).
-- **Correlation IDs:** every request is stamped before any other middleware ([server/app.ts:250-253](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L250-L253)).
-- **Logs:** `journalctl --user -u ai-proxy -f` ([CLAUDE.md:174-176](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L174-L176)).
-- **Error → GitHub:** uncaught errors automatically become issues on this repo via `githubErrorMiddleware` ([server/app.ts:272-274](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L272-L274)).
+- **`GET /health`** is served by the server factory and includes a database check ([server/app.ts:L171-L179](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L171-L179)).
+- **`GET /ping`** returns `pong` ([server/routes/index.ts:L14-L16](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/index.ts#L14-L16)).
+- **`GET /v1/diagnostics/detailed`** reports backend, database and auth-service status ([server/routes/diagnostics.ts:L86-L97](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/diagnostics.ts#L86-L97)).
+- **`GET /internal/anthropic-budget`** answers direct loopback requests only. It reports cycle spend and remaining budget ([docs/anthropic-credit-lane.md:L37-L41](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/anthropic-credit-lane.md#L37-L41)).
+- **Tracing.** OpenTelemetry starts before Express loads ([server/bin/www.ts:L10-L12](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/bin/www.ts#L10-L12)). Each request gets an OpenTelemetry trace context derived from its correlation ID, which also appears in logs and in `X-Request-ID` ([server/middleware/correlationId.ts:L9-L17](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/correlationId.ts#L9-L17)). The exporter endpoint is not shown in the provided source.
+- **Startup banner.** On boot the server logs its version, `NODE_ENV`, `PORT`, `ORIGIN_BASE_URL` and `PAY_SERVICE_URL` ([server/app.ts:L38-L45](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L38-L45)).
+
+## Documented vs verified
+
+| Topic | What the sources say | Status |
+|---|---|---|
+| Port | Code default is 3001 ([server/config/env.ts:L134](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L134)). CLAUDE.md says 3005 ([CLAUDE.md:L179](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L179)). The deployment guide's health URL uses 3001 ([docs/deployment.md:L164](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L164)). | Unverified |
+| Public hostname | `ai-proxy.jeffreykeyser.net` ([docs/deployment.md:L7](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L7)), `api.ai-proxy.jeffreykeyser.net` ([README.md:L183](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L183)) and `ai-proxy-api.jeffreykeyser.net` ([docs/TYPESAFE_SYSTEM_ONE.md:L54](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L54)) all appear. | Inconsistent |
+| TypeSafe endpoint | Local and public `/v1/systemone` calls returned 200 on the recorded date ([docs/TYPESAFE_SYSTEM_ONE.md:L23-L27](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L23-L27)) | Point-in-time evidence |
 
 ## Known gotchas
 
-- **QUIC/HTTP3 vs long image-generation responses.** Cloudflare HTTP/3 has been disabled for the zone because 30–55s base64 image responses trigger `ERR_QUIC_PROTOCOL_ERROR.QUIC_TOO_MANY_RTOS`. Defense in depth: `connectTimeout: 120s`, `keepAliveTimeout: 120s` on the AI Proxy ingress rule in `/etc/cloudflared/config.yml` ([README.md:282-292](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L282-L292)).
-- **Auth class identity across packages.** Pay-auth raises errors from `@jeffrey-keyser/api-errors`, which the factory cannot match by `instanceof`. Custom handlers by constructor name preserve 401/403 mapping ([server/app.ts:224-247](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L224-L247)).
-- **JSON body limit raised to 10mb** for vision/image base64 payloads ([server/app.ts:134-135](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L134-L135)).
-- **Two Anthropic "out of money" responses.** An empty Anthropic credit balance surfaces as `402 PROVIDER_CREDITS_EXHAUSTED` from the provider. The proxy's own monthly/daily guard returns `429 ANTHROPIC_BUDGET_EXHAUSTED` before any provider call. Check the error code to tell which limit was hit ([server/infrastructure/providers/AnthropicClient.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/infrastructure/providers/AnthropicClient.ts), [server/middleware/anthropicBudget.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/anthropicBudget.ts)).
+- **Image requests over HTTP/3.** Long image generations can fail under Cloudflare HTTP/3 with `QUIC_TOO_MANY_RTOS`. The fix is to disable HTTP/3 for the zone ([README.md:L304-L313](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L304-L313)).
+- **Claude budget check failures.** If the budget check itself fails, the request is allowed through. The Anthropic Console spend limit remains the hard backstop ([server/middleware/anthropicBudget.ts:L9-L12](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/anthropicBudget.ts#L9-L12)).
+
+See [Iteration Loop](../iteration-loop/) for how changes reach the host.

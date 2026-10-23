@@ -1,38 +1,43 @@
 ---
-title: Operations
-description: Deploy, runtime, observability, and on-call notes for the Insta Travel Map service.
+title: "Operations"
+description: "Start, deploy, test, health, and observability for Insta Travel Map, separating documented behavior from behavior verified in source."
 ---
 
 # Operations
 
-## Deploy
+Insta Travel Map is a deployed application, not a library. The root `package.json` excerpt has no scripts or exports, and the runnable units are the server and client packages ([package.json:L1-L14](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/package.json#L1-L14), [server/package.json:L5-L14](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L5-L14)).
 
-- **Frontend**: GitHub Actions builds `client/` and runs the `s3-deploy` composite action — sync to S3 bucket, invalidate CloudFront `/*` ([.github/workflows/ci-cd-pipeline.yml:90-96](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/.github/workflows/ci-cd-pipeline.yml#L90-L96)).
-- **Backend**: GitHub Actions POSTs to `BEELINK_DEPLOY_WEBHOOK_URL` with `{repository, ref}` and bearer `BEELINK_DEPLOY_TOKEN`; beelink-deploy pulls main and restarts the systemd unit ([.github/workflows/ci-cd-pipeline.yml:104-113](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/.github/workflows/ci-cd-pipeline.yml#L104-L113), [CLAUDE.md:103-106](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/CLAUDE.md#L103-L106)).
-- **Archived path**: AWS Lambda / ECR / Terraform config retired to `terraform/_archive/` — reference only ([README.md:480](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L480)).
+## Commands
 
-## Runtime
+- **Server dev**: `cd server && npm run dev` ([server/package.json:L7](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L7)).
+- **Server build and start**: `npm run build` runs `tsc`, and `npm start` runs `node ./dist/bin/www.js` ([server/package.json:L6, L8](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L6-L8)). `build_and_run_server.sh` chains these ([build_and_run_server.sh:L2](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/build_and_run_server.sh#L2)).
+- **Server test**: `npm test` runs Jest ([server/package.json:L11](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/package.json#L11)).
+- **Client**: `npm run dev` (Vite), `npm run build`, and `npm run test` (Vitest) ([client/package.json:L45-L48](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/package.json#L45-L48)).
+- **Database**: `cd server/db && ./deploy.sh` ([CLAUDE.md:L60-L62](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/CLAUDE.md#L60-L62)). `teardown.sh` asks for confirmation before running teardown SQL ([server/db/teardown.sh:L14-L18](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/db/teardown.sh#L14-L18)).
 
-- **Process**: `node ./dist/bin/www.js` started by `npm start` ([server/package.json:6](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/package.json#L6)).
-- **Systemd unit**: `/etc/systemd/system/insta-travel-map.service` — `User=deploy`, `WorkingDirectory=/opt/insta-travel-map/server`, `Restart=on-failure`, `EnvironmentFile=/opt/insta-travel-map/server/.env` ([README.md:55-72](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L55-L72)).
-- **Port**: production `PORT=3002`, exposed only on localhost ([README.md:104](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L104)).
-- **Ingress**: Cloudflare Tunnel maps `https://api.jeffreykeyser.net` → `http://localhost:<PORT>` — no inbound firewall ports ([README.md:9](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L9), [README.md:74](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L74)).
-- **Startup ordering**: Solo Vault secrets must resolve before config validation and DB pool creation — both `bin/www.ts` and `initializeApp()` enforce this ([server/bin/www.ts:5-17](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/bin/www.ts#L5-L17), [server/app.ts:17-27](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L17-L27)).
-- **Graceful shutdown**: SIGTERM/SIGINT close HTTP server within 10s, then force exit ([server/bin/www.ts:80-97](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/bin/www.ts#L80-L97)).
+The README's `npm run test:e2e` and `npm run test:auth` are not among the client scripts in the excerpt, so they are documented but unverified ([README.md:L308-L314](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/README.md#L308-L314), [client/package.json:L44-L54](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/package.json#L44-L54)).
 
-## Observability
+## Runtime and ports
 
-- **Health probe**: `GET /health` returns `{status, service, version, timestamp}`; DB health wired via `dal/diagnostics` ([server/app.ts:244-252](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L244-L252), [server/app.ts:356-365](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L356-L365)).
-- **Auth health**: `GET /health/auth` tests Pay-service connectivity ([README.md:384-393](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L384-L393)).
-- **Logs**: structured JSON in production, text + `dev` morgan format locally; sensitive headers (`authorization`, `cookie`, `x-api-key`) and body fields (`password`, `token`, `secret`, `apiKey`, `creditCard`) redacted ([server/app.ts:167-177](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L167-L177)).
-- **Correlation IDs**: `x-request-id` request context enabled, trustProxy on in prod ([server/app.ts:149-153](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L149-L153)).
-- **Rate limit**: 100 req/min/IP in prod (500 in dev), `/health` and `/ping` exempt ([server/app.ts:156-164](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L156-L164)).
-- **Error reporting**: uncaught route errors logged as `API_ERROR` JSON; `github-error-issues` fires-and-forgets to open a GitHub issue with stack + request metadata ([server/app.ts:296-328](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L296-L328)).
-- **API docs**: Swagger UI at `/api-docs`, generated from JSDoc in `routes/**/*.ts` ([README.md:80-86](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/README.md#L80-L86), [server/app.ts:254-286](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L254-L286)).
+- **Entrypoint**: `server/bin/www.ts` listens on `config.PORT` and handles `EADDRINUSE` by exiting ([server/bin/www.ts:L49-L74](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/bin/www.ts#L49-L74)).
+- **Port values conflict**: the config default is `3001` ([server/config/env.ts:L40](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/env.ts#L40)). The README production example uses `PORT=3002` ([README.md:L103](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/README.md#L103)), and Vite dev also uses `3002` ([client/vite.config.js:L7](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/client/vite.config.js#L7)). The live port is unknown.
+- **Systemd**: the README gives a unit example for `/etc/systemd/system/insta-travel-map.service` with `Restart=on-failure` ([README.md:L54-L72](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/README.md#L54-L72)). This is documented only.
+- **Ingress**: Cloudflare Tunnel points at `http://localhost:<PORT>` ([README.md:L74](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/README.md#L74)). This is documented only.
+- **Shutdown**: SIGTERM and SIGINT close the server, with a forced exit after 10 seconds ([server/bin/www.ts:L80-L97](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/bin/www.ts#L80-L97)).
+- **Vault failures**: missing bootstrap keys or unreachable vault exit the process ([server/config/vault.ts:L63-L71](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/vault.ts#L63-L71), [server/config/vault.ts:L92-L96](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/vault.ts#L92-L96)).
 
-## On-call notes
+## Health and observability
 
-- `EADDRINUSE` on startup → another process holding `PORT` ([server/bin/www.ts:71-74](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/bin/www.ts#L71-L74)).
-- `CRITICAL: Pay authentication middleware/routes is missing!` → `setupPayAuth` returned partial result; check Pay package version + network to `PAY_SERVICE_URL` ([server/app.ts:125-136](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L125-L136)).
-- `401 unauthenticated` from `npm.pkg.github.com` during install → `GITHUB_TOKEN` unset; see `.npmrc` requirement ([AGENTS.md:24-28](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/AGENTS.md#L24-L28)).
-- Production CORS errors → confirm origin is in the allow-list at [server/app.ts:182-203](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/main/server/app.ts#L182-L203).
+- **Health**: the factory mounts `/health` with a database check ([server/app.ts:L244-L252](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L244-L252)). A custom interceptor also answers `/health` with a simple healthy payload ([server/app.ts:L356-L360](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L356-L360)). Which handler wins at runtime is unverified.
+- **Ping**: `GET /ping` returns `pong` ([server/routes/index.ts:L14-L16](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/index.ts#L14-L16)).
+- **Auth health**: the README mentions `/health/auth`, but those lines are not in the excerpt, so it is unverified.
+- **Logs**: production uses JSON logs at `info`, and development uses text at `debug`. Sensitive headers and body fields are redacted ([server/app.ts:L167-L172](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L167-L172)).
+- **Request IDs and rate limits**: `x-request-id` is enabled, and rate limiting is 100 per window in production and 500 otherwise, skipping `/health` and `/ping` ([server/app.ts:L149-L164](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L149-L164)).
+- **Errors**: production errors are logged as `API_ERROR` JSON and sent to the GitHub error issue service ([server/app.ts:L296-L327](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L296-L327)).
+- **Docs**: Swagger UI is enabled outside test mode ([server/app.ts:L254-L256](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L254-L256)).
+- **Monitoring metrics**: the README describes auth metrics ([README.md:L329-L336](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/README.md#L329-L336)), but no implementation appears in the excerpts.
+
+## Known drift
+
+- The root route returns the title `Myrrs API` ([server/routes/index.ts:L6-L10](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/routes/index.ts#L6-L10)), while the health and Swagger titles say Insta Travel Map ([server/app.ts:L247](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/app.ts#L247)).
+- Some pool comments still refer to Lambda ([server/config/env.ts:L69](https://github.com/Jeffrey-Keyser/insta-travel-map/blob/e5887e273f84c43fe656071dccb23f3d3df3da2b/server/config/env.ts#L69)). Production is documented as Beelink systemd.

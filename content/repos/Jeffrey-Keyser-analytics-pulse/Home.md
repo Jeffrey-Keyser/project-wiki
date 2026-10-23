@@ -1,39 +1,45 @@
 ---
-title: Analytics-Pulse — Overview
-description: Self-hosted, privacy-first web analytics platform built on serverless AWS, with a React dashboard, Express/Lambda API, and a JS tracking library.
+title: "Analytics-Pulse Overview"
+description: "Overview of the self-hosted, privacy-focused Analytics-Pulse platform: its deliverables, shipped workflows, main flow, and links to the other wiki pages."
 ---
 
 # Analytics-Pulse
 
-Analytics-Pulse is a self-hosted, privacy-focused web analytics platform. It tracks pageviews, sessions, custom events, goals, and UTM campaigns without cookies, hashing IPs before storage and respecting Do-Not-Track ([README.md:3-5](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L3-L5), [README.md:58-64](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L58-L64)).
+Analytics-Pulse is a self-hosted, privacy-focused web analytics platform with a React 19 admin client, an Express 5 API, PostgreSQL-backed analytics storage, and deployment assets for AWS and container-based environments ([README.md:L5](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L5)). The product privacy behaviors listed in the README are no cookies, Do Not Track handling, and hashed IP addresses ([README.md:L51-L53](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L51-L53)).
 
-The repo is a monorepo containing three deployables — an Express/Lambda API, a Vite/React dashboard, and an npm-published JS tracking snippet — plus Terraform that provisions the AWS infrastructure they run on ([README.md:1022-1043](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1022-L1043)).
+The architecture doc describes three deliverables: an admin client, an API, and a standalone tracking library ([docs/ARCHITECTURE.md:L7-L11](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L7-L11)). The README asks readers to treat the application code as the primary source of truth for what is shipped ([README.md:L25](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L25)).
 
 ## At a glance
 
-- **Backend:** Express 5 on AWS Lambda via `serverless-http`, fronted by API Gateway ([server/app.ts:1-5](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L1-L5), [README.md:1032-1033](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1032-L1033)).
-- **Frontend:** React 19 + Redux Toolkit + RTK Query, served from S3 + CloudFront ([client/package.json:18-25](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/client/package.json#L18-L25), [README.md:1034-1035](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L1034-L1035)).
-- **Tracking SDK:** `@analytics-pulse/tracking-library`, ~lightweight browser snippet published to npm ([tracking-library/package.json:1-10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/tracking-library/package.json#L1-L10)).
-- **Datastore:** PostgreSQL (RDS) with monthly partitioned event tables and pre-computed daily rollups ([README.md:67-71](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L67-L71)).
-- **Auth:** External Pay service (`pay.jeffreykeyser.net`) wired via `@jeffrey-keyser/pay-auth-integration` ([server/app.ts:32-93](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L32-L93)).
-- **API contract:** Versioned under `/api/v1/*`; tracking endpoints use API-key auth, dashboard endpoints use JWT bearer ([CLAUDE.md](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/CLAUDE.md), [server/routes/versions/v1/index.ts:73-149](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/routes/versions/v1/index.ts#L73-L149)).
-- **Scheduled work:** In-process `node-cron` jobs for daily aggregation, partition maintenance, and email reports ([server/cron/dailyAggregation.ts:32-36](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/cron/dailyAggregation.ts#L32-L36), [server/app.ts:34-36](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/server/app.ts#L34-L36)).
-- **Infra:** Terraform 1.13.5+, state in `tf-state-jeffrey-keyser-prod` S3 bucket, OIDC for GitHub Actions ([README.md:307-317](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L307-L317), [README.md:341-346](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L341-L346)).
+- **Admin client:** React 19 and Vite under `client` ([docs/ARCHITECTURE.md:L9](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L9)), with shipped routes for the dashboard, campaigns, real-time, events, settings, and API keys ([docs/ARCHITECTURE.md:L19-L26](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L19-L26)).
+- **API:** Express 5 and TypeScript under `server` ([docs/ARCHITECTURE.md:L10](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L10)), mounted under `/api/v1` ([server/routes/versions/v1/index.ts:L31-L35](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/routes/versions/v1/index.ts#L31-L35)).
+- **Tracking library:** `@analytics-pulse/tracking-library`, packaged as ESM, CJS, and browser bundles ([tracking-library/package.json:L2-L8](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/tracking-library/package.json#L2-L8)).
+- **Storage:** PostgreSQL with default pool size 2 to 20 ([server/config/env.ts:L115-L116](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/config/env.ts#L115-L116)). The events table is partitioned by month ([docs/ARCHITECTURE.md:L187-L188](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L187-L188)).
+- **Auth:** Pay auth integration, with the Pay URL defaulting to `https://pay.jeffreykeyser.net` ([server/app.ts:L84-L87](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L84-L87)).
+- **Background work:** Daily aggregation, partition maintenance, and email reporting are started in-process ([server/app.ts:L136](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L136)).
+- **Deployment:** Terraform and Docker assets exist; the exact production topology is environment-specific and unknown from these excerpts ([docs/ARCHITECTURE.md:L13](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L13)).
+
+**Shipped versus API-first:** Project management, historical and real-time analytics, custom events, export, campaigns, API keys, and settings are shipped in the client ([README.md:L9](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L9)). Goals, funnels, email preferences, error dashboards, partition admin, and performance admin are API-first ([README.md:L44-L47](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L44-L47)).
 
 ## Who uses it
 
-- **Site operators** install the JS snippet on their site and read the dashboard ([README.md:104-135](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L104-L135)).
-- **Service owners** (the people deploying their own instance) run the automated `new-service-auto.sh` flow to go from clone to live in <10 min ([README.md:238-291](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L238-L291)).
-- **Tracking SDK consumers** install `@analytics-pulse/tracking-library` from npm and call `track()` against the deployed API ([README.md:118-134](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L118-L134)).
+- **Site operators** create a project, generate an API key, and install the tracking snippet ([README.md:L82-L109](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L82-L109)).
+- **Dashboard users** navigate project-scoped analytics pages ([docs/ARCHITECTURE.md:L17-L26](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L17-L26)).
+- **Deployers** running their own instance use the automated setup script, which requires `GITHUB_TOKEN` ([scripts/new-service-auto.sh:L226-L231](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/scripts/new-service-auto.sh#L226-L231)).
+- **Contributors** follow the guide in the contributing document ([CONTRIBUTING.md:L1-L3](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/CONTRIBUTING.md#L1-L3)).
 
-## How work moves through this repo
+## Main flow
 
-A typical change touches one of three surfaces: the API (`server/`), the dashboard (`client/`), or the tracking SDK (`tracking-library/`). Each surface has its own test suite (Jest for server + SDK, Vitest for client) and shares the top-level Terraform definitions for deployment ([README.md:996-1018](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L996-L1018)). CI/CD lives in GitHub Actions and uses OIDC to assume an AWS role created by Terraform ([README.md:353-380](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/main/README.md#L353-L380)).
+1. An admin creates a project and generates an API key, which is shown only once ([README.md:L86-L95](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/README.md#L86-L95)).
+2. The tracker posts to the public track endpoints, which use API-key authentication ([server/app.ts:L98-L100](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/app.ts#L98-L100)).
+3. The daily aggregation job is scheduled for `0 1 * * *` in UTC ([server/cron/dailyAggregation.ts:L33](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/cron/dailyAggregation.ts#L33), [server/cron/dailyAggregation.ts:L96-L97](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/server/cron/dailyAggregation.ts#L96-L97)).
+4. The dashboard reads project analytics through authenticated `/api/v1/projects/:id/*` routes ([docs/ARCHITECTURE.md:L41-L48](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/ARCHITECTURE.md#L41-L48)).
+5. Operators confirm health with `/health` and runtime telemetry ([docs/OPERATIONS.md:L50-L54](https://github.com/Jeffrey-Keyser/analytics-pulse/blob/32744d978fd9eb0cd42b8198bd04d3ef4c0f3cea/docs/OPERATIONS.md#L50-L54)).
 
 ## Wiki pages
 
-- [Architecture](./architecture/) — internal module layout, request flow, datastore shape.
-- [Iteration Loop](./iteration-loop/) — how a change goes from edit to merge to deployed.
-- [Services and Dependencies](./services-and-dependencies/) — inbound/outbound integrations.
-- [Operations](./operations/) — deploy, runtime, observability.
-- [Glossary](./glossary/) — repo-specific terminology.
+- [Architecture](../architecture/): components, contracts, and the component map.
+- [Iteration Loop](../iteration-loop/): contributor workflow, scripts, and CI.
+- [Services and Dependencies](../services-and-dependencies/): confirmed and unknown integrations.
+- [Operations](../operations/): start, deploy, test, health, and observability.
+- [Glossary](../glossary/): project-specific terms.

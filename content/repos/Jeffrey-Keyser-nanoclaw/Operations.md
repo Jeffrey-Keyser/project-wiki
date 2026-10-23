@@ -1,48 +1,65 @@
 ---
-title: Operations
-description: How to run, deploy, observe, and recover NanoClaw in production.
+title: "Operations"
+description: "Start, build, reload, health and smoke commands for the NanoClaw service, with documented versus verified runtime facts."
 ---
 
 # Operations
 
-NanoClaw is a deployable, long-running Node service. It is not a library: `package.json` declares `"main": "dist/index.js"`, ships a `bin` entry, and the README documents systemd / launchd lifecycles ([package.json:6-9](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L6-L9), [CLAUDE.md:79-90](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L79-L90)).
+NanoClaw is a long-running service, not a library. Its entry point is `dist/index.js`, which `npm start` runs ([package.json:L6](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/package.json#L6), [package.json:L15](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/package.json#L15)).
 
-## Start command
+## Setup and start
 
-- **Production:** `npm start` → `node dist/index.js` ([package.json:15](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L15)).
-- **Dev:** `npm run dev` → `tsx src/index.ts` ([package.json:14](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L14), [CLAUDE.md:48](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L48)).
-- **Build path:** `npm run build` runs `build:core` then `reload-service` ([package.json:11](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L11)).
-- **Agent runner:** built separately with `npm run build:agent-runner` (delegates to `container/agent-runner`) ([package.json:13](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L13)).
+- **Setup steps.** Run them with `npx tsx setup/index.ts --step <name>`. The available steps are ([setup/index.ts:L1-L19](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/setup/index.ts#L1-L19)):
+  - `environment`
+  - `container`
+  - `groups`
+  - `register`
+  - `mounts`
+  - `service`
+  - `verify`
+- **Service install.** The `service` step builds the project, then installs a service:
+  - On macOS: a launchd plist, with stdout and stderr going to `logs/nanoclaw.log` and `logs/nanoclaw.error.log` ([setup/service.ts:L178-L223](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/setup/service.ts#L178-L223)).
+  - On Linux: a systemd unit, falling back to `nohup` when systemd is unavailable ([setup/service.ts:L265-L278](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/setup/service.ts#L265-L278)).
+- **Service control** ([CLAUDE.md:L93-L103](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/CLAUDE.md#L93-L103)):
+  - Linux: `systemctl --user start|stop|restart nanoclaw`
+  - macOS: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
+- **Rebuild from scratch:** `npm ci`, then `npm --prefix container/agent-runner ci`, then `build:core` and `build:agent-runner` ([docs/SETUP_RECOVERY.md:L16-L23](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SETUP_RECOVERY.md#L16-L23)).
+- **Build and reload.** `npm run build` restarts the systemd unit. It uses `NANOCLAW_SYSTEMD_UNIT`, defaulting to `nanoclaw.service`. It then waits up to 90 seconds for the unit to become active, and runs the health check and the agent-event smoke ([scripts/reload-service.mjs:L5-L9](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/scripts/reload-service.mjs#L5-L9), [scripts/reload-service.mjs:L115-L125](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/scripts/reload-service.mjs#L115-L125)). This reload path is systemd-only.
 
-## Service units
+## Health and smoke checks
 
-- **macOS / launchd:** `~/Library/LaunchAgents/com.nanoclaw.plist`; load / unload / `launchctl kickstart -k gui/$(id -u)/com.nanoclaw` to restart ([CLAUDE.md:79-83](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L79-L83)). The plist source lives at `launchd/com.nanoclaw.plist`.
-- **Linux / systemd:** `systemctl --user start|stop|restart nanoclaw` ([CLAUDE.md:85-90](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L85-L90)). Unit files under `systemd/` (`nanoclaw.service`, `systemd-crash-monitor.service`).
-- **Deploy helper:** `./deploy-service <service> [--with-tests]`. Use `--with-tests` for changes touching dispatch, routing, IPC, config verification, notifications; omit for config-only or emergency hotfixes ([CLAUDE.md:68-72](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L68-L72)).
+- **Smoke scripts.** `npm run smoke:runtime` checks tmux, and `npm run smoke:health` checks the `/health` endpoint. If `smoke:runtime` fails, fix tmux before anything else ([docs/SETUP_RECOVERY.md:L5-L14](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SETUP_RECOVERY.md#L5-L14)).
+- **Agent-event smoke.** `NANOCLAW_SMOKE_RECIPIENT='tg:…' npm run smoke:agent-event` invokes a real provider. It requires two exact outputs, produced by separate runner invocations, and delivers nothing to the channel ([docs/SETUP_RECOVERY.md:L41-L54](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SETUP_RECOVERY.md#L41-L54)).
+- **`smoke:db-container`.** The README describes this check as waiting for a fresh Docker container spawn ([README.md:L173-L177](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/README.md#L173-L177)). That conflicts with the tmux-only runtime adapter ([src/runtime-adapter.ts:L5](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/runtime-adapter.ts#L5)). Treat its current behavior as unverified.
+- **`/health` contents.** The snapshot includes runtime readiness, active session count, credential mode, provider diagnostics, channel circuit state, and subsystem states. Its status is `ok` or `degraded`, with `degradedReasons` explaining any degradation ([src/service-health.ts:L10-L38](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/service-health.ts#L10-L38)).
+- **Other diagnostics:** `npm run status`, `npm run health-check` and `npm run verify` ([package.json:L33-L35](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/package.json#L33-L35)).
 
-## Ports
+## Ports: documented versus verified
 
-- **Credential proxy:** `CREDENTIAL_PROXY_PORT`, default `3001` ([src/config.ts:47-50](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L47-L50)).
-- **Health / skills HTTP:** the main process serves `GET /health`, `GET /skills`, and `GET /api/v1/skills` ([CLAUDE.md:13](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L13), [README.md:78](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L78)).
+Port values disagree across sources, and the real ports for any given installation are unknown here:
+
+| Setting | Code default | Other documented values |
+|---|---|---|
+| `CREDENTIAL_PROXY_PORT` | 3001 ([src/config.ts:L47-L50](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/config.ts#L47-L50)) | — |
+| `MESSAGE_API_PORT` | — | 3003 in the Message API doc ([docs/MESSAGE_API.md:L11-L13](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/MESSAGE_API.md#L11-L13)) |
+| `SKILL_SERVER_PORT` | 3101 in the reload script ([scripts/reload-service.mjs:L77](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/scripts/reload-service.mjs#L77)); 3002 in `verify` ([src/cli/verify-config.ts:L85](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/cli/verify-config.ts#L85)) | — |
+
+The checked-in `systemd/nanoclaw.service` sets the following values ([systemd/nanoclaw.service:L14-L18](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/systemd/nanoclaw.service#L14-L18)):
+- `CREDENTIAL_PROXY_PORT=3100`
+- `SKILL_SERVER_PORT=3101`
+- `MESSAGE_API_PORT=3102`
+- `DISPATCH_SLOTS_PG=true`
+
+That unit hard-codes one user's home path ([systemd/nanoclaw.service:L7-L11](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/systemd/nanoclaw.service#L7-L11)). Treat it as an example, not proof of any deployment.
 
 ## Observability
 
-- **Health snapshot:** built by `src/service-health.ts` ([CLAUDE.md:25](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L25), [README.md:186](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L186)).
-- **Smoke tests:** `npm run smoke:runtime`, `npm run smoke:health`, `npm run smoke:db-container` ([package.json:29-31](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L29-L31)). `smoke:db-container` injects a CLI-routed message, waits for a fresh container spawn, and verifies the reply through the session `outbound.db` ([README.md:154-162](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L154-L162)).
-- **Logging:** `pino` + `pino-pretty` ([package.json:43-44](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L43-L44)).
-- **Crash + uptime monitoring:** `src/systemd-crash-monitor.ts`, `src/uptime-monitor.ts`, wired in `lifecycle.ts` ([src/lifecycle.ts:58-63](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/lifecycle.ts#L58-L63)).
-- **Status CLI:** `npm run status`, `npm run health-check`, `npm run verify` ([package.json:32-34](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/package.json#L32-L34)).
-
-## Parallel dispatch gate
-
-Parallel dispatch (4 worker slots) is gated by a metrics check against Agency HQ's `/notifications/metrics/gate`. All three must pass: ≥3 distinct agents, ≥7 calendar days, no test rows. Override via `DISPATCH_PARALLEL=true|false` ([CLAUDE.md:94-110](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L94-L110)).
+- **Logs.** Logs go to `logs/nanoclaw.log` and `logs/nanoclaw.error.log`. Setup generates a logrotate config capped at 50 MB × 3 ([setup/service.ts:L76-L89](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/setup/service.ts#L76-L89)).
+- **Dispatch slot transitions.** Each transition is logged with its slot, task, state and backend ([src/dispatch-pool.ts:L159-L171](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/src/dispatch-pool.ts#L159-L171)).
+- **Crash monitor.** It runs inside the main process by default. A standalone unit is also available ([systemd/systemd-crash-monitor.service:L4-L6](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/systemd/systemd-crash-monitor.service#L4-L6)).
 
 ## Recovery
 
-- **`dispatch_blocked_until` unblock:** after 3 consecutive dispatch failures, the loop sets a 24h block via Agency HQ. Clear it with `UPDATE tasks SET dispatch_blocked_until = NULL, status = 'ready' WHERE id = '<id>'` directly in the Agency HQ Postgres DB — there is no dedicated API for it. Restarting NanoClaw only resets the in-memory retry counter ([CLAUDE.md:113-129](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L113-L129)).
-- **Setup recovery:** see [docs/SETUP_RECOVERY.md](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/docs/SETUP_RECOVERY.md) ([CLAUDE.md:93](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L93)).
-- **WhatsApp upgrade breakage:** WhatsApp is no longer bundled in core — reapply the channel skill or downstream fork and re-run validation ([CLAUDE.md:94-95](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/CLAUDE.md#L94-L95)).
-
-## Secrets
-
-Real Anthropic credentials stay on the host. The credential proxy mediates Claude API access for the agent ([README.md:79](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/README.md#L79)). Other secrets can come from Solo Vault (`SOLO_VAULT_TOKEN`, `SOLO_VAULT_PROJECT`, default URL `https://api.vault.jeffreykeyser.net`) or `.env` ([src/config.ts:72-80](https://github.com/Jeffrey-Keyser/nanoclaw/blob/main/src/config.ts#L72-L80)).
+- **Degraded service.** Read the `degradedReasons` in `/health`, then confirm that a channel is connected ([docs/SETUP_RECOVERY.md:L68-L72](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/docs/SETUP_RECOVERY.md#L68-L72)).
+- **Tasks stuck behind `dispatch_blocked_until`.** This applies only to the legacy dispatcher. Clear the field with SQL against the Agency HQ `tasks` table ([CLAUDE.md:L129-L142](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/CLAUDE.md#L129-L142)).
+- **Agent sessions blocked from controlling the service.** Agent sessions cannot restart the service themselves: the `service-guard.sh` hook denies `systemctl` commands that target `nanoclaw`, as well as `daemon-reload` ([container/hooks/service-guard.sh:L12-L46](https://github.com/Jeffrey-Keyser/nanoclaw/blob/080f00b65b7849e311f7b4aa5825eaa8ab9a8228/container/hooks/service-guard.sh#L12-L46)).

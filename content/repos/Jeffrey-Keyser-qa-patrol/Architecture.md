@@ -1,63 +1,58 @@
 ---
-title: Architecture
-description: Internal module layout — Express routes, Playwright runner, completion-hook fan-out, and Postgres/RabbitMQ surfaces.
+title: "Architecture"
+description: "Components and contracts of the QA Patrol Express service: routing, Playwright execution, auth, probes, eventing, and completion hooks."
 ---
 
 # Architecture
 
-QA Patrol is a single Express 5 process. `src/app.ts` wires the server via `express-server-factory`, mounts routers under `/api/v1`, `/dashboard`, `/evidence`, and boots singletons for the RabbitMQ publisher and consumer ([app.ts:34-99](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/src/app.ts#L34-L99)).
+QA Patrol is a single Express 5 process. `src/bin/www.ts` loads the app and listens on the configured port ([src/bin/www.ts:L8-L13](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/bin/www.ts#L8-L13)). After startup it syncs scheduled workflows and registers the evidence-cleanup cron job ([src/bin/www.ts:L17-L43](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/bin/www.ts#L17-L43)).
 
-## Component diagram
+## Composition
+
+`src/app.ts` builds the server with `createExpressApp` and mounts `/evidence`, `/dashboard`, `/`, and `/api/v1` ([src/app.ts:L94-L99](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/app.ts#L94-L99)). Version negotiation runs first, and unsupported `/api/vN/` paths return 404 ([src/app.ts:L112-L117](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/app.ts#L112-L117), [src/middleware/versioning.ts:L28-L33](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/middleware/versioning.ts#L28-L33)). The server factory's own auth option is disabled ([src/app.ts:L81](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/app.ts#L81)). Pay-auth applies only to target apps.
+
+## Components and contracts
+
+- **v1 router**: mounts apps, runs, workflows, summary, evidence, dashboard, and probe routes ([src/routes/versions/v1/index.ts:L12-L18](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/routes/versions/v1/index.ts#L12-L18)).
+- **Runs**: synchronous execution and the completion fan-out ([src/routes/versions/v1/runs.ts:L256-L293](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/routes/versions/v1/runs.ts#L256-L293)).
+- **Workflows**: a run links back to its workflow through `workflow_id` ([src/routes/versions/v1/workflows.ts:L230-L237](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/routes/versions/v1/workflows.ts#L230-L237)). Cron jobs are registered or removed on create, update, and delete ([src/routes/versions/v1/workflows.ts:L61-L63](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/routes/versions/v1/workflows.ts#L61-L63), [src/routes/versions/v1/workflows.ts:L169-L171](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/routes/versions/v1/workflows.ts#L169-L171)).
+- **Playwright runner**: defaults to a 1920x1080 viewport and a 120000 ms timeout ([src/services/playwright-runner.ts:L146-L147](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/playwright-runner.ts#L146-L147)). It captures console errors and responses with status 400 or higher, and screenshots each step by default ([src/services/playwright-runner.ts:L177-L196](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/playwright-runner.ts#L177-L196), [src/services/playwright-runner.ts:L312-L316](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/playwright-runner.ts#L312-L316)).
+- **Auth**: the detector looks for pay-auth markers in page HTML and fails safe to none ([src/services/auth-detector.ts:L32-L47](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/auth-detector.ts#L32-L47)). The lifecycle tries saved state first, then a single password fallback ([src/services/auth-lifecycle.ts:L70-L117](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/auth-lifecycle.ts#L70-L117)). Login tries three methods in order ([src/services/auth.ts:L37-L70](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/auth.ts#L37-L70)).
+- **Step generation**: AI output must be a JSON array of known actions ([src/services/step-generator.ts:L59-L73](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/step-generator.ts#L59-L73)).
+- **Vision analysis**: runs only when `options.enableVisionAnalysis` is set ([src/services/playwright-runner.ts:L337](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/playwright-runner.ts#L337)).
+- **Probes**: the trigger route returns 202 and runs the probe in the background ([src/routes/versions/v1/probe-runs.ts:L189-L193](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/routes/versions/v1/probe-runs.ts#L189-L193)). The probe registry's methods currently throw "not implemented" ([src/services/probe-registry.ts:L24-L31](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/probe-registry.ts#L24-L31)).
+- **Completion hooks**: RabbitMQ publish, callback webhook, GitHub issues, and evidence cleanup, with cleanup skipped on error ([src/routes/versions/v1/runs.ts:L259-L288](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/routes/versions/v1/runs.ts#L259-L288)). The README lists Telegram alerts ([README.md:L237](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/README.md#L237)), but no Telegram step appears in these hooks, and no notifier module is in the attached excerpts.
+- **Events**: the publisher uses the exchange defined by the message-contracts package ([src/services/rabbitmq-publisher.ts:L57-L59](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/rabbitmq-publisher.ts#L57-L59)). It publishes failed or completed run routing keys ([src/services/rabbitmq-publisher.ts:L128-L131](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/rabbitmq-publisher.ts#L128-L131)).
+- **Consumers**: evidence cleanup, probe triggers, and workflow runs ([src/services/rabbitmq-consumer.ts:L92-L109](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/services/rabbitmq-consumer.ts#L92-L109)).
+- **Data access**: the DAL uses one shared pool ([src/db/connection.ts:L4](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/db/connection.ts#L4)).
+
+## Flowchart
 
 ```mermaid
 flowchart TD
-  Caller[Agent / curl / cron-service] -->|POST /api/v1/runs| RunsRoute[routes/versions/v1/runs.ts]
-  Caller -->|POST /api/v1/workflows/:id/run| WorkflowsRoute[routes/versions/v1/workflows.ts]
-  CronSvc[cron-service] -->|AMQP trigger| Consumer[rabbitmq-consumer]
-  Consumer --> Cleanup[evidence-cleanup]
-
-  RunsRoute --> PayClient[pay-client]
-  RunsRoute --> StepGen[step-generator]
-  RunsRoute --> Runner[playwright-runner]
-  WorkflowsRoute --> CronClient[cron-client]
-  WorkflowsRoute --> Runner
-
-  Runner --> AuthDet[auth-detector]
-  Runner --> Auth[auth.ts]
-  Runner --> Vision[vision-analyzer]
-  Runner --> DAL[(qa.runs / qa.workflows)]
-  Runner --> Disk[(evidence/runs/)]
-
-  RunsRoute --> Publisher[rabbitmq-publisher]
-  RunsRoute --> Webhook[webhook-notifier]
-  RunsRoute --> Telegram[telegram-notifier]
-  RunsRoute --> GHIssues[github-issues]
-  RunsRoute --> Cleanup
-
-  Publisher -->|qa.events| RMQ[(RabbitMQ)]
-  PayClient -->|HTTP| Pay[Pay app registry]
-  CronClient -->|HTTP| CronSvc
+  Caller["Caller agent or client"] -->|"POST runs"| RunsRoute["Runs route"]
+  Caller -->|"Probe trigger"| ProbeRoute["Probe routes"]
+  Cron["cron-service"] -->|"AMQP messages"| Consumer["RabbitMQ consumers"]
+  Consumer -->|"internal HTTP run"| WorkflowRoute["Workflows route"]
+  WorkflowRoute --> Runner["Playwright runner"]
+  RunsRoute --> PayReg["Pay registry proxy"]
+  RunsRoute --> StepGen["Step generator"]
+  RunsRoute --> Runner
+  RunsRoute --> Db["PostgreSQL qa schema"]
+  ProbeRoute --> ProbeRunner["Probe runner"]
+  ProbeRunner --> Runner
+  Runner --> AuthFlow["Pay-auth lifecycle"]
+  Runner --> Vision["Vision analyzer"]
+  Runner --> Evidence["Evidence directory"]
+  RunsRoute --> Hooks["Completion hooks"]
+  Hooks --> Events["RabbitMQ run events"]
+  Hooks --> Callback["Caller callback URL"]
+  Hooks --> Issues["GitHub issues"]
+  Hooks --> Cleanup["Evidence cleanup"]
+  StepGen --> AiProxy["AI Proxy"]
+  Vision --> AiProxy
 ```
-
-## Role contracts
-
-- **HTTP entrypoint** — `src/app.ts` composes middleware, health checks (DB + RabbitMQ), and version negotiation ([app.ts:52-118](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/src/app.ts#L52-L118)). Routes are mounted under `/api/v1` via the v1 router index ([src/routes/versions/v1/index.ts](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/src/routes/versions/v1/index.ts)).
-- **Runs router** — `runs.ts` owns run CRUD, synchronous execution, and the post-completion hook fan-out ([CLAUDE.md:26](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/CLAUDE.md#L26)).
-- **Workflows router** — `workflows.ts` owns workflow CRUD + cron-service sync; running a workflow creates a `qa.runs` row that links back via `workflow_id` ([CLAUDE.md:27](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/CLAUDE.md#L27), [migrations/1000000003000_add-workflow-id-to-runs.ts](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/migrations/1000000003000_add-workflow-id-to-runs.ts)).
-- **Playwright runner** — `services/playwright-runner.ts` (~274 lines) launches system Chrome, runs steps sequentially, captures console + 4xx/5xx network errors, screenshots per step ([README.md:164-169](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/README.md#L164-L169)).
-- **Auth pipeline** — `auth-detector.ts` sniffs HTML for pay-auth markers; `auth.ts` runs the 3-tier login (`window.__PAY_AUTH__` → `data-testid` → React onChange hack) ([CLAUDE.md:29-30](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/CLAUDE.md#L29-L30), [README.md:243-246](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/README.md#L243-L246)).
-- **Step generator** — `step-generator.ts` decomposes free-text `instructions` into structured steps via AI Proxy / gpt-4o ([README.md:215-216](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/README.md#L215-L216)).
-- **Vision analyzer** — `vision-analyzer.ts` posts screenshots to a vision model when `options.enableVisionAnalysis` is set ([README.md:217](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/README.md#L217)).
-- **Probes** — `probe-runner.ts` (~1174 lines) plus probe routes/registry/event publisher implement the smoke-probe subsystem seeded by migrations `1000000005000`…`1000000009000` ([migrations/](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/migrations/)).
-- **Eventing** — `rabbitmq-publisher.ts` emits to the `qa.events` exchange; `rabbitmq-consumer.ts` ingests cron triggers (e.g. evidence cleanup) ([CLAUDE.md:34-35](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/CLAUDE.md#L34-L35)).
-- **DAL** — `src/dal/` centralizes Postgres reads/writes; pool from `src/db/connection.ts` ([CLAUDE.md:41](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/CLAUDE.md#L41)).
-- **Dashboard** — `routes/dashboard-ui` renders SSR pages; `routes/versions/v1/dashboard.ts` powers the SSE stream with polling fallback ([README.md:264](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/README.md#L264)).
 
 ## Data model
 
-Two tables in schema `qa`:
-
-- `qa.runs` — steps, summary, evidence paths, status, optional `workflow_id` ([CLAUDE.md:47](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/CLAUDE.md#L47)).
-- `qa.workflows` — reusable definitions with optional cron schedule ([CLAUDE.md:48](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/CLAUDE.md#L48)).
-
-Probe tables added by `1000000005000_create-probe-tables.ts` extend the schema for the smoke-probe subsystem ([migrations/1000000005000_create-probe-tables.ts](https://github.com/Jeffrey-Keyser/qa-patrol/blob/main/migrations/1000000005000_create-probe-tables.ts)).
+Documented tables are `qa.runs` and `qa.workflows` ([CLAUDE.md:L46-L47](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/CLAUDE.md#L46-L47)). Probe tables are referenced by DAL code ([src/dal/probe-runs.ts:L4-L48](https://github.com/Jeffrey-Keyser/qa-patrol/blob/f9b3dd00ba79e6fc176957326134666ddbb039b5/src/dal/probe-runs.ts#L4-L48)). Migration files are not in the attached excerpts, so their exact schema is unknown.

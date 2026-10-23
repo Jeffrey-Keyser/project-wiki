@@ -1,47 +1,50 @@
 ---
-title: Iteration Loop
-description: How a new handler or feature moves from idea to running service inside openclaw-bridge.
+title: "Iteration Loop"
+description: "Contributor workflow for changing openclaw-bridge, grounded in package scripts, the handler registry, deploy.sh, and the service unit."
 ---
 
 # Iteration Loop
 
-The repo's day-to-day change is "add a new bridge handler" or "tweak an existing one". The README documents the canonical recipe ([README.md:38-72](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/README.md#L38-L72)); the actual code paths are short and predictable.
+Most changes add a handler or adjust an existing one. The steps below use the scripts and deploy path in the snapshot. No CI configuration appears in the provided excerpts, so whether CI runs is unknown.
 
 ## Change cycle
 
 ```mermaid
 flowchart TD
-  A[Idea: new producer wants to fan out events] --> B[Create src/handlers/<name>.js]
-  B --> C[Export async init() that calls subscribeToExchange/subscribeToQueue]
-  C --> D[Forward via sendToOpenClaw with name + channel]
-  D --> E[Register in src/handlers/index.js handlers array]
-  E --> F[Add Node --test file at repo root: test-<name>.test.js]
-  F --> G[npm test + npm run lint]
-  G --> H[git push main]
-  H --> I[deploy.sh on host: git pull, npm ci, systemctl --user restart]
-  I --> J[journalctl -u openclaw-bridge -f to verify init]
+  A["Add or edit a module in src/handlers"]
+  B["Register the entry in the handlers array"]
+  C["Add or update a node test file"]
+  D["npm run lint"]
+  E["npm test"]
+  F["Push to origin main"]
+  G["Run deploy.sh on the host"]
+  H["systemctl user restart openclaw-bridge"]
+  I["Check journalctl for handler init lines"]
+  A --> B --> C --> D --> E --> F --> G --> H --> I
 ```
 
-## Steps, cited to source
+## Steps
 
-1. **Author the handler.** New file under `src/handlers/`. Convention: export `init()` that calls `subscribeToExchange(exchangeName, queueName, handleEvent)` and an internal `handleEvent` that returns `await sendToOpenClaw(message, { name })`. The README walks through a minimal example ([README.md:38-58](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/README.md#L38-L58)). Existing handlers like `src/handlers/ping.js` show the production shape, including `@jeffrey-keyser/message-contracts` typing and external API calls ([src/handlers/ping.js:1-40](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/handlers/ping.js#L1-L40)).
+1. **Write the handler.** The README shows a minimal pattern: an `init()` that calls `subscribeToExchange`, plus a handler that calls `sendToOpenClaw` ([README.md:L46-L66](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/README.md#L46-L66)). Current handlers also use `subscribeToQueue` for topic patterns, for example the cron alert handler ([src/handlers/cron.js:L14-L16](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/cron.js#L14-L16)).
 
-2. **Register it.** Append a row to the `handlers` array in `src/handlers/index.js`. The registry is the single source of truth; `initializeHandlers()` walks it in order and sets `setCurrentHandler(name)` so the rabbit subscriber captures the handler name for pause-checks ([src/handlers/index.js:41-102](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/handlers/index.js#L41-L102)).
+2. **Register it.** Add an entry to the `handlers` array. Entries are `{ name, module, enabled }` ([src/handlers/index.js:L37-L38](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/index.js#L37-L38)). A handler that is not in this array is not initialized ([L68-L91](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/index.js#L68-L91)).
 
-3. **Write a test.** Tests live as `test-*.test.js` files at the repo root and run under `node --test`. Recent examples: `test-qa-patrol-handler.test.js`, `test-plan-manager-watchdog.test.js`, `test-nanoclaw.test.js` ([package.json:8](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/package.json#L8)).
+3. **Lint.** `npm run lint` runs `node --check` on five named files only: the entry point, bridge state, the handler registry, plan-manager, and one test file ([package.json:L8](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/package.json#L8)). Other handler files are not syntax-checked by this script. `typecheck` is an alias for lint ([package.json:L11](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/package.json#L11)).
 
-4. **Lint and test.** `npm run lint` is a `node --check` pass on the three core files; `npm test` runs the node test suite ([package.json:7-9](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/package.json#L7-L9)).
+4. **Test.** `npm test` runs `node --test` ([package.json:L9](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/package.json#L9)). The test files themselves are not in the excerpts, so their coverage is unknown.
 
-5. **Ship.** Push to `main`. On the host, `deploy.sh` does `git pull`, `npm ci --production`, then `systemctl --user restart openclaw-bridge` ([deploy.sh:1-19](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/deploy.sh#L1-L19)).
+5. **Build check.** `npm run build` only runs syntax checks on the entry point and plan-manager ([package.json:L10](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/package.json#L10)).
 
-6. **Verify.** The bridge prints a startup banner and `Handlers: N active, M failed`; tail with `journalctl -u openclaw-bridge -f` ([src/index.js:597-620](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L597-L620), [README.md:74-80](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/README.md#L74-L80)).
+6. **Deploy.** `deploy.sh` runs `git pull origin main`, `npm ci --production`, and `systemctl --user restart openclaw-bridge` ([deploy.sh:L12](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/deploy.sh#L12), [L15](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/deploy.sh#L15), [L18](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/deploy.sh#L18)).
 
-## Hot path: pausing or rerouting without redeploy
+7. **Verify.** The README tails logs with `journalctl -u openclaw-bridge -f` ([README.md:L92-L93](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/README.md#L92-L93)). Handler init logs `Handler initialized` or a skip message ([src/handlers/cron.js:L44-L47](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/cron.js#L44-L47)).
 
-Because handler pause state and routing target both live in memory plus disk, you can change them via the admin API without restarting:
+## Runtime toggles without redeploy
 
-- `PUT /admin/handlers/:name` toggles a single handler ([src/index.js:60-70](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L60-L70)).
-- `PUT /admin/bridge` flips the global kill switch ([src/index.js:98-107](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L98-L107)).
-- `PUT /admin/targets/:handler` reroutes between `openclaw | nanoclaw | both` ([src/index.js:83-95](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/main/src/index.js#L83-L95)).
+Pause and routing state can change through the admin API without a restart. These routes are `PUT /admin/handlers/:name`, `PUT /admin/bridge`, and `PUT /admin/targets/:handler` ([src/index.js:L58-L68](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L58-L68), [L96-L105](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L96-L105), [L81-L93](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L81-L93)). Use these to isolate a noisy handler before changing code.
 
-Use these for "is this handler the noisy one?" debugging before changing code.
+Route targets are keyed by the name passed to `sendToOpenClaw`, not the registry name. For example, the briefing handler sends `Morning Email Triage` ([src/handlers/briefing.js:L39-L41](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/briefing.js#L39-L41)). Check that key when rerouting.
+
+## Hygiene
+
+Source files contain embedded credentials and fallback secrets. Do not copy them into docs or tickets. Move them into environment configuration before adding new integrations.

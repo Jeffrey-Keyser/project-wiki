@@ -1,56 +1,57 @@
 ---
-title: Architecture
-description: Internal module layout of Business HQ — Express API, RabbitMQ consumers, Absurd durable workflow worker, and Postgres DAL.
+title: "Architecture"
+description: "Components and contracts of Business HQ: Express API, RabbitMQ consumers, the Absurd daily-snapshot worker, the shared Postgres pool, and the publisher."
 ---
 
 # Architecture
 
-Single Node process. Hosts Express HTTP API, three RabbitMQ consumers, and an Absurd durable workflow worker bound to one shared `pg.Pool` ([src/bin/www.ts:11-35](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/bin/www.ts#L11-L35)).
-
-## Component diagram
+Business HQ is a single Node process. It hosts the Express HTTP API, three RabbitMQ consumers, and an Absurd worker. The API, consumers, and worker share one database pool ([src/db/connection.ts:4-6](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/db/connection.ts#L4-L6)). The entrypoint starts the HTTP listener first, then the Absurd worker and RabbitMQ subscriptions ([src/bin/www.ts:16-35](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/bin/www.ts#L16-L35)).
 
 ```mermaid
 flowchart LR
-  subgraph BHQ["Business HQ (port 3041)"]
-    APP["Express App<br/>(app.ts)"]
-    V1["v1 Router<br/>products / revenue / costs / dashboard"]
-    PAY["pay-consumer"]
-    AGN["agency-consumer"]
-    CRN["cron-consumer"]
-    ABS["Absurd worker<br/>daily-snapshot task"]
-    DAL["DAL modules<br/>(src/dal/*)"]
+  RMQ["RabbitMQ exchanges pay events agency events cron jobs"]
+  subgraph BHQ["Business HQ process"]
+    API["Express API under api v1"]
+    PC["pay-consumer"]
+    AC["agency-consumer"]
+    CC["cron-consumer"]
+    ABS["Absurd daily-snapshot task"]
     PUB["event-publisher"]
+    DAL["DAL modules"]
   end
-  PG[("Postgres<br/>business + absurd schemas")]
-  RMQ[("RabbitMQ")]
-
-  APP --> V1 --> DAL --> PG
-  PAY --> DAL
-  AGN --> DAL
-  CRN --> ABS --> PG
-  PAY --> PUB --> RMQ
-  RMQ --> PAY
-  RMQ --> AGN
-  RMQ --> CRN
+  PG["PostgreSQL business and absurd schemas"]
+  RMQ --> PC
+  RMQ --> AC
+  RMQ --> CC
+  CC --> ABS
+  API --> DAL
+  PC --> DAL
+  AC --> DAL
+  PC --> PUB
+  PUB --> RMQ
+  DAL --> PG
+  ABS --> PG
 ```
 
 ## Role contracts
 
-**HTTP boundary.** `app.ts` builds the Express app via `@jeffrey-keyser/express-server-factory`, registers `versionNegotiation` + `validateVersion([1])` middleware, mounts `/` and `/api/v1`, and exposes a `/health` probe wired to a Postgres health check ([src/app.ts:21-67](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/app.ts#L21-L67)). The v1 router fans out to four resource routers ([src/routes/versions/v1/index.ts:10-13](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/routes/versions/v1/index.ts#L10-L13)).
+**HTTP boundary.** The app is built with `createExpressApp` and mounts `/` and `/api/v1` ([src/app.ts:64-67](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/app.ts#L64-L67)). Requests to `/api/v*` other than version 1 receive a 404 `VERSION_NOT_FOUND` response ([src/middleware/versioning.ts:28-33](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/middleware/versioning.ts#L28-L33)). Responses carry an `API-Version` header ([src/middleware/versioning.ts:19](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/middleware/versioning.ts#L19)). CORS allows GET, POST, PUT, DELETE, and OPTIONS ([src/app.ts:31-36](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/app.ts#L31-L36)).
 
-**Process entrypoint.** `bin/www.ts` listens on `PORT`, then asynchronously starts the Absurd worker and connects RabbitMQ, registering all three consumers in parallel. SIGTERM/SIGINT trigger graceful shutdown of Absurd, RabbitMQ, then HTTP ([src/bin/www.ts:14-49](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/bin/www.ts#L14-L49)).
+**Health.** `GET /health` is enabled and checks the database through the shared pool ([src/app.ts:54-62](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/app.ts#L54-L62)). The provided excerpt does not show the check's internals.
 
-**Messaging layer.** `services/rabbit.ts` wraps `amqplib` with a reconnecting `RabbitMQService` singleton that asserts the `BusinessExchange` on connect and tracks subscriptions for replay on reconnect ([src/services/rabbit.ts:19-40](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/services/rabbit.ts#L19-L40)).
+**Resource routes.** Each resource returns a `{ success, data }` envelope. Creates require `name` for products and a numeric `amount_cents` for revenue and costs ([src/routes/versions/v1/products.ts:34-37](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/routes/versions/v1/products.ts#L34-L37), [src/routes/versions/v1/revenue.ts:23-26](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/routes/versions/v1/revenue.ts#L23-L26)).
+
+**Messaging layer.** `RabbitMQService` asserts the business exchange on connect ([src/services/rabbit.ts:45-50](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/rabbit.ts#L45-L50)) and replays subscriptions after reconnect ([src/services/rabbit.ts:65-67](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/rabbit.ts#L65-L67)). Handlers ack on success and nack with requeue on error ([src/services/rabbit.ts:173-183](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/rabbit.ts#L173-L183)). Publishing returns `false` with a warning when no channel exists ([src/services/rabbit.ts:127-131](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/rabbit.ts#L127-L131)).
 
 **Inbound consumers.**
-- `pay-consumer` binds queues to the `pay.events` topic exchange for `payment.succeeded` and `subscription.created`, deduping on `stripe_payment_id` ([src/services/pay-consumer.ts:6-87](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/services/pay-consumer.ts#L6-L87)).
-- `agency-consumer` binds to `AgencyExchange` for `sprint.completed`, resolving `product_id` by `repo` lookup ([src/services/agency-consumer.ts:11-45](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/services/agency-consumer.ts#L11-L45)).
-- `cron-consumer` binds to `cron.jobs` for `business.daily-snapshot` and spawns the Absurd task ([src/services/cron-consumer.ts:4-34](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/services/cron-consumer.ts#L4-L34)).
+- `pay-consumer` handles `payment.succeeded` and `subscription.created` ([src/services/pay-consumer.ts:14-16](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/pay-consumer.ts#L14-L16), [src/services/pay-consumer.ts:61-63](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/pay-consumer.ts#L61-L63)).
+- `agency-consumer` handles `sprint.completed` ([src/services/agency-consumer.ts:10-13](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/agency-consumer.ts#L10-L13)).
+- `cron-consumer` handles `business.daily-snapshot` on `cron.jobs` ([src/services/cron-consumer.ts:10-12](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/cron-consumer.ts#L10-L12)).
 
-**Durable workflow.** `services/absurd.ts` registers a single `daily-snapshot` task with two checkpointed `ctx.step` calls (`collect-metrics`, `save-snapshot`). Idempotency key `daily-snapshot:<date>:<hour>` prevents duplicate spawns; `ON CONFLICT (period, period_start) DO UPDATE` makes the upsert safe to retry ([src/services/absurd.ts:18-115](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/services/absurd.ts#L18-L115)). Worker concurrency=1, 5s poll ([src/services/absurd.ts:118-125](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/services/absurd.ts#L118-L125)).
+**Durable workflow.** Absurd uses the queue `business-hq` with a default of three attempts ([src/services/absurd.ts:5](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/absurd.ts#L5), [src/services/absurd.ts:15](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/absurd.ts#L15)). The `daily-snapshot` task has two checkpointed steps, `collect-metrics` and `save-snapshot` ([src/services/absurd.ts:31](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/absurd.ts#L31), [src/services/absurd.ts:70](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/absurd.ts#L70)). The worker runs with concurrency 1 ([src/services/absurd.ts:121](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/absurd.ts#L121)).
 
-**Outbound publisher.** `event-publisher.ts` emits three routing keys on `business.events` — `revenue_updated`, `product_launched`, `milestone_reached` ([src/services/event-publisher.ts:7-48](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/services/event-publisher.ts#L7-L48)).
+**Outbound publisher.** `event-publisher.ts` defines three helpers: revenue updated, product launched, and milestone reached ([src/services/event-publisher.ts:7-48](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/event-publisher.ts#L7-L48)). Only `publishRevenueUpdated` is called in the provided excerpts ([src/services/pay-consumer.ts:43-48](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/pay-consumer.ts#L43-L48)).
 
-**Data layer.** Each `business` table has a thin DAL module under `src/dal/` (products, revenue-events, cost-events, build-events, financial-snapshots, settings). All share the single `pg.Pool` from `src/db/connection.ts`.
+**Data layer.** DAL modules for products, revenue, costs, build events, snapshots, and settings wrap SQL against the `business` schema ([src/dal/products.ts:4-16](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/dal/products.ts#L4-L16), [src/dal/settings.ts:3-9](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/dal/settings.ts#L3-L9)).
 
-**Legacy snapshot calculator.** `snapshot-calculator.ts` is the pre-Absurd, non-durable variant of the daily rollup, kept for reference / fallback ([src/services/snapshot-calculator.ts:8-77](https://github.com/Jeffrey-Keyser/business-hq/blob/main/src/services/snapshot-calculator.ts#L8-L77)).
+**Legacy calculator.** `snapshot-calculator.ts` says the cron consumer calls it ([src/services/snapshot-calculator.ts:4-7](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/snapshot-calculator.ts#L4-L7)). The cron consumer imports `spawnDailySnapshot` instead ([src/services/cron-consumer.ts:2](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/cron-consumer.ts#L2)), so the header is stale. Its insert has no `ON CONFLICT` clause ([src/services/snapshot-calculator.ts:51-56](https://github.com/Jeffrey-Keyser/business-hq/blob/9fa76d7545fdce535b7a3a89236c2309937f4671/src/services/snapshot-calculator.ts#L51-L56)). No caller appears in the provided excerpts.

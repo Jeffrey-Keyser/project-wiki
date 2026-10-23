@@ -1,66 +1,72 @@
 ---
-title: Services and Dependencies
-description: Inbound and outbound integrations of the Life repo — Pay SSO, AI Proxy, PostgreSQL, S3, GitHub, and the systems that consume Life.
+title: "Services and Dependencies"
+description: "Confirmed upstream dependencies and consumers of Life, with unknown or expected callers clearly marked."
 ---
 
 # Services and Dependencies
 
-Life is a leaf application — it consumes several Jeffrey-Keyser services and external SaaS, and is consumed only by the end user's browser (and the deploy webhook on the host).
+Life is an application, not a library. It depends on several services and has a small set of confirmed callers. Entries below are labeled as confirmed, documented, or unknown.
 
 ## Depends on
 
-### Inbound auth — Pay SSO
+### Pay SSO (confirmed)
 
-- Library: `@jeffrey-keyser/pay-auth-integration` v6.10.1 on the client, v6.9.0 on the server ([client/package.json:7](https://github.com/Jeffrey-Keyser/Life/blob/master/client/package.json#L7), [server/package.json:24](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L24)).
-- `payAuthMiddleware.ts` validates every authenticated request against `PAY_SERVICE_URL` and auto-provisions a local user on first login ([CLAUDE.md:155-159](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L155-L159)).
-- The frontend is configured with `VITE_PAY_URL` at build time, baked into the bundle ([README.md:65-67](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L65-L67)).
+- Server config reads `PAY_SERVICE_URL` into `payServiceUrl`, with a default ([server/config/env.ts:220](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/env.ts#L220)).
+- The user routes build Pay API URLs from that config ([server/routes/users.ts:20-21](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/users.ts#L20-L21)).
+- The client uses `VITE_PAY_URL` ([client/src/config/payAuth.ts:4](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/src/config/payAuth.ts#L4)).
 
-### AI Proxy (Whisper + GPT-4o-mini)
+### AI Proxy (confirmed in code)
 
-- All transcription and structuring calls go through the AI Proxy service via `server/services/aiProxy.ts`; the server holds no OpenAI key directly ([README.md:84-85](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L84-L85)).
-- Configured via `AI_PROXY_URL` and `AI_PROXY_API_KEY` in `server/.env`, with a fallback hydration path from `/etc/ai-proxy/secrets.env` on the beelink host ([CLAUDE.md:163-167](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L163-L167), [docs/DEPLOYMENT.md:35-47](https://github.com/Jeffrey-Keyser/Life/blob/master/docs/DEPLOYMENT.md#L35-L47)).
+- Transcription and chat requests go to `AI_PROXY_URL` with a bearer key ([server/services/aiProxy.ts:119](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/aiProxy.ts#L119), [server/services/aiProxy.ts:144-147](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/aiProxy.ts#L144-L147)).
+- The shared key can be hydrated from a secrets file on the host. Only `AI_PROXY_API_KEY` is read from it ([server/config/env.ts:84](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/env.ts#L84), [docs/DEPLOYMENT.md:37-45](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L37-L45)).
 
-### PostgreSQL
+### Struct analysis service (confirmed in code)
 
-- Driver: `pg` v8 ([server/package.json:42](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L42)).
-- Two schemas — `public` (journals, entries, persons, tags, edges, images) and `life` (user mapping with `pay_uuid` → local user id) ([CLAUDE.md:118-141](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L118-L141)).
-- Session storage uses `connect-pg-simple` against the same database ([server/package.json:29](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L29)).
-- Schema lifecycle is `server/db/deploy.sh`: `schema/` → `migrations/` → `stored_procedures/` ([docs/DEPLOYMENT.md:77-85](https://github.com/Jeffrey-Keyser/Life/blob/master/docs/DEPLOYMENT.md#L77-L85)).
+- `STRUCT_URL` is used for voice structuring, edge explanations, synopses, and insights ([server/config/env.ts:227](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/env.ts#L227), [server/services/voiceEntry.ts:244](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/voiceEntry.ts#L244), [server/services/personSynopsis.service.ts:67](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/personSynopsis.service.ts#L67), [server/services/search.service.ts:175](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/search.service.ts#L175)).
+- Deployment status of this service is unknown from these excerpts.
 
-### S3 (audio + images)
+### PostgreSQL (confirmed)
 
-- `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` ([server/package.json:21-22](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L21-L22)).
-- Used for journal entry audio and the `journal_entry_image` records that keep S3 keys and dominant colors in the DB ([CLAUDE.md:140](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L140)).
+- The server uses `pg` through a connection pool. The health route runs a query against it ([server/routes/health.ts:60](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/health.ts#L60)).
+- Schema and procedures are applied from `server/db` ([docs/DEPLOYMENT.md:79-85](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L79-L85)).
 
-### Local embedding model
+### Object storage (confirmed in code)
 
-- `@xenova/transformers` runs an embedding model locally for synopsis vectors; the deploy script primes it idempotently via `scripts/prepare-models.ts` ([server/package.json:27](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L27), [deploy.sh:13-15](https://github.com/Jeffrey-Keyser/Life/blob/master/deploy.sh#L13-L15)).
-- Synopsis embeddings are backfilled on every deploy via `scripts/backfill-embeddings.ts` (no-op when caught up) ([deploy.sh:29-31](https://github.com/Jeffrey-Keyser/Life/blob/master/deploy.sh#L29-L31)).
+- The storage factory supports only the `s3` provider ([server/services/storage/index.ts:9-12](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/storage/index.ts#L9-L12)). The bucket and region are configurable ([server/config/env.ts:235-236](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/env.ts#L235-L236)).
 
-### GitHub (error issues)
+### Local embedding model (confirmed in code)
 
-- `@jeffrey-keyser/github-error-issues` opens GitHub Issues for production exceptions; controlled by `GITHUB_TOKEN`/`GITHUB_REPO` and a `NODE_ENV === "production"` gate ([server/app.ts:117-123](https://github.com/Jeffrey-Keyser/Life/blob/master/server/app.ts#L117-L123)).
+- Synopsis vectors come from `Xenova/bge-small-en-v1.5` ([server/embed/index.ts:4](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/embed/index.ts#L4)). Deploy prepares it ([deploy.sh:13-15](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/deploy.sh#L13-L15)).
 
-### UI kit and editor
+### Feedback Registry (confirmed in code)
 
-- `@jeffrey-keyser/personal-ui-kit` for primitives, `@jeffrey-keyser/feedback-widget` for in-app feedback, TipTap (`@tiptap/*`) for the rich-text editing surface used in deeper edit views, Cytoscape for graphs ([client/package.json:6-23](https://github.com/Jeffrey-Keyser/Life/blob/master/client/package.json#L6-L23)).
+- The feedback route forwards submissions to an external API ([server/routes/feedback.ts:20](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/feedback.ts#L20)). It sends a bearer key only when one is configured ([server/routes/feedback.ts:63-65](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/feedback.ts#L63-L65)).
 
-### Frameworks
+### GitHub error reporting (confirmed in code, production-gated)
 
-- Server: Express 5 + TypeScript 5 ([server/package.json:34](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L34), [server/package.json:79](https://github.com/Jeffrey-Keyser/Life/blob/master/server/package.json#L79)).
-- Client: React 19 + Vite 6 + Redux Toolkit 2 ([client/package.json:27-31](https://github.com/Jeffrey-Keyser/Life/blob/master/client/package.json#L27-L31), [client/package.json:84](https://github.com/Jeffrey-Keyser/Life/blob/master/client/package.json#L84)).
+- The error middleware is enabled only when `NODE_ENV` is production ([server/app.ts:117-123](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/app.ts#L117-L123)).
+
+### Solo Vault (confirmed in code, optional)
+
+- At startup the server loads selected secrets from a local vault URL when `SOLO_VAULT_KEY` is set. Otherwise it logs a warning and uses `.env` ([server/config/vault.ts:1](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/vault.ts#L1), [server/config/vault.ts:27-32](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/vault.ts#L27-L32)).
 
 ## Consumed by
 
-### End-user browsers
+### Browser clients (confirmed)
 
-- Public frontend at `https://life.jeffreykeyser.net`, public API at `https://life-api.jeffreykeyser.net`, both fronted by Cloudflare Tunnel ([docs/DEPLOYMENT.md:8-12](https://github.com/Jeffrey-Keyser/Life/blob/master/docs/DEPLOYMENT.md#L8-L12)).
-- Voice capture requires `getUserMedia` and so requires HTTPS or `localhost` ([README.md:58](https://github.com/Jeffrey-Keyser/Life/blob/master/README.md#L58)).
+- The client calls the API base from `VITE_API_URL` ([client/src/config/api.ts:2](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/src/config/api.ts#L2)).
+- Share readers call the unauthenticated public routes ([server/app.ts:110](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/app.ts#L110)).
 
-### beelink-deploy webhook
+### Smoke script (documented caller)
 
-- The deploy listener consumes GitHub push events on `master` and runs `./deploy.sh` on the host ([CLAUDE.md:79-83](https://github.com/Jeffrey-Keyser/Life/blob/master/CLAUDE.md#L79-L83), [docs/DEPLOYMENT.md:21-25](https://github.com/Jeffrey-Keyser/Life/blob/master/docs/DEPLOYMENT.md#L21-L25)).
+- The post-deploy smoke test calls the production voice transcribe route with a token and audio fixture ([docs/DEPLOYMENT.md:53-58](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L53-L58)).
 
-### Pay SSO (downstream relationship)
+### beelink-deploy webhook (documented, not verified)
 
-- Life is a Pay relying-party; it does not expose endpoints that Pay calls back. See the Pay wiki at `https://wiki.jeffreykeyser.net/repos/Jeffrey-Keyser-pay/` for the auth flow's other side.
+- The docs say GitHub pushes trigger this listener, which runs `./deploy.sh` ([docs/DEPLOYMENT.md:24](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L24)). Its code is not in the excerpts.
+
+### Unknown or expected callers
+
+- **Health probes**: a load balancer, uptime monitor, or Cloudflare check may call `/health`. No such configuration is in the excerpts ([server/app.ts:97](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/app.ts#L97)).
+- **Other Jeffrey-Keyser services** calling Life's API are not confirmed by any excerpt.
+- **Pay** is a relying party on Life's side only. See the Pay guide: https://wiki.jeffreykeyser.net/repos/jeffrey-keyser-pay/home/

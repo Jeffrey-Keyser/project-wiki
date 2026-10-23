@@ -1,32 +1,66 @@
 ---
-title: Glossary
-description: Repo-specific terms used in the AI Proxy codebase and docs.
+title: "Glossary"
+description: "Project-specific terms used in the AI Proxy codebase and docs, with source citations."
 ---
 
 # Glossary
 
-**Application.** A named tenant holding an API key, daily request/token limits, and an allow-list of models. Created via `POST /v1/applications`; the plaintext API key is returned exactly once at creation ([README.md:166-189](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L166-L189), [server/dal/ApplicationDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/dal/ApplicationDal.ts)).
+**Application.** A tenant record holding:
+- a bcrypt hash of its API key
+- a status of active, inactive or suspended
+- daily request and token limits
+- `allowed_models`
+- metadata
 
-**Application API key.** A bearer credential of the form `app_live_*` that authorizes a client to call provider endpoints. Validated by the `applicationAuth` middleware, which resolves the key to an `Application` and attaches it to the request ([server/middleware/applicationAuth.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/applicationAuth.ts), [README.md:184-189](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L184-L189)).
+It is stored in the `applications` table ([server/dal/ApplicationDal.ts:L35-L40](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/ApplicationDal.ts#L35-L40), [server/routes/applications.ts:L67-L69](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/applications.ts#L67-L69)).
 
-**Service API key (`AI_PROXY_API_KEY`).** A coarse-grained shared secret enforced by `serviceApiKey` middleware on non-public routes — a perimeter check in addition to the per-application key ([server/middleware/serviceApiKey.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/serviceApiKey.ts), [server/app.ts:254-256](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L254-L256)).
+**Application API key.** A Bearer credential such as `app_live_…`, returned once when the application is created ([README.md:L203-L208](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L203-L208)). `applicationAuth` checks it against stored hashes and rejects inactive applications ([server/middleware/applicationAuth.ts:L36-L61](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/applicationAuth.ts#L36-L61)).
 
-**Pay auth.** JWT/session-based authentication proxied to the external Pay service at `https://pay.jeffreykeyser.net`. Configured by `setupPayAuth` with `authEndpoints` mapping to `/api/v1/auth/{ping,me,login,logout}` ([server/app.ts:60-99](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L60-L99)).
+**Service API key (`AI_PROXY_API_KEY`).** A service-wide key, sent via `X-API-Key` or Bearer, that gates routes which are neither public nor application-authenticated ([server/middleware/serviceApiKey.ts:L31-L45](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/serviceApiKey.ts#L31-L45)).
 
-**Public routes.** Paths exempted from Pay auth: `/health`, `/ping`, `/`, `/api-docs`, `/v1/diagnostics`, plus all provider endpoints that use `applicationAuth` instead (`/v1/chat`, `/v1/chat/async`, `/v1/transcription`, `/v1/tts`, `/v1/image`) ([server/app.ts:72-86](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L72-L86)).
+**Application-auth route prefixes.** These paths are skipped by the service-key gate because they authenticate with application keys instead ([server/middleware/serviceApiKey.ts:L22-L29](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/serviceApiKey.ts#L22-L29)):
+- `/v1/chat`
+- `/v1/transcription`
+- `/v1/image`
+- `/v1/tts`
+- `/v1/systemone`
+- `/api/v1/usage`
 
-**Quota.** Daily request and token limits stored on each Application (`dailyRequestLimit`, `dailyTokenLimit`). Enforced before provider dispatch and surfaced via `GET /v1/applications/:id/quotas` ([README.md:175-180](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L175-L180), [server/middleware/rateLimit.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/rateLimit.ts)).
+**Pay auth / public routes.** Pay auth is JWT/session authentication proxied to the Pay service. `publicRoutes` lists the paths it skips ([server/app.ts:L75-L92](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/app.ts#L75-L92)).
 
-**Anthropic credit budget.** A spend guard that sums per-request Anthropic cost for the current credit cycle and rejects `/v1/chat` and `/v1/chat/async` requests with `429 ANTHROPIC_BUDGET_EXHAUSTED` once `ANTHROPIC_MONTHLY_BUDGET_USD` (default 90) or the optional daily cap is spent. The default sits below the $100/month Max plan credit that the proxy routes through ([server/domain/services/AnthropicBudgetService.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/domain/services/AnthropicBudgetService.ts), [server/middleware/anthropicBudget.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/anthropicBudget.ts), [docs/anthropic-credit-lane.md](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/docs/anthropic-credit-lane.md)).
+**Quota / rate limit.** The daily request and token limits on an application. When either is exceeded the proxy returns `429 RATE_LIMIT_EXCEEDED`. Limits reset at midnight UTC ([server/middleware/rateLimit.ts:L94-L110](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/rateLimit.ts#L94-L110)).
 
-**Request log.** A row written for every billable request — request ID, application ID, model, tokens, latency, status. Source of usage aggregation. Managed by `RequestLogDal` and the `usageTracking` middleware ([server/dal/RequestLogDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/dal/RequestLogDal.ts), [server/middleware/usageTracking.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/usageTracking.ts)).
+**Managed model / model preference.** An Agency HQ setting named `api:<application UUID>:<operation>` that can replace the model in a request. Preferences never bypass an application's allowed models ([docs/model-controls.md:L5-L7](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/model-controls.md#L5-L7)).
 
-**Response cache.** An opt-in cache of provider responses keyed by request shape, skipped for empty or truncated outputs (commit `ac0bc07`) ([server/middleware/responseCache.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/responseCache.ts), [server/dal/ResponseCacheDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/dal/ResponseCacheDal.ts)).
+**`X-Model-Source: request`.** A request header that keeps the caller's chosen model instead of the managed preference. `AI_PROXY_MODEL_SOURCE=request` does the same for the whole service ([docs/model-controls.md:L7](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/model-controls.md#L7)).
 
-**Async job.** A queued chat request submitted via `POST /v1/chat/async` and processed out-of-band by `worker.ts`, persisted through `AsyncJobDal`. Lets clients hand off long completions without holding an HTTP connection ([server/routes/chatAsync.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/routes/chatAsync.ts), [server/dal/AsyncJobDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/dal/AsyncJobDal.ts), [server/worker.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/worker.ts)).
+**Anthropic credit lane.** Claude traffic funded by the monthly API credit included with the Max plan. Every Claude request is priced and capped inside the proxy ([docs/anthropic-credit-lane.md:L3](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/anthropic-credit-lane.md#L3)).
 
-**Correlation ID.** Per-request identifier set by the first middleware and propagated through logs to tie provider calls back to a client request ([server/middleware/correlationId.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/middleware/correlationId.ts), [server/app.ts:250-253](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L250-L253)).
+**Credit cycle / budget guard.**
+- A credit cycle runs from the most recent `cycleDay` at 00:00 UTC to the same day in the next month ([server/domain/services/AnthropicBudgetService.ts:L49-L57](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/domain/services/AnthropicBudgetService.ts#L49-L57)).
+- Once spend reaches the cap, the guard returns `429 ANTHROPIC_BUDGET_EXHAUSTED`. Callers should fall back to another provider when they see that code ([docs/anthropic-credit-lane.md:L33-L35](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/anthropic-credit-lane.md#L33-L35)).
 
-**Word-level timestamps.** Whisper pass-through feature: when the client supplies `response_format=verbose_json` and `timestamp_granularities[]=word`, the transcription response includes a `words` array of `{word, start, end}` ([README.md:215-241](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/README.md#L215-L241), [CHANGELOG.md:10-25](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CHANGELOG.md#L10-L25)).
+**`PROVIDER_CREDITS_EXHAUSTED`.** A `402` returned when Anthropic itself reports that the credit balance is too low ([server/infrastructure/providers/AnthropicClient.ts:L312-L320](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/infrastructure/providers/AnthropicClient.ts#L312-L320)).
 
-**Pay service.** The external authentication and user-profile service at `https://pay.jeffreykeyser.net` that this proxy depends on for admin auth. Configured via `PAY_SERVICE_URL` ([server/app.ts:60-66](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/server/app.ts#L60-L66), [CLAUDE.md:271](https://github.com/Jeffrey-Keyser/ai-proxy/blob/main/CLAUDE.md#L271)).
+**Request log (`llm_requests`) and `daily_usage_summary`.** Each tracked request inserts one log row and upserts a per-application, per-day, per-model summary ([server/dal/RequestLogDal.ts:L25-L28](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/RequestLogDal.ts#L25-L28)). Cache hits are recorded with zero tokens ([server/middleware/usageTracking.ts:L57-L68](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/usageTracking.ts#L57-L68)).
+
+**Response cache.** A cache of chat responses keyed by a SHA-256 hash.
+- It is on by default; set `CACHE_ENABLED=false` to turn it off. The default TTL is 86400 seconds ([server/config/env.ts:L271-L272](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L271-L272)).
+- Streaming requests, `temperature` above 0 and `top_p` below 1 skip the cache ([server/middleware/responseCache.ts:L40-L46](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/responseCache.ts#L40-L46)).
+- Only complete responses are stored: non-empty content with `finish_reason` of `stop` ([server/middleware/responseCache.ts:L90-L102](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/responseCache.ts#L90-L102)).
+
+**Async job / ticket.** A chat or image job stored in `async_jobs` and polled using its ticket ID ([server/routes/chatAsync.ts:L5-L11](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/chatAsync.ts#L5-L11)). Cleanup deletes only completed or failed jobs that have expired ([server/dal/AsyncJobDal.ts:L198-L215](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/AsyncJobDal.ts#L198-L215)).
+
+**Correlation ID vs trace ID.** These are two different identifiers:
+- The correlation ID appears in `X-Request-ID` and comes from the caller or a new UUID ([server/middleware/correlationId.ts:L23-L27](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/correlationId.ts#L23-L27)).
+- The trace ID (`req_<uuid>`) is set by application auth and written to usage logs ([server/middleware/applicationAuth.ts:L63-L65](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/applicationAuth.ts#L63-L65)).
+
+**Jev / System One.** TypeSafe's decision model, served at `POST /v1/systemone`. It answers `noul`, `choice` and `score` questions. If no model is given, `jev-latest` is used ([docs/TYPESAFE_SYSTEM_ONE.md:L3-L6](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L3-L6), [docs/TYPESAFE_SYSTEM_ONE.md:L59-L60](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L59-L60)).
+
+**Agent Services.** An application record whose key Image Studio uses and which was granted access to Jev models ([docs/image-model-setup.md:L33-L35](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/image-model-setup.md#L33-L35), [docs/TYPESAFE_SYSTEM_ONE.md:L16](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L16)).
+
+**Shared secrets file.** A secret file kept outside the repository and loaded without overriding values already set in the environment. The default path is `/etc/ai-proxy/secrets.env` ([server/config/env.ts:L26-L35](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/config/env.ts#L26-L35)).
+
+**Word-level timestamps.** A Whisper option on transcription. Send `response_format=verbose_json` together with `timestamp_granularities[]=word` to get a `words` array in the response ([README.md:L236-L262](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L236-L262)).
+
+See [Home](../home/) and [Architecture](../architecture/).

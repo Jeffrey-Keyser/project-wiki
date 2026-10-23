@@ -1,45 +1,85 @@
 ---
-title: Iteration Loop
-description: How a change moves from edit through test, build, changeset, and publish to GitHub Package Registry.
+title: "Iteration Loop"
+description: "Contributor workflow from local edit through typecheck, Jest, build, CI and changesets-driven publish."
 ---
 
 # Iteration Loop
 
-Library repo — change cycle ends in an npm publish, not a deploy. Tooling: `tsc`, `jest`, `changesets`, GitHub Actions.
+This is a library repo, so a change ends in a package release, not a deployment. The tooling is TypeScript, Jest, Storybook and changesets, all declared in package.json scripts and dev dependencies ([package.json:L98-L173](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L98-L173)).
 
 ```mermaid
-sequenceDiagram
-  participant Dev
-  participant Local as Local repo
-  participant CI as GH Actions CI
-  participant Reg as npm.pkg.github.com
-
-  Dev->>Local: edit src/**
-  Dev->>Local: npm run typecheck
-  Dev->>Local: npm test (jest)
-  Dev->>Local: npx changeset (record bump)
-  Dev->>Local: git commit + push branch
-  Dev->>CI: open PR -> main
-  CI->>CI: typecheck, test:coverage, build:esm/cjs
-  CI->>CI: npm pack --dry-run
-  Dev->>Local: merge PR to main
-  CI->>CI: build-and-test on main
-  CI->>Reg: changesets/action publish OR open Version PR
-  Reg-->>Dev: new version available
+flowchart TD
+  Edit["Edit src or tests"]
+  Check["npm run typecheck"]
+  Test["npm test or npm run test:coverage"]
+  Build["npm run build"]
+  PR["Open pull request"]
+  CI["CI build-and-test on Node 20.x and 22.x"]
+  Merge["Push to main"]
+  Pub["publish job: changesets/action"]
+  Ver["Version PR via npm run version"]
+  Rel["Publish via npm run release"]
+  Edit --> Check --> Test --> Build --> PR --> CI --> Merge --> Pub
+  Pub --> Ver
+  Pub --> Rel
 ```
 
-## Steps cited
+## Local loop
 
-1. **Edit** under `src/` — package source root ([package.json:52-58](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L52-L58)).
-2. **Typecheck** via `npm run typecheck` → `tsc --noEmit` ([package.json:120](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L120)).
-3. **Test** via `npm test` → `jest`; coverage via `npm run test:coverage` ([package.json:112-114](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L112-L114)). Jest config at [jest.config.js](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/jest.config.js).
-4. **Record bump** — changesets CLI: `.changeset/` directory holds pending bump notes ([package.json:128-130](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L128-L130)).
-5. **Build (local sanity)** — `npm run build` runs ESM, CJS, ESM-import fixer, and asset copies ([package.json:99-109](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L99-L109)).
-6. **CI** — pushes and PRs trigger `build-and-test` job on Node 20 + 22 matrix ([.github/workflows/ci.yml:1-66](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/.github/workflows/ci.yml#L1-L66)).
-7. **Publish** — on merge to `main`, `publish` job runs `changesets/action@v1` to either open a Version PR or publish to GitHub Package Registry ([.github/workflows/ci.yml:68-100](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/.github/workflows/ci.yml#L68-L100), [package.json:128-130](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L128-L130)).
-8. **prepublishOnly guard** — `clean && build && typecheck` runs before any `npm publish` ([package.json:118](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L118)).
-9. **CHANGELOG** auto-updated by changesets; manual entries also kept ([CHANGELOG.md:1-7](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/CHANGELOG.md#L1-L7)).
+1. **Install.** Install dependencies with a GitHub Package Registry token configured. Scoped `@jeffrey-keyser` packages are resolved from `npm.pkg.github.com` ([README.md:L47-L51](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/README.md#L47-L51)).
+2. **Typecheck.** The main check is `npm run typecheck` (`tsc --noEmit`). Two variants exist ([package.json:L120-L122](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L120-L122)):
+   - `typecheck:react`;
+   - `lint:types`, which runs with `--strict`.
+3. **Test.** Test scripts are defined at [package.json:L112-L116](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L112-L116):
+   - `npm test` runs Jest;
+   - `test:watch` and `test:coverage` are variants;
+   - `test:react` and `test:types` target specific suites.
+4. **Jest configuration** ([jest.config.js:L4-L60](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/jest.config.js#L4-L60)):
+   - uses `ts-jest` with `jsdom`;
+   - collects tests from `src` and `tests`;
+   - enforces global coverage minimums of branches 24, functions 34, lines 32 and statements 32.
+5. **Build.** `npm run build` runs four steps in order ([package.json:L99-L109](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L99-L109)):
+   - the ESM build;
+   - the CJS build;
+   - `scripts/fix-esm-imports.mjs`;
+   - copying CSS and locale assets into both `dist` trees.
+   The two TypeScript configs differ only in `module` and `outDir` ([tsconfig.esm.json:L1-L10](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/tsconfig.esm.json#L1-L10), [tsconfig.cjs.json:L1-L10](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/tsconfig.cjs.json#L1-L10)).
+6. **Optional extras** ([package.json:L131-L136](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L131-L136)):
+   - `npm run storybook` starts Storybook on port 6006;
+   - the `i18n:*` scripts run i18next-parser.
 
-Default branch is `main`; CI also runs on pushes to `develop` ([.github/workflows/ci.yml:3-6](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/.github/workflows/ci.yml#L3-L6)).
+## CI
 
-Storybook is available for component dev (`npm run storybook`) but not required to ship ([package.json:135-136](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/main/package.json#L135-L136)).
+The workflow runs on every pull request and on pushes to `main` and `develop`. It uses a Node 20.x / 22.x matrix ([.github/workflows/ci.yml:L3-L13](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/.github/workflows/ci.yml#L3-L13)).
+
+The steps are ([.github/workflows/ci.yml:L30-L49](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/.github/workflows/ci.yml#L30-L49)):
+
+1. `npm ci`
+2. `typecheck`
+3. `test:coverage`
+4. `build:esm`
+5. `build:cjs`
+6. `copy:assets`
+7. `npm pack --dry-run`
+
+On the Node 20 leg only, CI also uploads coverage to Codecov (non-fatal) and saves `dist/` as a build artifact ([.github/workflows/ci.yml:L51-L66](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/.github/workflows/ci.yml#L51-L66)).
+
+CI differs from a local `npm run build` in two ways:
+
+- It never runs `fix:esm-imports`. That only happens in the full `build` script, or through `prepublishOnly`.
+- It does not run `i18n:check` or `lint:types`.
+
+## Release
+
+The `publish` job runs only on pushes to `main`, after `build-and-test` succeeds. It invokes `changesets/action@v1` with `npm run version` and `npm run release` ([.github/workflows/ci.yml:L68-L100](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/.github/workflows/ci.yml#L68-L100)). Those scripts map to:
+
+- `changeset version`
+- `changeset publish`
+
+([package.json:L129-L130](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L129-L130))
+
+Contributors therefore record a changeset with the `@changesets/cli` dev dependency ([package.json:L139](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L139)). The exact changeset config is not in this snapshot.
+
+`prepublishOnly` runs clean, build and typecheck before any publish ([package.json:L118](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/package.json#L118)).
+
+The changelog follows Keep a Changelog and SemVer ([CHANGELOG.md:L1-L8](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/CHANGELOG.md#L1-L8)).
