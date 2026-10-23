@@ -93,6 +93,7 @@ end-to-end. Writes `results/<runId>/observer.json`. Toggled via
 | `DEV_INBOX_PLANNER_PROVIDER` / `_MODEL` / `_CLI` | per script | Override Planner provider / model / CLI ([spawn-planner.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/spawn-planner.sh)) |
 | `DEV_INBOX_PLANNER_TIMEOUT_SECONDS` | `600` | Planner-stage timeout |
 | `DEV_INBOX_WORKER_NO_AUTO_COMMIT` | `0` | If `1`, disable auto-salvage of a dirty worktree ([spawn-common.sh](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/lib/spawn-common.sh)) |
+| `DEV_INBOX_QUEUE_TERMINAL_PARK_AFTER` | `45m` | Queue daemon (`cmd/dev-inbox-queued`): after this long since the last slice completion, a plan parked at terminal integration has its job blocked as `terminal_parked` so it releases its concurrency keys; `0` disables ([terminal_park.go](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/cmd/dev-inbox-queued/terminal_park.go)) |
 | `DEV_INBOX_LEGACY_CLEANUP_OBS_TIMEOUT` | `10` | Per-call tmux/ps observation timeout (seconds) for `scripts/cleanup-zombie-sessions.sh` |
 | `DEV_INBOX_LEGACY_CLEANUP_KILL_TIMEOUT` | `15` | Timeout (seconds) for the session kill step in `scripts/cleanup-zombie-sessions.sh` |
 | `DEV_INBOX_LEGACY_CLEANUP_LOCK_WAIT` | `60` | Seconds to wait for `results/.legacy-session-cleanup.lock` before skipping a forced pass |
