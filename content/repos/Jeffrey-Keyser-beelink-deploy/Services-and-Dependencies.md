@@ -16,6 +16,7 @@ description: What beelink-deploy depends on (GitHub, RabbitMQ, systemd, Telegram
 ### Inbound
 - **GitHub webhooks.** `push` (service deploys and default-branch wiki updates) and `pull_request` (package repos). HMAC-SHA256 signature header `X-Hub-Signature-256` ([src/github.ts:6-28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/github.ts#L6-L28), [src/server.ts:115-198](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L115-L198)).
 - **Operator HTTP.** Manual deploy via `POST /deploy/:owner/:repo` with `X-Deploy-Key` ([src/server.ts:273-308](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L273-L308)).
+- **Pay admin sessions.** The dashboard, `/api/status`, `/repos` and deploy logs require a current Pay admin session or bearer token. Browsers are redirected to `/logs/login`, which returns to the dashboard ([src/server.ts:95-108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L108), [src/log-pages.ts:10-22](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/log-pages.ts#L10-L22)).
 - **Cloudflare Tunnel.** Routes `deploy.jeffrey-keyser.com` → `http://localhost:9000` ([README.md:61-69](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L61-L69)).
 
 ### Outbound
@@ -39,5 +40,5 @@ PR-merge sources, re-emitted to RabbitMQ rather than deployed locally ([config/p
 
 - **`openclaw-bridge`.** Subscribes to `packages.events` to bump the package version downstream ([src/rabbit.ts:1-11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/rabbit.ts#L1-L11)).
 - **Central wiki pipeline.** Subscribes to `wiki.events`. Receives events for **all** merged PRs and default-branch pushes; self-filters un-onboarded repos (unknown-repo, not-allowlisted, no-existing-pages). Best-effort — failure is logged but does not fail the request ([src/server.ts:147-173](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L147-L173), [src/server.ts:247-255](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L247-L255)).
-- **Status page / dashboards.** Read `GET /api/status` and `GET /deploy/:owner/:repo/logs` ([src/server.ts:91-112](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L91-L112)).
+- **Status page / dashboards.** Read `GET /api/status` and `GET /deploy/:owner/:repo/logs`. Both require a Pay admin session; `/health` is the only anonymous read ([src/server.ts:95-108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L108), [src/server.ts:137-141](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L137-L141)).
 - **Telegram chat.** Receives per-deploy outcome notices ([src/server.ts:39-57](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L39-L57)).

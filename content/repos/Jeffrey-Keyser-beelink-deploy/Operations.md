@@ -33,6 +33,7 @@ systemd loads these from `/home/jkeyser/beelink-deploy/.env` ([beelink-deploy.se
 - Listens on `127.0.0.1:9000` by default ([src/config.ts:57-59](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/config.ts#L57-L59)).
 - Cloudflare Tunnel maps `deploy.jeffrey-keyser.com` → `http://localhost:9000` ([README.md:61-69](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L61-L69)).
 - Manual deploys go through the tunnel too; they require `X-Deploy-Key` ([src/server.ts:273-308](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L273-L308)).
+- Everything else on the tunnel hostname requires a Pay admin session; see Health probe below.
 
 ## systemd unit
 
@@ -55,10 +56,11 @@ EnvironmentFile=-/home/jkeyser/beelink-deploy/.env
 
 ## Health probe
 
-- `GET /health` returns `{status: "ok", time}` ([src/server.ts:86-88](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L86-L88)).
-- `GET /api/status` returns the rolled-up deploy status across all configured repos ([src/server.ts:91-94](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L91-L94)).
-- `GET /deploy/:owner/:repo/logs` returns the last 20 deploy log entries (in-memory only) ([src/server.ts:108-112](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L108-L112)).
+- `GET /health` returns `{status: "ok", time}` and is the only read reachable without a Pay admin session ([src/server.ts:65-70](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L65-L70), [src/server.ts:86-88](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L86-L88)).
+- `GET /api/status` returns the rolled-up deploy status across all configured repos. It requires a current Pay admin session (a bearer token from the CLI, or the browser cookie set by `/logs/login`); unauthenticated calls get 401 ([src/server.ts:95-108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L108)).
+- `GET /deploy/:owner/:repo/logs` returns the last 20 deploy log entries (in-memory only) and is also admin-gated ([src/server.ts:95-108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L108), [src/server.ts:137-141](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L137-L141)).
 - beelink-deploy is registered as one of its own deploy targets with `healthUrl: http://localhost:9000/health` ([config/repos.json:63-68](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/config/repos.json#L63-L68)).
+- External health monitors must poll `/health`. Any other path returns 401 without a Pay admin token.
 
 ## Logs
 
@@ -69,6 +71,7 @@ EnvironmentFile=-/home/jkeyser/beelink-deploy/.env
 ## On-call quick refs
 
 - **Manual deploy:** `curl -X POST -H "X-Deploy-Key: $DEPLOY_API_KEY" https://deploy.jeffrey-keyser.com/deploy/Jeffrey-Keyser/<repo>` ([src/server.ts:273-308](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L273-L308)).
+- **Read status from the CLI:** `curl -H "Authorization: Bearer $TOKEN" localhost:9000/api/status`, with a Pay admin token. Without one the response is 401 ([src/server.ts:95-108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L95-L108)).
 - **Skip a deploy from GitHub:** include `[skip deploy]` or `[no deploy]` in the head commit message ([src/server.ts:231-235](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/server.ts#L231-L235), [README.md:101-103](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/README.md#L101-L103)).
 - **Skip the wiki update for a push:** include `[skip wiki]` in the head commit message. `[skip deploy]` does not affect the wiki update ([src/wiki-push.ts:18-53](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/wiki-push.ts#L18-L53)).
 - **Reload repo list without restart:** `sudo systemctl kill -s SIGHUP beelink-deploy` ([src/index.ts:33](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/main/src/index.ts#L33)).
