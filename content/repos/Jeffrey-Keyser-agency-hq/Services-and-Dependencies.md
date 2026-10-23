@@ -17,7 +17,7 @@ Source presence is not proof that an integration is live. Items below separate w
 - **NanoClaw IPC.** `build:deploy` writes a reload request file; whether NanoClaw acts on it is outside this repo ([package.json:L10](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L10)).
 - **Internal packages:** `database-base-config`, `express-server-factory`, `message-contracts`, `pay-auth-integration`, from GitHub Packages ([package.json:L33-L36](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L33-L36), [package.json:L59-L61](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L59-L61)).
 
-- **Repository-history acceptance checks.** The `repo-history-exec` environment runs owner-declared command argv against a commit and its first parent in disposable worktrees, and caches the outputs for reuse across acceptance passes ([acceptance/environments/repo-history-exec.mjs:1-12](https://github.com/Jeffrey-Keyser/agency-hq/blob/05577e8773ef075ba82c086a84d20243fd3be1a3/acceptance/environments/repo-history-exec.mjs#L1-L12)).
+- **Repository-history acceptance checks.** The `repo-history-exec` environment runs owner-declared command argv against a commit and its first parent in disposable worktrees, and caches the outputs and the comparison of the two for reuse across acceptance passes. Output streams are decoded as UTF-8 across chunk boundaries, so multibyte characters do not vary between runs ([acceptance/environments/repo-history-exec.mjs:1-12](https://github.com/Jeffrey-Keyser/agency-hq/blob/ed217bc7bf7ac2343a005868323ef64ac486479f/acceptance/environments/repo-history-exec.mjs#L1-L12)).
 
 ## Consumed by
 
