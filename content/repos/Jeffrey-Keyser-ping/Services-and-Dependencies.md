@@ -34,7 +34,7 @@ description: Inbound and outbound integrations — packages, services, and exter
 - **Apple Shortcuts** — primary inbound client; uses `X-Ping-Key` header ([README.md:93-108](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L93-L108)).
 - **Cloudflare Tunnel** — public ingress to Beelink ([README.md:37](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L37)).
 - **`beelink-deploy` webhook** — receives push events and runs `deploy.sh` ([README.md:61-63](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L61-L63)).
-- **GitHub Packages** — npm registry for `@jeffrey-keyser/*`; `GITHUB_TOKEN` required ([AGENTS.md:20-28](https://github.com/Jeffrey-Keyser/ping/blob/main/AGENTS.md#L20-L28)).
+- **GitHub Packages** — npm registry for `@jeffrey-keyser/*`; `GITHUB_TOKEN` required for installs that resolve these packages. Builds and tests after the host bootstrap has installed dependencies do not need it ([AGENTS.md:20-28](https://github.com/Jeffrey-Keyser/ping/blob/main/AGENTS.md#L20-L28)).
 
 ## Consumed by
 

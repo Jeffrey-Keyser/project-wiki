@@ -56,7 +56,7 @@ npx ts-node --project tsconfig.json ../scripts/seed-grocery-zones.ts --user-id 4
 
 - Single source: `server/config/env.ts` validates env at boot ([CLAUDE.md:337-347](https://github.com/Jeffrey-Keyser/ping/blob/main/CLAUDE.md#L337-L347)).
 - Required: `PAY_SERVICE_URL`, `SESSION_SECRET`, `CORS_ALLOWED_ORIGINS`, `PING_API_KEY`, `DATABASE_*` ([server/app.ts:160-194](https://github.com/Jeffrey-Keyser/ping/blob/main/server/app.ts#L160-L194)).
-- `GITHUB_TOKEN` required for any npm install touching `@jeffrey-keyser/*` ([AGENTS.md:20-28](https://github.com/Jeffrey-Keyser/ping/blob/main/AGENTS.md#L20-L28)).
+- `GITHUB_TOKEN` is required for npm installs that touch `@jeffrey-keyser/*`. It is not needed for builds or tests once dependencies are installed ([AGENTS.md:20-28](https://github.com/Jeffrey-Keyser/ping/blob/main/AGENTS.md#L20-L28)).
 
 ## Rate limits and CORS
 
