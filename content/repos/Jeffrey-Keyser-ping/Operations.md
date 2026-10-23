@@ -16,6 +16,20 @@ Production runs on a Beelink mini PC, exposed publicly via Cloudflare Tunnel ([R
 - **Client dev** — `vite` on :3002 ([client/package.json:37](https://github.com/Jeffrey-Keyser/ping/blob/main/client/package.json#L37), [README.md:58](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L58)).
 - **Client prod** — `vite build`, static output served by `ping-frontend` systemd unit ([client/package.json:38](https://github.com/Jeffrey-Keyser/ping/blob/main/client/package.json#L38), [deploy.sh:27](https://github.com/Jeffrey-Keyser/ping/blob/main/deploy.sh#L27)).
 
+## One-off grocery zone provisioning
+
+Bulk-provisioning command for one explicitly selected account. It is not a service start command and is run manually from `server/`:
+
+```bash
+npx ts-node --project tsconfig.json ../scripts/seed-grocery-zones.ts --user-id 42 --zones-file /absolute/path/zones.json
+```
+
+- Both `--user-id` and `--zones-file` are required, each exactly once. The account id is illustrative only and has no default. Missing or invalid input prints help and performs no writes (exit 1). `--help` / `-h` prints usage (exit 0) ([server/scripts/groceryZoneProvisioning.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/server/scripts/groceryZoneProvisioning.ts), [scripts/seed-grocery-zones.ts](https://github.com/Jeffrey-Keyser/ping/blob/main/scripts/seed-grocery-zones.ts)).
+- The entire zones file is validated before any category or zone write.
+- Category and zone writes apply in one transaction and roll back on failure. Re-running skips existing same-account, same-category, same-name zones without changing them.
+- The entry point loads `server/.env` relative to the repository, not the caller's working directory, and uses the `DATABASE_*` variables listed under Configuration.
+- For normal setup, create zones on the Map page instead ([README.md:75-98](https://github.com/Jeffrey-Keyser/ping/blob/main/README.md#L75-L98)).
+
 ## systemd
 
 `deploy.sh` runs `sudo systemctl restart ping` and `sudo systemctl restart ping-frontend` ([deploy.sh:25-27](https://github.com/Jeffrey-Keyser/ping/blob/main/deploy.sh#L25-L27)). Unit files live on the Beelink, not in the repo.
