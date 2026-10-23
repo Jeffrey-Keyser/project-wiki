@@ -12,15 +12,15 @@ sequenceDiagram
   participant Dev as Developer
   participant Local as Local workspaces
   participant Repo as main branch
-  participant Box as Homelab host
+  participant Host as Homelab host
   Dev->>Local: edit server routes services and DAL
   Dev->>Local: run server lint and test
   Dev->>Local: run client dev and test
   Dev->>Repo: commit and push to main
-  Dev->>Box: run deploy.sh
-  Box->>Repo: git pull origin main
-  Box->>Box: npm ci then build server then build client
-  Box->>Box: restart myrrs-api and myrrs-frontend
+  Dev->>Host: run deploy.sh
+  Host->>Repo: git pull origin main
+  Host->>Host: npm ci then build server then build client
+  Host->>Host: restart myrrs-api and myrrs-frontend
 ```
 
 ## Local loop

@@ -37,14 +37,14 @@ sequenceDiagram
   participant dev as "Developer"
   participant repo as "GitHub main"
   participant hook as "beelink-deploy webhook"
-  participant box as "Beelink host"
+  participant Host as "Beelink host"
   participant sys as "systemd units"
   dev->>dev: Run checks and agents verify block
   dev->>repo: Push to main
   repo->>hook: Push event
-  hook->>box: Run deploy.sh
-  box->>box: Pull build and apply migrations
-  box->>sys: Restart ping and ping-frontend
+  hook->>Host: Run deploy.sh
+  Host->>Host: Pull build and apply migrations
+  Host->>sys: Restart ping and ping-frontend
   sys-->>dev: Health probe reports healthy
 ```
 
