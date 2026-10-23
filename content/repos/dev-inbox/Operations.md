@@ -114,6 +114,23 @@ Re-spawns only the Reviewer for an existing slice, preserving Worker
 artifacts and worktree state
 ([CLAUDE.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/CLAUDE.md)).
 
+## Override a stalled slice merge
+
+When an operator takes over a slice whose merge has stalled, use
+[`scripts/plan-manager-tools/override-merge-slice.sh`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/scripts/plan-manager-tools/override-merge-slice.sh).
+The override is recorded in the plan journal (`plans/<planId>/events.jsonl`)
+as a `plan.slice.override_merged` event. The event names the slice, the
+run, the `mergedSha`, the branch, a `reason`, and an `origin`. Use
+`origin` `operator` for a human decision. Records with any other origin
+are not treated as operator takeovers.
+
+The directive-reading v3 measurement
+(`orchmeasure directive-reading --reading-version v3 --plans-dir DIR`)
+joins these events to admitted runs only when both the plan id and the
+run id match. It reads the journals without appending to or repairing
+them. See
+[docs/directive-reading-v3.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/docs/directive-reading-v3.md).
+
 ## Clean up legacy zombie sessions
 
 Abandoned `dev-inbox-*` tmux sessions from earlier runs are reaped by
