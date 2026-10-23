@@ -13,6 +13,7 @@ are rendered to inline SVG at build time via `rehype-mermaid`.
 ```
 content/
   index.md            # landing page
+  ecosystem/          # global architecture and repository directory
   repos/              # per-repository wiki content (added by later slices)
     _smoke/           # build smoke tests (kept out of the navigation tree)
 .wiki-config.json     # repo allowlist + per-repo ignorePaths for the updater
@@ -174,3 +175,9 @@ handling, and updater output validation. Provider tests use local fake binaries;
 no paid inference is needed. Release `87c7392` was loaded by an idle updater
 restart; a read-only resolver check using its environment retained the existing
 Claude/default selection. No dispatch preferences were written.
+
+## Global ecosystem map
+
+`content/ecosystem/overview.md` is the cross-repository architecture and directory, linked from the home page. It is a dated scaffold based on the ecosystem/host prompts and existing guides. Repository update events currently maintain per-repo pages; refresh this overview when host ownership, shared contracts, major integrations, or wiki coverage changes.
+
+`npm run build` also exports standalone SVGs under `/diagrams/` for opening or downloading the maps at full size. Keep the three Mermaid blocks in topology, events, and delivery order so their stable filenames stay aligned.

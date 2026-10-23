@@ -1,0 +1,366 @@
+---
+title: "Ecosystem Architecture"
+description: "The global map of the Jeffrey-Keyser ecosystem: hosts, shared services, workflows, and a complete repository and wiki directory."
+sidebar:
+  label: "Ecosystem map"
+  order: 1
+---
+
+The self-hosted core of the ecosystem lives on **two small Linux boxes with separate jobs**. **Beelink** is the production and data host. It runs PostgreSQL, RabbitMQ, secrets, Pay identity, most product apps and the public front door. **Forge** is the execution host, where agents plan, write, test and review code. Finished work normally reaches production through `git push`, GitHub and Beelink Deploy.
+
+Around those two hosts sit a set of shared npm building blocks and a few cross-cutting services: Pay for identity, Solo Vault for credentials, Prompt Registry for prompts, AI Proxy and Struct for model inference, and Logos for knowledge.
+
+> **Snapshot: 23 October 2026.** Based on the ecosystem registry, the current host reference, and 33 repository guides.
+
+## The big picture
+
+```mermaid
+flowchart TB
+  people["People, browsers and devices"] --> ingress["Cloudflare public edge"]
+  subgraph beelink["Beelink: production and shared data"]
+    web["Product APIs, frontends and wiki"]
+    shared["Pay, Solo Vault and Prompt Registry"]
+    inference["AI Proxy, Struct and Logos"]
+    postgres["PostgreSQL"]
+    rabbit["RabbitMQ"]
+    assistant["OpenClaw Bridge and NanoClaw"]
+  end
+  subgraph forge["Forge: development and control"]
+    agency["Agency HQ: dashboard and API"]
+    execution["dev-inbox, worktrees, development CLIs and tests"]
+  end
+  ingress -->|"Tunnel on Beelink"| web
+  ingress -->|"Beelink tunnel + Tailscale"| agency
+  web --> shared
+  web --> inference
+  web --> postgres
+  rabbit --> assistant
+  agency --> execution
+  execution -->|"Loopback bridge over Tailscale"| postgres
+  execution -->|"Shared events"| rabbit
+```
+
+[Open the topology diagram at full size](/diagrams/ecosystem-topology.svg)
+
+## Two hosts, two jobs
+
+Since 2026-10-18 the homelab has had two identical Beelink ME Mini machines. The rule of thumb is simple. Data, user-facing apps and ingress live on **Beelink**. dev-inbox, Agency HQ and the development agent CLIs run on **Forge**. Some Beelink services, such as Struct and NanoClaw, still invoke agent CLIs locally. The split exists because agent test stacks were driving production to high load. See [Homelab architecture](/repos/jeffrey-keyser-homelab/architecture/) and [Homelab services and dependencies](/repos/jeffrey-keyser-homelab/services-and-dependencies/).
+
+**Beelink (production)** runs:
+
+- PostgreSQL 17 and RabbitMQ
+- Solo Vault and Pay
+- cloudflared and Beelink Deploy
+- NanoClaw and OpenClaw Bridge
+- Netdata
+- the application backends and static frontends, most of them as systemd services
+
+**Forge (execution)** runs:
+
+- Agency HQ (port 3040)
+- all dev-inbox units: work queue, plan supervision, issue publishing and triage, the clipboard buffer, and timers
+- the development agent CLIs, git worktrees and test suites
+
+The shared databases, broker, secrets, Pay, Cloudflare ingress, Beelink Deploy and NanoClaw stay on Beelink. Agency HQ's own control UI and API run on Forge.
+
+The dev-inbox and Agency HQ state left on Beelink was frozen at the cutover. Treat it as not live.
+
+### The compatibility bridge
+
+Much older code assumes everything is on `localhost`. Several shims keep that code working across the host boundary:
+
+- **Explicit settings on Forge.** Forge services point at Beelink's Tailscale address where configuration supports it.
+- **Loopback bridge on Forge.** A user unit holds one SSH session that forwards Beelink's app ports, plus 5432 and 5672, onto Forge's loopback. `localhost:<port>` fallbacks therefore still work. Ports owned by Forge are excluded.
+- **Plan-manager shim on Forge (port 3099).** On Forge, port 3099 serves the plan-manager wake paths locally. Every other path is proxied to OpenClaw Bridge on Beelink.
+- **Agency HQ proxy on Beelink (port 3040).** A small relay forwards this port to Forge, so NanoClaw callers that assume `localhost:3040` still reach Agency HQ. On Beelink, port 3040 is the proxy, not Agency HQ itself.
+
+When a new service lands on Beelink, its port must be added to the Forge loopback bridge.
+
+## Ingress, data and messaging
+
+**Cloudflare Tunnel** is the only public front door. No ports are exposed directly to the internet. A tracked `cloudflared` config maps `*.jeffreykeyser.net` hostnames to local Beelink ports. The agency hostname is the exception: it is routed to Forge over Tailscale. cloudflared does not hot-reload, so ingress changes need a restart. See [Homelab home](/repos/jeffrey-keyser-homelab/home/).
+
+**PostgreSQL** is one shared instance on Beelink. Many applications own their own database or schema. Examples include `agency`, `logos`, `qa`, `nof1`, `music` and `image_studio`. Some reuse a shared schema: Spanish Studio and Spanish Tutor share the `spanish` schema in the ping database. Do not assume every app uses the same database or schema. Most services build their pool and migrations on `database-base-config`.
+
+**RabbitMQ** carries scheduled and domain events. Exchange names and payload types live in [Message Contracts](/repos/jeffrey-keyser-message-contracts/architecture/), which is the single source of truth for message shapes. The older Event Bus package is legacy.
+
+## Shared npm building blocks
+
+Most Express services start from `express-server-factory`, which covers health checks, routing, error formatting and lifecycle. On top of that sit a few other packages:
+
+- `express-middleware-suite`, `api-error-kit` (`@jeffrey-keyser/api-errors`) and `github-error-issues` for consistent errors
+- `database-base-config` for database access and migrations
+- `pay-auth-integration` for login
+- `personal-ui-kit` and `redux-app-toolkit` for frontends
+- `domain-core` and its Pantry, MYRRS and Pay domain cores for business rules
+
+Many shared packages publish to GitHub Packages; private package installs need configured registry credentials. Beelink Deploy handles both application deploys and package publishing.
+
+## Flow 1: a person uses an app, and Pay identity
+
+A browser request reaches a product's frontend and API through Cloudflare. Pay-enabled apps use [pay-auth-integration](/repos/jeffrey-keyser-pay-auth-integration/architecture/) for shared server and React sign-in helpers. A common path proxies authentication through the app server to [Pay](/repos/jeffrey-keyser-pay/home/); redirects, token handling and authorization rules depend on the application.
+
+Pay-integrated examples include:
+
+- [Ping](/repos/jeffrey-keyser-ping/home/), [Life](/repos/jeffrey-keyser-life/home/) and [Image Studio](/repos/jeffrey-keyser-image-studio/home/)
+- [Music Store](/repos/jeffrey-keyser-music-store/home/), [nof1](/repos/jeffrey-keyser-nof1/home/) and Pantry
+- [Feedback Registry](/repos/jeffrey-keyser-feedback-registry/home/) and admin surfaces such as Agency HQ and Beelink Deploy logs
+
+Authentication varies by service: some use Pay, others accept API keys or expose selected public routes. The service-specific guides document those boundaries. Ping Mobile uses a Ping key; Pantry Manager adds its own API-key policy.
+
+## Flow 2: scheduled and domain events
+
+```mermaid
+flowchart TB
+  cron["Cron Service"] -->|"CronJobTriggered on cron.jobs"| mq["RabbitMQ"]
+  ping["Ping"] -->|"arrive and depart on ping.events"| mq
+  deploy["Beelink Deploy"] -->|"packages.events and wiki.events"| mq
+  mq --> bridge["OpenClaw Bridge handlers"]
+  mq --> subs["Other subscribers such as Business HQ, Logos, QA Patrol"]
+  bridge -->|"agent-events API or IPC files"| nano["NanoClaw"]
+  nano --> tg["Telegram"]
+```
+
+[Open the event flow diagram at full size](/diagrams/ecosystem-events.svg)
+
+[Cron Service](/repos/jeffrey-keyser-cron-service/architecture/) only publishes; it does no work itself. A successful publish is recorded as "awaiting downstream", not as completed work.
+
+Subscribers do the actual work:
+
+- [OpenClaw Bridge](/repos/jeffrey-keyser-openclaw-bridge/architecture/) runs handlers for cron alerts, Ping events, briefings, Flights, Spanish lessons, Agency decisions and Cream City Web.
+- Business HQ, Logos, QA Patrol, Feedback Registry and NanoClaw bind their own keys.
+
+The bridge's routing defaults to NanoClaw. NanoClaw delivery is gated by a configuration flag.
+
+[NanoClaw](/repos/jeffrey-keyser-nanoclaw/home/) is the personal assistant gateway. It is a single process with a Telegram channel, a scheduler and agent runners. It replaces the historical OpenClaw gateway. Some services also notify NanoClaw directly through its message API or IPC files. Examples are Presence Signal, Image Studio import notices and Cream City Web run summaries.
+
+## Flow 3: from strategy to shipped code
+
+```mermaid
+flowchart TD
+  task["Agency HQ task ready on Forge"] -->|"spawn manager script"| mgr["dev-inbox run manager"]
+  mgr --> work["Workers in git worktrees"]
+  work --> verify["Declared verify commands"]
+  verify --> review["Reviewers"]
+  review -->|"request-changes"| work
+  review -->|"accepted"| land["Merge, PR or branch-ready handoff"]
+  mgr -->|"result files"| task
+  land -->|"git push"| gh["GitHub"]
+  gh -->|"push webhook"| bd["Beelink Deploy on Beelink"]
+  bd -->|"deploy script and restart"| svc["Beelink service"]
+  bd -->|"relayed over SSH"| ahq["Agency HQ release on Forge"]
+  bd -->|"wiki.update event"| wiki["Per-repo wiki docs"]
+```
+
+[Open the delivery workflow diagram at full size](/diagrams/ecosystem-delivery.svg)
+
+**Agency HQ decides; dev-inbox executes.**
+
+[Agency HQ](/repos/jeffrey-keyser-agency-hq/architecture/) is the strategic and supervisory layer. It tracks project work and dispatches implementation runs to dev-inbox after its admission gates pass. A result watcher reconciles plan, result and review files back into task status.
+
+[dev-inbox](/repos/jeffrey-keyser-dev-inbox/architecture/) moves each run through these steps:
+
+1. plan
+2. approve
+3. enrich (optional)
+4. implement in isolated worktrees
+5. verify
+6. review
+7. bounded revision (three revisions by default; a reject is never auto-revised)
+8. land
+
+Operator gates stay in front of destructive or production-sensitive actions. Queue preapproval authorizes execution only, never a merge or a production deploy.
+
+The normal deploy path from Forge to production is `git push` → GitHub → [Beelink Deploy](/repos/jeffrey-keyser-beelink-deploy/architecture/). Beelink Deploy listens on port 9000, checks the webhook signature when a secret is configured, also accepts key-protected manual deploys, and serializes deploys per repository. It runs each repo's deploy script, polls health and can notify Telegram. Agency HQ deploys are relayed to Forge automatically.
+
+Default-branch pushes delivered to Beelink Deploy also publish a `wiki.update` event, which drives per-repo wiki refreshes. The Project Wiki updater consumes those events to maintain repository guides and rebuild the site; its [implementation and operating model](https://github.com/Jeffrey-Keyser/project-wiki/blob/390d2b3b1567ea8588ac2a5b3e59b72bf166f3f3/README.md) are documented in this repository.
+
+The retired Claude Issue Creator and Claude Issue Triager are deprecated, replaced by dev-inbox.
+
+## Model inference: two lanes
+
+Not every AI call goes through one gateway. There are two lanes.
+
+- **API lane: [AI Proxy](/repos/jeffrey-keyser-ai-proxy/architecture/).**
+  - Gives apps per-application keys, quotas, model controls, usage logs and a Claude budget guard across several providers.
+  - Named callers: Life (Whisper and chat), Image Studio, QA Patrol and Spanish Studio.
+  - dev-inbox has an optional API lane, off by default.
+- **CLI lane.**
+  - [Struct](/repos/jeffrey-keyser-struct/architecture/) wraps a local agent CLI to return schema-validated JSON. It is internal only, on port 3032. Logos, Life, Feedback Registry triage and Spanish Studio use it.
+  - dev-inbox and NanoClaw run agent CLIs directly.
+  - Logos sends free-form calls, such as extraction fallback, to native Codex, Copilot or Gemini CLIs, trying each provider in order.
+
+Agency HQ publishes dispatch configuration that both Struct and AI Proxy can read.
+
+## Knowledge, prompts and credentials
+
+[Logos](/repos/jeffrey-keyser-logos/architecture/) is the knowledge hub. Its ingestion path works like this:
+
+1. URLs and RSS feeds arrive by API or through a RabbitMQ event.
+2. A worker extracts and chunks the content and embeds it with a local model into PostgreSQL with pgvector.
+3. Struct proposes new or updated themed pages.
+4. A human approves, rejects or comments in a review page.
+5. Agents can call the query API for cited answers. Named agent callers such as dev-inbox and Agency HQ are still listed as future consumers.
+
+Logos also stores project contexts, such as product intent for Beelink Steward.
+
+**Prompts** live in [Prompt Registry](/repos/jeffrey-keyser-prompt-registry/home/), a versioned key-value store. Logos, Struct templates, Agency HQ personas, Passthrough actions and OpenClaw Bridge read from it.
+
+**Credentials** live in [Solo Vault](/repos/jeffrey-keyser-solo-vault/home/). It encrypts secrets and serves them to services at deploy or boot time, using scoped API keys. On-host services prefer its loopback address. This page deliberately lists no secret names, paths or values.
+
+## Operations at a glance
+
+- **Homelab** holds the host setup, ingress config and the Forge bootstrap.
+- **Beelink Backup** runs a weekly encrypted off-site backup, triggered by Cron Service.
+- **QA Patrol** runs Playwright checks against apps.
+- **Analytics Pulse** collects telemetry.
+- **[Beelink Steward](/repos/jeffrey-keyser-beelink-steward/home/)** is an advisory host-care agent. It is **not yet built**. Its units exist in the repo but are not established as installed.
+
+The AWS Terraform repos remain as legacy reference.
+
+## Where to look first
+
+- *Which host runs a service, and how does ingress reach it?* → [Homelab architecture](/repos/jeffrey-keyser-homelab/architecture/)
+- *Why didn't my push deploy?* → [Beelink Deploy operations](/repos/jeffrey-keyser-beelink-deploy/operations/)
+- *How does an agent run plan, review and land work?* → [dev-inbox architecture](/repos/jeffrey-keyser-dev-inbox/architecture/) and [Agency HQ home](/repos/jeffrey-keyser-agency-hq/home/)
+- *Why didn't a scheduled job do anything?* → [Cron Service](/repos/jeffrey-keyser-cron-service/services-and-dependencies/), then [OpenClaw Bridge](/repos/jeffrey-keyser-openclaw-bridge/services-and-dependencies/)
+- *What message shape does an exchange expect?* → [Message Contracts](/repos/jeffrey-keyser-message-contracts/architecture/)
+- *How do I add sign-in to an app?* → [pay-auth-integration](/repos/jeffrey-keyser-pay-auth-integration/home/)
+- *Where should an AI call go?* → [AI Proxy](/repos/jeffrey-keyser-ai-proxy/home/) or [Struct](/repos/jeffrey-keyser-struct/home/)
+- *Why isn't the assistant replying on Telegram?* → [NanoClaw operations](/repos/jeffrey-keyser-nanoclaw/operations/)
+- *How does knowledge get into Logos?* → [Logos home](/repos/jeffrey-keyser-logos/home/)
+- *What does a term mean?* → each repo's glossary, for example [dev-inbox glossary](/repos/jeffrey-keyser-dev-inbox/glossary/)
+
+## Keeping this map current
+
+This snapshot covers the ecosystem registry, the wiki allowlist and deployed-config references. It is not an exhaustive census of the GitHub account and not a live health report.
+
+Repository-scoped wiki events currently refresh per-repo docs only. They do **not** automatically regenerate this global page, and this page is refreshed manually.
+
+Refresh this page when any of these change:
+
+- a service moves between Beelink and Forge
+- ingress hostnames or the loopback bridge change
+- a new repo, exchange or shared package appears
+- a service is retired or replaced, the way NanoClaw replaced OpenClaw
+- Beelink Steward or another planned component is actually built
+- the auth or inference lanes change
+
+## Repository and wiki directory
+
+This snapshot covers **69 repositories**, including **33 complete six-page wiki guides**. Each row links to its source repository; the wiki column opens every available guide page. “Documented” describes source coverage, not a live health check. “Not scaffolded” means a dedicated guide is still missing.
+
+### Platform services
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [ai-proxy](https://github.com/Jeffrey-Keyser/AI-Proxy) | Central LLM gateway giving apps per-application keys, quotas, model controls, usage tracking and a Claude budget guard. | Documented | [Overview](/repos/jeffrey-keyser-ai-proxy/home/) · [Architecture](/repos/jeffrey-keyser-ai-proxy/architecture/) · [Workflow](/repos/jeffrey-keyser-ai-proxy/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-ai-proxy/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-ai-proxy/operations/) · [Glossary](/repos/jeffrey-keyser-ai-proxy/glossary/) |
+| [analytics-pulse](https://github.com/Jeffrey-Keyser/Analytics-Pulse) | Privacy-focused analytics platform with tracking library, admin dashboard and telemetry ingestion for ecosystem applications. | Documented | [Overview](/repos/jeffrey-keyser-analytics-pulse/home/) · [Architecture](/repos/jeffrey-keyser-analytics-pulse/architecture/) · [Workflow](/repos/jeffrey-keyser-analytics-pulse/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-analytics-pulse/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-analytics-pulse/operations/) · [Glossary](/repos/jeffrey-keyser-analytics-pulse/glossary/) |
+| [cron-service](https://github.com/Jeffrey-Keyser/cron-service) | Publisher-only scheduler that sends cron-triggered RabbitMQ messages and records job runs in PostgreSQL. | Documented | [Overview](/repos/jeffrey-keyser-cron-service/home/) · [Architecture](/repos/jeffrey-keyser-cron-service/architecture/) · [Workflow](/repos/jeffrey-keyser-cron-service/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-cron-service/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-cron-service/operations/) · [Glossary](/repos/jeffrey-keyser-cron-service/glossary/) |
+| [feedback-registry](https://github.com/Jeffrey-Keyser/feedback-registry) | Collects user bug reports and feature requests, auto-triages them and creates linked GitHub issues. | Documented | [Overview](/repos/jeffrey-keyser-feedback-registry/home/) · [Architecture](/repos/jeffrey-keyser-feedback-registry/architecture/) · [Workflow](/repos/jeffrey-keyser-feedback-registry/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-feedback-registry/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-feedback-registry/operations/) · [Glossary](/repos/jeffrey-keyser-feedback-registry/glossary/) |
+| [pay](https://github.com/Jeffrey-Keyser/Pay) | Central authentication and payment backend providing JWT identity, guest login and Stripe processing. | Documented | [Overview](/repos/jeffrey-keyser-pay/home/) · [Architecture](/repos/jeffrey-keyser-pay/architecture/) · [Workflow](/repos/jeffrey-keyser-pay/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-pay/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-pay/operations/) · [Glossary](/repos/jeffrey-keyser-pay/glossary/) |
+| [qa-patrol](https://github.com/Jeffrey-Keyser/qa-patrol) | QA-as-a-Service running Playwright workflow steps against apps and returning evidence-backed reports. | Documented | [Overview](/repos/jeffrey-keyser-qa-patrol/home/) · [Architecture](/repos/jeffrey-keyser-qa-patrol/architecture/) · [Workflow](/repos/jeffrey-keyser-qa-patrol/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-qa-patrol/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-qa-patrol/operations/) · [Glossary](/repos/jeffrey-keyser-qa-patrol/glossary/) |
+| [solo-vault](https://github.com/Jeffrey-Keyser/Solo-Vault) | Self-hosted secrets service storing encrypted credentials behind scoped API keys, with a CLI. | Documented | [Overview](/repos/jeffrey-keyser-solo-vault/home/) · [Architecture](/repos/jeffrey-keyser-solo-vault/architecture/) · [Workflow](/repos/jeffrey-keyser-solo-vault/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-solo-vault/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-solo-vault/operations/) · [Glossary](/repos/jeffrey-keyser-solo-vault/glossary/) |
+| [struct](https://github.com/Jeffrey-Keyser/struct) | Internal structured-completion service wrapping a local agent CLI to return schema-validated JSON responses. | Documented | [Overview](/repos/jeffrey-keyser-struct/home/) · [Architecture](/repos/jeffrey-keyser-struct/architecture/) · [Workflow](/repos/jeffrey-keyser-struct/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-struct/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-struct/operations/) · [Glossary](/repos/jeffrey-keyser-struct/glossary/) |
+| [Switchboard](https://github.com/Jeffrey-Keyser/Switchboard) | Feature flag and typed configuration service with admin UI and client SDK. | Documented | [Overview](/repos/jeffrey-keyser-switchboard/home/) · [Architecture](/repos/jeffrey-keyser-switchboard/architecture/) · [Workflow](/repos/jeffrey-keyser-switchboard/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-switchboard/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-switchboard/operations/) · [Glossary](/repos/jeffrey-keyser-switchboard/glossary/) |
+
+### Orchestration and agent workflows
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [agency-hq](https://github.com/Jeffrey-Keyser/agency-hq) | Strategic agent control plane on Forge that dispatches dev-inbox runs and tracks Runs and Topology outcomes. | Documented | [Overview](/repos/jeffrey-keyser-agency-hq/home/) · [Architecture](/repos/jeffrey-keyser-agency-hq/architecture/) · [Workflow](/repos/jeffrey-keyser-agency-hq/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-agency-hq/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-agency-hq/operations/) · [Glossary](/repos/jeffrey-keyser-agency-hq/glossary/) |
+| [business-hq](https://github.com/Jeffrey-Keyser/business-hq) | Financial layer tracking products, revenue, costs and daily snapshots from Pay, Agency and cron events. | Documented | [Overview](/repos/jeffrey-keyser-business-hq/home/) · [Architecture](/repos/jeffrey-keyser-business-hq/architecture/) · [Workflow](/repos/jeffrey-keyser-business-hq/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-business-hq/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-business-hq/operations/) · [Glossary](/repos/jeffrey-keyser-business-hq/glossary/) |
+| [dev-inbox](https://github.com/Jeffrey-Keyser/dev-inbox) | Multi-provider agent orchestration on Forge that plans, implements, verifies, reviews and lands software changes. | Documented | [Overview](/repos/jeffrey-keyser-dev-inbox/home/) · [Architecture](/repos/jeffrey-keyser-dev-inbox/architecture/) · [Workflow](/repos/jeffrey-keyser-dev-inbox/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-dev-inbox/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-dev-inbox/operations/) · [Glossary](/repos/jeffrey-keyser-dev-inbox/glossary/) |
+| [nanoclaw](https://github.com/Jeffrey-Keyser/nanoclaw) | Personal assistant gateway on Beelink with Telegram channel, scheduler and agent runners, replacing OpenClaw. | Documented | [Overview](/repos/jeffrey-keyser-nanoclaw/home/) · [Architecture](/repos/jeffrey-keyser-nanoclaw/architecture/) · [Workflow](/repos/jeffrey-keyser-nanoclaw/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-nanoclaw/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-nanoclaw/operations/) · [Glossary](/repos/jeffrey-keyser-nanoclaw/glossary/) |
+| [openclaw-bridge](https://github.com/Jeffrey-Keyser/openclaw-bridge) | Event bridge whose handlers forward RabbitMQ and webhook events to NanoClaw, with legacy OpenClaw routing. | Documented | [Overview](/repos/jeffrey-keyser-openclaw-bridge/home/) · [Architecture](/repos/jeffrey-keyser-openclaw-bridge/architecture/) · [Workflow](/repos/jeffrey-keyser-openclaw-bridge/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-openclaw-bridge/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-openclaw-bridge/operations/) · [Glossary](/repos/jeffrey-keyser-openclaw-bridge/glossary/) |
+| [passthrough](https://github.com/Jeffrey-Keyser/passthrough) | Claude Code Web dispatch protocol that fetches action instructions from Prompt Registry and opens PRs. | Documented | Not scaffolded |
+
+### Knowledge, prompts, and documentation
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [logos](https://github.com/Jeffrey-Keyser/logos) | Knowledge hub ingesting URLs into reviewed themed pages and answering agent queries with citations. | Documented | [Overview](/repos/jeffrey-keyser-logos/home/) · [Architecture](/repos/jeffrey-keyser-logos/architecture/) · [Workflow](/repos/jeffrey-keyser-logos/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-logos/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-logos/operations/) · [Glossary](/repos/jeffrey-keyser-logos/glossary/) |
+| [milo-workspace](https://github.com/Jeffrey-Keyser/milo-workspace) | Git-backed identity, memory and log store for the Milo assistant, described against the historical OpenClaw gateway. | Documented | Not scaffolded |
+| [project-wiki](https://github.com/Jeffrey-Keyser/project-wiki) | Central architecture and operations wiki serving source-cited repository guides with a RabbitMQ-driven updater. | Documented | [Wiki home](/) · Repository guide not scaffolded |
+| [prompt-registry](https://github.com/Jeffrey-Keyser/Prompt-registry) | Versioned key-value store holding reusable prompts for apps, agents and workflows. | Documented | [Overview](/repos/jeffrey-keyser-prompt-registry/home/) · [Architecture](/repos/jeffrey-keyser-prompt-registry/architecture/) · [Workflow](/repos/jeffrey-keyser-prompt-registry/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-prompt-registry/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-prompt-registry/operations/) · [Glossary](/repos/jeffrey-keyser-prompt-registry/glossary/) |
+
+### Applications and domain services
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [Apps](https://github.com/Jeffrey-Keyser/Apps) | Static landing page listing connected ecosystem applications, served through Cloudflare Tunnel using personal-ui-kit. | Documented | Not scaffolded |
+| [cream-city-web](https://github.com/Jeffrey-Keyser/cream-city-web) | AI-operated Milwaukee web design micro-business with lead CLIs, site staging, payment API and email worker. | Documented | [Overview](/repos/jeffrey-keyser-cream-city-web/home/) · [Architecture](/repos/jeffrey-keyser-cream-city-web/architecture/) · [Workflow](/repos/jeffrey-keyser-cream-city-web/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-cream-city-web/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-cream-city-web/operations/) · [Glossary](/repos/jeffrey-keyser-cream-city-web/glossary/) |
+| [Dota-2-Draft-Helper](https://github.com/Jeffrey-Keyser/Dota-2-Draft-Helper) | Minimal web app suggesting Dota 2 hero picks from synergy and counter matrices. | Documented | Not scaffolded |
+| [google-flights](https://github.com/Jeffrey-Keyser/google-flights) | Flight deal tracker parsing deal emails with Struct and storing structured deals in PostgreSQL. | Documented | Not scaffolded |
+| [image-studio](https://github.com/Jeffrey-Keyser/image-studio) | AI image generation app with Pay sign-in, AI Proxy generation, versioned library and S3 storage. | Documented | [Overview](/repos/jeffrey-keyser-image-studio/home/) · [Architecture](/repos/jeffrey-keyser-image-studio/architecture/) · [Workflow](/repos/jeffrey-keyser-image-studio/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-image-studio/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-image-studio/operations/) · [Glossary](/repos/jeffrey-keyser-image-studio/glossary/) |
+| [insta-travel-map](https://github.com/Jeffrey-Keyser/insta-travel-map) | Map-based travel request app where signed-in users pin locations and admins review submissions. | Documented | [Overview](/repos/jeffrey-keyser-insta-travel-map/home/) · [Architecture](/repos/jeffrey-keyser-insta-travel-map/architecture/) · [Workflow](/repos/jeffrey-keyser-insta-travel-map/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-insta-travel-map/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-insta-travel-map/operations/) · [Glossary](/repos/jeffrey-keyser-insta-travel-map/glossary/) |
+| [Jeffrey-Keyser.net](https://github.com/Jeffrey-Keyser/Jeffrey-Keyser.net) | Personal website and portfolio with an Express API, self-hosted on Beelink with webhook deploys. | Documented | Not scaffolded |
+| [Life](https://github.com/Jeffrey-Keyser/Life) | Voice-first journal that transcribes, structures and links entries into a people and tag graph. | Documented | [Overview](/repos/jeffrey-keyser-life/home/) · [Architecture](/repos/jeffrey-keyser-life/architecture/) · [Workflow](/repos/jeffrey-keyser-life/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-life/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-life/operations/) · [Glossary](/repos/jeffrey-keyser-life/glossary/) |
+| [music-store](https://github.com/Jeffrey-Keyser/music-store) | Cloud-backed DJ music library with web UI, S3 storage and a sync CLI. | Documented | [Overview](/repos/jeffrey-keyser-music-store/home/) · [Architecture](/repos/jeffrey-keyser-music-store/architecture/) · [Workflow](/repos/jeffrey-keyser-music-store/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-music-store/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-music-store/operations/) · [Glossary](/repos/jeffrey-keyser-music-store/glossary/) |
+| [myrrs](https://github.com/Jeffrey-Keyser/myrrs) | Routine scheduling web app combining probability-based selection, streak tracking and a rule engine. | Documented | [Overview](/repos/jeffrey-keyser-myrrs/home/) · [Architecture](/repos/jeffrey-keyser-myrrs/architecture/) · [Workflow](/repos/jeffrey-keyser-myrrs/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-myrrs/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-myrrs/operations/) · [Glossary](/repos/jeffrey-keyser-myrrs/glossary/) |
+| [nof1](https://github.com/Jeffrey-Keyser/nof1) | Personal N-of-1 experiment tracker with phases, quick-log entries and computed insights. | Documented | [Overview](/repos/jeffrey-keyser-nof1/home/) · [Architecture](/repos/jeffrey-keyser-nof1/architecture/) · [Workflow](/repos/jeffrey-keyser-nof1/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-nof1/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-nof1/operations/) · [Glossary](/repos/jeffrey-keyser-nof1/glossary/) |
+| [Pantry](https://github.com/Jeffrey-Keyser/Pantry) | Kitchen management app for ingredients, AI receipt scanning and recipes, separate from Pantry Manager. | Documented | Not scaffolded |
+| [pantry-manager](https://github.com/Jeffrey-Keyser/pantry-manager) | Standalone inventory service tracking products, stock and receipt-backed purchase history, distinct from Pantry. | Documented | [Overview](/repos/jeffrey-keyser-pantry-manager/home/) · [Architecture](/repos/jeffrey-keyser-pantry-manager/architecture/) · [Workflow](/repos/jeffrey-keyser-pantry-manager/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-pantry-manager/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-pantry-manager/operations/) · [Glossary](/repos/jeffrey-keyser-pantry-manager/glossary/) |
+| [ping](https://github.com/Jeffrey-Keyser/ping) | Location, health and life-tracking service that resolves zones, records visits and publishes events. | Documented | [Overview](/repos/jeffrey-keyser-ping/home/) · [Architecture](/repos/jeffrey-keyser-ping/architecture/) · [Workflow](/repos/jeffrey-keyser-ping/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-ping/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-ping/operations/) · [Glossary](/repos/jeffrey-keyser-ping/glossary/) |
+| [presence-signal](https://github.com/Jeffrey-Keyser/presence-signal) | Local Wi-Fi presence proxy that polls the router and sends transition notices through NanoClaw. | Documented | [Overview](/repos/jeffrey-keyser-presence-signal/home/) · [Architecture](/repos/jeffrey-keyser-presence-signal/architecture/) · [Workflow](/repos/jeffrey-keyser-presence-signal/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-presence-signal/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-presence-signal/operations/) · [Glossary](/repos/jeffrey-keyser-presence-signal/glossary/) |
+| [spanish-studio](https://github.com/Jeffrey-Keyser/spanish-studio) | Voice-centric Spanish practice app with persona role-play, pronunciation review and a reading workbench. | Documented | [Overview](/repos/jeffrey-keyser-spanish-studio/home/) · [Architecture](/repos/jeffrey-keyser-spanish-studio/architecture/) · [Workflow](/repos/jeffrey-keyser-spanish-studio/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-spanish-studio/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-spanish-studio/operations/) · [Glossary](/repos/jeffrey-keyser-spanish-studio/glossary/) |
+| [spanish-tutor](https://github.com/Jeffrey-Keyser/spanish-tutor) | Spaced repetition Spanish vocabulary system living as a schema and functions in the ping database. | Documented | Not scaffolded |
+| [Workout](https://github.com/Jeffrey-Keyser/Workout) | Workout tracking application with Apple Shortcuts integration, built with personal-ui-kit. | Documented | Not scaffolded |
+
+### Shared packages and frameworks
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [api-error-kit](https://github.com/Jeffrey-Keyser/api-error-kit) | Shared npm package of standardized API error formats, status codes and transformation patterns for backend services. | Documented | Not scaffolded |
+| [api-toolkit](https://github.com/Jeffrey-Keyser/api-toolkit) | Shared backend utilities and helper abstractions reused across multiple API services in the ecosystem. | Documented | Not scaffolded |
+| [api-types](https://github.com/Jeffrey-Keyser/api-types) | Shared TypeScript type definitions for API contracts used across multiple full-stack projects. | Documented | Not scaffolded |
+| [bootstrap-env](https://github.com/Jeffrey-Keyser/bootstrap-env) | CLI and library for loading and validating environment variables consistently across Express backend services. | Documented | Not scaffolded |
+| [database-base-config](https://github.com/Jeffrey-Keyser/database-base-config) | Shared PostgreSQL connection pooling, query helpers, transactions and migration CLI tooling for services. | Documented | Not scaffolded |
+| [domain-core](https://github.com/Jeffrey-Keyser/domain-core) | Base domain-driven design building blocks extended by the Pantry, MYRRS and Pay domain cores. | Documented | Not scaffolded |
+| [express-middleware-suite](https://github.com/Jeffrey-Keyser/express-middleware-suite) | Standardized Express middleware for logging, tracing, validation, error mapping, security headers and auth wrappers. | Documented | Not scaffolded |
+| [express-server-factory](https://github.com/Jeffrey-Keyser/express-server-factory) | Factory producing consistent Express services with routing, health checks, error formatting and lifecycle management. | Documented | Not scaffolded |
+| [github-error-issues](https://github.com/Jeffrey-Keyser/github-error-issues) | Package that turns application errors into deduplicated GitHub issues via Express error middleware. | Documented | Not scaffolded |
+| [message-contracts](https://github.com/Jeffrey-Keyser/message-contracts) | Single source of truth for RabbitMQ exchange constants, event types and correlation helpers. | Documented | [Overview](/repos/jeffrey-keyser-message-contracts/home/) · [Architecture](/repos/jeffrey-keyser-message-contracts/architecture/) · [Workflow](/repos/jeffrey-keyser-message-contracts/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-message-contracts/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-message-contracts/operations/) · [Glossary](/repos/jeffrey-keyser-message-contracts/glossary/) |
+| [myrrs-domain-core](https://github.com/Jeffrey-Keyser/myrrs-domain-core) | Domain core library encapsulating MYRRS business invariants, aggregates and domain events. | Documented | Not scaffolded |
+| [pantry-domain-core](https://github.com/Jeffrey-Keyser/pantry-domain-core) | Domain library for Pantry item rules, categorization and domain events shared by frontend and backend. | Documented | Not scaffolded |
+| [pay-api-types](https://github.com/Jeffrey-Keyser/pay-api-types) | TypeScript type definitions for Pay APIs shared between Pay and integrating packages. | Documented | Not scaffolded |
+| [pay-auth-integration](https://github.com/Jeffrey-Keyser/pay-auth-integration) | Library adding Pay-backed sign-in and payments through server proxy middleware and React components. | Documented | [Overview](/repos/jeffrey-keyser-pay-auth-integration/home/) · [Architecture](/repos/jeffrey-keyser-pay-auth-integration/architecture/) · [Workflow](/repos/jeffrey-keyser-pay-auth-integration/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-pay-auth-integration/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-pay-auth-integration/operations/) · [Glossary](/repos/jeffrey-keyser-pay-auth-integration/glossary/) |
+| [pay-domain-core](https://github.com/Jeffrey-Keyser/pay-domain-core) | Domain-driven design core holding Pay aggregates, value objects, events and business logic. | Documented | Not scaffolded |
+| [personal-ui-kit](https://github.com/Jeffrey-Keyser/personal-ui-kit) | Shared React component library and design system used by ecosystem frontends, with Storybook docs. | Documented | [Overview](/repos/jeffrey-keyser-personal-ui-kit/home/) · [Architecture](/repos/jeffrey-keyser-personal-ui-kit/architecture/) · [Workflow](/repos/jeffrey-keyser-personal-ui-kit/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-personal-ui-kit/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-personal-ui-kit/operations/) · [Glossary](/repos/jeffrey-keyser-personal-ui-kit/glossary/) |
+| [redux-app-toolkit](https://github.com/Jeffrey-Keyser/redux-app-toolkit) | Abstractions over Redux Toolkit and RTK Query patterns to reduce frontend boilerplate. | Documented | Not scaffolded |
+
+### Mobile and desktop clients
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [ping-mobile](https://github.com/Jeffrey-Keyser/ping-mobile) | Native iOS companion collecting background location, drives and health data for the Ping backend. | Documented | Not scaffolded |
+| [Whisperclip](https://github.com/Jeffrey-Keyser/Whisperclip) | Electron desktop app for hotkey-triggered voice recording and transcription for quick notes and dictation. | Documented | Not scaffolded |
+
+### Hosting, deployment, and operations
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [beelink-backup](https://github.com/Jeffrey-Keyser/beelink-backup) | Weekly encrypted backup scripts for Beelink databases, service configuration and repository metadata, triggered by Cron Service. | Documented | Not scaffolded |
+| [beelink-deploy](https://github.com/Jeffrey-Keyser/beelink-deploy) | GitHub webhook deploy service on Beelink that runs deploy scripts, publishes packages and emits wiki update events. | Documented | [Overview](/repos/jeffrey-keyser-beelink-deploy/home/) · [Architecture](/repos/jeffrey-keyser-beelink-deploy/architecture/) · [Workflow](/repos/jeffrey-keyser-beelink-deploy/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-beelink-deploy/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-beelink-deploy/operations/) · [Glossary](/repos/jeffrey-keyser-beelink-deploy/glossary/) |
+| [beelink-steward](https://github.com/Jeffrey-Keyser/beelink-steward) | Advisory-first Beelink host care agent with deterministic sensors and owner-granted actions; not yet built. | Planned | [Overview](/repos/jeffrey-keyser-beelink-steward/home/) · [Architecture](/repos/jeffrey-keyser-beelink-steward/architecture/) · [Workflow](/repos/jeffrey-keyser-beelink-steward/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-beelink-steward/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-beelink-steward/operations/) · [Glossary](/repos/jeffrey-keyser-beelink-steward/glossary/) |
+| [github-actions](https://github.com/Jeffrey-Keyser/github-actions) | Reusable GitHub Actions workflows and composite actions for cross-project CI, publishing and downstream notifications. | Documented | Not scaffolded |
+| [homelab](https://github.com/Jeffrey-Keyser/homelab) | Configuration, ingress and runbooks for the Beelink production host and Forge execution host. | Documented | [Overview](/repos/jeffrey-keyser-homelab/home/) · [Architecture](/repos/jeffrey-keyser-homelab/architecture/) · [Workflow](/repos/jeffrey-keyser-homelab/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-homelab/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-homelab/operations/) · [Glossary](/repos/jeffrey-keyser-homelab/glossary/) |
+| [mcp-aws-bastion](https://github.com/Jeffrey-Keyser/mcp-aws-bastion) | MCP server letting AI tools run readonly or admin AWS CLI commands with validation. | Documented | Not scaffolded |
+| [mcp-postgres-bastion](https://github.com/Jeffrey-Keyser/mcp-postgres-bastion) | MCP server letting AI tools query PostgreSQL RDS through AWS SSM bastion tunnels. | Documented | Not scaffolded |
+
+### Legacy and deprecated systems
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [ClaudeIssueCreator](https://github.com/Jeffrey-Keyser/ClaudeIssueCreator) | Former GitHub Actions issue creation and orchestration tool, deprecated and replaced by dev-inbox. | Deprecated | Not scaffolded |
+| [ClaudeIssueTriager](https://github.com/Jeffrey-Keyser/ClaudeIssueTriager) | Former AI GitHub workflow for classifying issues and proposing fixes, deprecated and replaced by dev-inbox. | Deprecated | Not scaffolded |
+| [event-bus](https://github.com/Jeffrey-Keyser/event-bus) | Pluggable RabbitMQ and AWS event bus package whose message types moved to message-contracts. | Legacy | Not scaffolded |
+| [serverless-web-infra](https://github.com/Jeffrey-Keyser/serverless-web-infra) | Terraform module for CloudFront, S3, API Gateway and Lambda sites, kept for reference after self-hosting. | Legacy | Not scaffolded |
+| [ServerlessWebTemplate](https://github.com/Jeffrey-Keyser/ServerlessWebTemplate) | Starter template for Lambda-based backends, legacy since most services moved to self-hosting. | Legacy | Not scaffolded |
+| [shared-infra](https://github.com/Jeffrey-Keyser/shared-infra) | Core AWS Terraform infrastructure for publicly hosted sites, kept only for reference. | Legacy | Not scaffolded |
+
+## Sources and coverage
+
+The map combines the [ecosystem registry](https://prompt-api.jeffreykeyser.net/api/v1/prompts/Jeffrey-Keyser%2Fecosystem), the [host reference](https://prompt-api.jeffreykeyser.net/api/v1/prompts/Jeffrey-Keyser%2Fhost), and the repository guides linked above, captured on **23 October 2026**. The host reference governs the current Beelink/Forge split where older repository prose differs. Repository URLs were checked against GitHub; registration and a reachable repository do not establish runtime health.
+
+The guide snapshot comes from [Project Wiki at `390d2b3`](https://github.com/Jeffrey-Keyser/project-wiki/tree/390d2b3b1567ea8588ac2a5b3e59b72bf166f3f3/content/repos). Each individual guide links to the implementation sources behind its claims.

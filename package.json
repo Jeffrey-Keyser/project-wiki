@@ -10,7 +10,7 @@
     "dev": "astro dev",
     "start": "node server/index.js",
     "start:updater": "node server/updater.js",
-    "build": "astro build",
+    "build": "astro build && node scripts/export-ecosystem-diagrams.mjs",
     "preview": "astro preview",
     "astro": "astro",
     "test:cli": "node --test cli/__tests__/*.test.js",

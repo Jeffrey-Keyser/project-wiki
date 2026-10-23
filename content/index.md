@@ -8,6 +8,8 @@ source of truth: code, configuration and operational data remain authoritative.
 Use these pages to understand how projects fit together, then follow their
 source citations for implementation details.
 
+**Start here:** [Explore the global ecosystem architecture and directory](/ecosystem/overview/) — hosts, shared services, cross-repository workflows, and links to every available wiki guide.
+
 Each repository guide covers its overview, architecture, iteration loop,
 services and dependencies, operations, and glossary.
 
