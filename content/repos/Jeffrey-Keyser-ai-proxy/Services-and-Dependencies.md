@@ -34,7 +34,7 @@ Having source code for an integration does not mean it is configured in producti
 
 The server depends on these first-party packages ([server/package.json:L18-L23](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/package.json#L18-L23)):
 - `@jeffrey-keyser/express-server-factory` ^2.0.1
-- `@jeffrey-keyser/pay-auth-integration` ^6.10.1
+- `@jeffrey-keyser/pay-auth-integration` 6.10.2 (exact pin; previously `^6.10.1`)
 - `@jeffrey-keyser/database-base-config`
 - `@jeffrey-keyser/api-errors`
 - `@jeffrey-keyser/github-error-issues`
