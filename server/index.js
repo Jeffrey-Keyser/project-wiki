@@ -5,10 +5,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
-// pay-auth-integration's ESM bundle ships unresolvable directory imports, so
-// we load the CommonJS build through createRequire. The library is still the
-// only source of validateToken/extractToken; this is purely a module-resolution
-// workaround.
+// Load the shared authentication helpers through the package's CommonJS export.
 const require = createRequire(import.meta.url);
 const { validateToken, extractToken } = require(
   '@jeffrey-keyser/pay-auth-integration/server',
