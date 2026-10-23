@@ -64,6 +64,23 @@ or *hand a decision* to the managing AI (judgment faults), but it never reasons.
 - **Crash-only.** Holds no authoritative in-memory state — all truth is the durable event log, so kill/restart loses nothing (`Restart=always`).
 - **Kill-switches.** `DEV_INBOX_SUPERVISE_DISABLED` (whole tick no-op), `DEV_INBOX_SUPERVISE_NO_AUTOHEAL` (mechanical heals off, detect-only).
 
+## Terminal merge-conflict recovery
+
+A `merge-conflict` judgment handoff on a completed plan is resolved by an explicit
+recovery request, not by the tick. The request path is `recoverTerminalIntegration`
+in
+[`cmd/plan-managerd/terminal_integration_recovery.go`](https://github.com/Jeffrey-Keyser/dev-inbox/blob/main/cmd/plan-managerd/terminal_integration_recovery.go),
+which appends one reconciliation slice to `slices.json` (or only prepares it with `--prepare`).
+
+- **Slice IDs and bound.** The first recovery is `terminal-merge-recovery`; later ones are
+  `terminal-merge-recovery-2` and `-3`. A fourth request is refused with
+  "terminal recovery attempts exhausted" and leaves the plan unchanged.
+- **Resume before re-admit.** While the latest recovery is pending or in flight, a replayed request only resumes it. A new numbered recovery is admitted only after the latest one is `done` and the conflict is still present because the target moved again.
+- **Repo line.** The recovery prompt starts with the plan's own `Repo:` declaration, reused from the compiled slices. It falls back to `<basename> (<repoPath>)` when none is found, so prevalidation accepts the slice.
+- **Operation release.** The queue manager (`internal/queuemanager/incidents.go`) tracks the appended recovery slice as the subject of the `recover_integration` operation, not the synthetic `terminal-complete` slice. If that slice finishes `done` and a new terminal conflict handoff is detected after the operation started, the operation is marked `failed` with evidence that another recovery may be requested. Ownership is not held indefinitely.
+
+The recovery still goes through normal exact-scope host finalization, fresh independent review, and the existing merge and sign-off gates. Completed slices are preserved and not replayed.
+
 ## Why it exists
 
 Before this daemon, the recovery primitives existed but `replay-recovery.sh` had
