@@ -1,0 +1,17 @@
+[Unit]
+Description=Project Wiki durable batch refresh worker (Forge)
+After=network-online.target prod-loopback-bridge.service
+
+[Service]
+WorkingDirectory=%h/project-wiki-worker
+Environment=NODE_ENV=production
+Environment=NPM_CONFIG_USERCONFIG=%h/project-wiki/.npmrc
+EnvironmentFile=%h/.config/project-wiki-worker.env
+ExecStart=/usr/bin/bash %h/project-wiki-worker/scripts/wiki-worker.sh run
+KillMode=control-group
+TimeoutStopSec=20
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

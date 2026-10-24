@@ -186,3 +186,31 @@ Claude/default selection. No dispatch preferences were written.
 `content/ecosystem/overview.md` is the cross-repository architecture and directory, linked from the home page. It is a dated scaffold based on the ecosystem/host prompts and existing guides. Repository update events currently maintain per-repo pages; refresh this overview when host ownership, shared contracts, major integrations, or wiki coverage changes.
 
 `npm run build` also exports standalone SVGs under `/diagrams/` for opening or downloading the maps at full size. Keep the three Mermaid blocks in topology, events, and delivery order so their stable filenames stay aligned.
+
+
+## Background wiki automation (Forge)
+
+The `project-wiki-worker.service` unit in `deploy/` replaces the legacy Beelink updater consumer. Run exactly one consumer; keep the authenticated front-server on Beelink. The worker accepts existing `wiki.update.#` events and `wiki.page.updated`, saves intake to a private SQLite WAL database before acknowledging RabbitMQ, and coalesces each repository for 30 minutes. Daily source checks also catch ecosystem/host registry changes. Guide links and the home directory are generated from files on disk without inference. The catalog describes registered repositories, not a GitHub account census or live service health.
+
+Background generation uses AI Proxy's application-owned `/v1/batches` endpoints. Routine global updates use Haiku 5.5; structural registry/host/allowlist changes require a second batch with an Opus 5.5 approval. Repository updates resolve the existing `project-wiki-generator` central selection and accept Haiku/Opus 5.5 only. A non-Claude or unsupported selection blocks that update visibly. Interactive onboarding/reindex commands keep their immediate path. There is no background CLI or synchronous fallback. Batch results can take up to 24 hours per stage.
+
+Configure a private `~/.config/project-wiki-worker.env` (mode 600) on Forge:
+
+```dotenv
+RABBITMQ_URL=amqp://user:password@100.99.136.81:5672
+AI_PROXY_URL=http://127.0.0.1:3005
+AI_PROXY_API_KEY=<dedicated batch-only application key>
+WIKI_BATCH_UNTIL=2026-11-03T00:00:00Z
+PROJECT_WIKI_AGENCY_URL=http://127.0.0.1:3040
+PROJECT_WIKI_SOURCE_DIFF_CACHE=/home/jkeyser/.cache/project-wiki/source-diffs
+```
+
+The rollout application has a **one-time $80 lifetime allowance**, an explicit expiry, and access only to Haiku/Opus 5.5. The shared proxy cap still applies. This is not a recurring $80 subscription or a monthly reset. The initial November 3 cutoff leaves processing time before the earliest reported November 4 credit expiry; new structural drafts stop one day earlier to leave time for their review. Polling and free directory checks continue after submissions stop. Confirm the actual credit expiry in the provider console before extending the cutoff.
+
+Use `scripts/wiki-worker.sh status` for pending batches, job counts, source-check timestamps, submission/poll errors, and publication recovery. `scripts/wiki-worker.sh check` requests a source check while holding the same exclusive process lock as the service; stop the service before using it. Both require the configured environment. Normal operation uses the installed systemd unit and checks each minute. Runtime state defaults to `~/.local/state/project-wiki/automation`; protect the whole directory (700), including SQLite, source snapshots and prompts. Never commit or attach its contents publicly.
+
+Requests and idempotency keys persist before HTTP submission. An uncertain provider submission retains its proxy reservation and is surfaced for manual reconciliation; never generate a fresh key or enable a fallback to bypass it. Known failed/invalid results remain visible and are not automatically rebilled. A source or document change can produce a new job. Check `AI Proxy /internal/anthropic-budget` (service auth) for settled cost and outstanding reservations.
+
+Before applying a repository result, the worker requires unchanged source-page hashes and an ancestor source revision. It can publish a valid older code snapshot, then enqueue a catch-up update, so busy repositories do not starve. Global results require unchanged structural inputs, narrative and curated catalog fields. `<!-- curated:start -->...<!-- curated:end -->` blocks are preserved exactly. Unknown pages, truncated responses, active content, credentials and destructive changes are rejected. Build/render/link/anchor/diagram checks run on Forge before a normal fast-forward Git push. The Beelink installer verifies the current main revision, archive hash and safe paths, then atomically exchanges the built directory. A durable publish intent retries installation after a crash without making another model call. An intervening main commit causes revalidation rather than a force push.
+
+Install `scripts/install-wiki-artifact.sh` on Beelink first, with executable permissions. The Forge worker needs its normal GitHub SSH access and `ssh beelink`. Copy the supplied service unit to `~/.config/systemd/user/`, use a production dependency install in `~/project-wiki-worker`, and set `NPM_CONFIG_USERCONFIG` to the existing authenticated npm config. At cutover, verify the old updater is idle, stop/disable it, then enable/start the Forge worker. Rollback: stop Forge first, verify there are no pending model results to apply, and re-enable the legacy consumer; pending batch reservations remain tracked by AI Proxy. Do not run both consumers together.

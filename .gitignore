@@ -23,3 +23,6 @@ pnpm-debug.log*
 
 # updater runtime state (poll-rebuild last-rendered-commit tracker)
 .wiki-updater-build-state.json
+.wiki-artifact-state.json
+.wiki-artifact-*/
+.wiki-dist-previous/
