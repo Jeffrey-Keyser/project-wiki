@@ -50,6 +50,12 @@ None of the optional systems above are verified as deployed by this snapshot.
 - **Agency HQ.** Source comments say the startup and failure markers exist so that Agency HQ can tell when a manager never started ([scripts/manager-standalone.sh:L157-L158](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/scripts/manager-standalone.sh#L157-L158)).
 - **Agency HQ release workflow.** Agency HQ is described as owning drain, activation, health, and rollback of reconciler releases ([cmd/project-reconciler-release/main.go:L1-L2](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/cmd/project-reconciler-release/main.go#L1-L2)).
 - **Relay sessions.** A cloud agent session can exchange prompts through the opt-in clipboard relay ([README.md:L302-L306](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L302-L306)).
+  - The relay's enrollment request construction and client-state projection are owned by the source-run Go helper `cmd/relay-enrollment-encode`, which has two operations ([cmd/relay-enrollment-encode/main.go:L1-L109](https://github.com/Jeffrey-Keyser/dev-inbox/blob/d6559913f6af9d75f3c71a43c7053ecc58c65ab2/cmd/relay-enrollment-encode/main.go#L1-L109)):
+    - `request --mode token|pay` builds an enrollment request, with optional `--label`, `--explicit-label`, and `--purpose`;
+    - `state --url URL` reads an enrollment response on stdin and writes the projected client state.
+  - Usage errors exit 64; other failures exit 1 ([cmd/relay-enrollment-encode/main.go:L1-L109](https://github.com/Jeffrey-Keyser/dev-inbox/blob/d6559913f6af9d75f3c71a43c7053ecc58c65ab2/cmd/relay-enrollment-encode/main.go#L1-L109)).
+  - The design that moved this work into the typed encoder is recorded with status `done` ([design/relay-enrollment-data-typed-owner/meta.json:L1-L13](https://github.com/Jeffrey-Keyser/dev-inbox/blob/d6559913f6af9d75f3c71a43c7053ecc58c65ab2/design/relay-enrollment-data-typed-owner/meta.json#L1-L13)).
+  - Go is already listed under host tooling above.
 
 ### Unknown
 
