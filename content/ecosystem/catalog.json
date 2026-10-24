@@ -5,415 +5,1378 @@
       "repo": "Jeffrey-Keyser/agency-hq",
       "group": "orchestration",
       "summary": "Strategic agent control plane on Forge that dispatches dev-inbox runs and tracks Runs and Topology outcomes.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-agency-hq/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-agency-hq/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-agency-hq/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-agency-hq/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-agency-hq/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-agency-hq/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/ai-proxy",
       "group": "platform",
       "summary": "Central LLM gateway giving apps per-application keys, quotas, model controls, usage tracking and a Claude budget guard.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-ai-proxy/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-ai-proxy/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-ai-proxy/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-ai-proxy/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-ai-proxy/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-ai-proxy/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/analytics-pulse",
       "group": "platform",
       "summary": "Privacy-focused analytics platform with tracking library, admin dashboard and telemetry ingestion for ecosystem applications.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-analytics-pulse/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-analytics-pulse/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-analytics-pulse/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-analytics-pulse/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-analytics-pulse/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-analytics-pulse/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/api-error-kit",
       "group": "shared",
       "summary": "Shared npm package of standardized API error formats, status codes and transformation patterns for backend services.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/api-toolkit",
       "group": "shared",
       "summary": "Shared backend utilities and helper abstractions reused across multiple API services in the ecosystem.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/api-types",
       "group": "shared",
       "summary": "Shared TypeScript type definitions for API contracts used across multiple full-stack projects.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/Apps",
       "group": "products",
       "summary": "Static landing page listing connected ecosystem applications, served through Cloudflare Tunnel using personal-ui-kit.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/beelink-backup",
       "group": "operations",
       "summary": "Weekly encrypted backup scripts for Beelink databases, service configuration and repository metadata, triggered by Cron Service.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/beelink-deploy",
       "group": "operations",
       "summary": "GitHub webhook deploy service on Beelink that runs deploy scripts, publishes packages and emits wiki update events.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-beelink-deploy/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-beelink-deploy/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-beelink-deploy/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-beelink-deploy/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-beelink-deploy/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-beelink-deploy/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/beelink-steward",
       "group": "operations",
       "summary": "Advisory-first Beelink host care agent with deterministic sensors and owner-granted actions; not yet built.",
-      "state": "planned"
+      "state": "planned",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-beelink-steward/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-beelink-steward/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-beelink-steward/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-beelink-steward/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-beelink-steward/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-beelink-steward/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/bootstrap-env",
       "group": "shared",
       "summary": "CLI and library for loading and validating environment variables consistently across Express backend services.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/business-hq",
       "group": "orchestration",
       "summary": "Financial layer tracking products, revenue, costs and daily snapshots from Pay, Agency and cron events.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-business-hq/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-business-hq/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-business-hq/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-business-hq/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-business-hq/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-business-hq/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/ClaudeIssueCreator",
       "group": "legacy",
       "summary": "Former GitHub Actions issue creation and orchestration tool, deprecated and replaced by dev-inbox.",
-      "state": "deprecated"
+      "state": "deprecated",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/ClaudeIssueTriager",
       "group": "legacy",
       "summary": "Former AI GitHub workflow for classifying issues and proposing fixes, deprecated and replaced by dev-inbox.",
-      "state": "deprecated"
+      "state": "deprecated",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/cream-city-web",
       "group": "products",
       "summary": "AI-operated Milwaukee web design micro-business with lead CLIs, site staging, payment API and email worker.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-cream-city-web/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-cream-city-web/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-cream-city-web/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-cream-city-web/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-cream-city-web/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-cream-city-web/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/cron-service",
       "group": "platform",
       "summary": "Publisher-only scheduler that sends cron-triggered RabbitMQ messages and records job runs in PostgreSQL.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-cron-service/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-cron-service/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-cron-service/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-cron-service/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-cron-service/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-cron-service/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/database-base-config",
       "group": "shared",
       "summary": "Shared PostgreSQL connection pooling, query helpers, transactions and migration CLI tooling for services.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/dev-inbox",
       "group": "orchestration",
       "summary": "Multi-provider agent orchestration on Forge that plans, implements, verifies, reviews and lands software changes.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-dev-inbox/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-dev-inbox/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-dev-inbox/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-dev-inbox/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-dev-inbox/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-dev-inbox/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/domain-core",
       "group": "shared",
       "summary": "Base domain-driven design building blocks extended by the Pantry, MYRRS and Pay domain cores.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/Dota-2-Draft-Helper",
       "group": "products",
       "summary": "Minimal web app suggesting Dota 2 hero picks from synergy and counter matrices.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/event-bus",
       "group": "legacy",
       "summary": "Pluggable RabbitMQ and AWS event bus package whose message types moved to message-contracts.",
-      "state": "legacy"
+      "state": "legacy",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/express-middleware-suite",
       "group": "shared",
       "summary": "Standardized Express middleware for logging, tracing, validation, error mapping, security headers and auth wrappers.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/express-server-factory",
       "group": "shared",
       "summary": "Factory producing consistent Express services with routing, health checks, error formatting and lifecycle management.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/feedback-registry",
       "group": "platform",
       "summary": "Collects user bug reports and feature requests, auto-triages them and creates linked GitHub issues.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-feedback-registry/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-feedback-registry/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-feedback-registry/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-feedback-registry/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-feedback-registry/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-feedback-registry/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/github-actions",
       "group": "operations",
       "summary": "Reusable GitHub Actions workflows and composite actions for cross-project CI, publishing and downstream notifications.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/github-error-issues",
       "group": "shared",
       "summary": "Package that turns application errors into deduplicated GitHub issues via Express error middleware.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/google-flights",
       "group": "products",
       "summary": "Flight deal tracker parsing deal emails with Struct and storing structured deals in PostgreSQL.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/homelab",
       "group": "operations",
       "summary": "Configuration, ingress and runbooks for the Beelink production host and Forge execution host.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-homelab/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-homelab/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-homelab/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-homelab/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-homelab/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-homelab/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/image-studio",
       "group": "products",
       "summary": "AI image generation app with Pay sign-in, AI Proxy generation, versioned library and S3 storage.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-image-studio/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-image-studio/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-image-studio/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-image-studio/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-image-studio/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-image-studio/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/insta-travel-map",
       "group": "products",
       "summary": "Map-based travel request app where signed-in users pin locations and admins review submissions.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-insta-travel-map/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-insta-travel-map/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-insta-travel-map/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-insta-travel-map/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-insta-travel-map/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-insta-travel-map/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/Jeffrey-Keyser.net",
       "group": "products",
       "summary": "Personal website and portfolio with an Express API, self-hosted on Beelink with webhook deploys.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/Life",
       "group": "products",
       "summary": "Voice-first journal that transcribes, structures and links entries into a people and tag graph.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-life/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-life/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-life/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-life/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-life/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-life/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/logos",
       "group": "knowledge",
       "summary": "Knowledge hub ingesting URLs into reviewed themed pages and answering agent queries with citations.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-logos/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-logos/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-logos/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-logos/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-logos/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-logos/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/mcp-aws-bastion",
       "group": "operations",
       "summary": "MCP server letting AI tools run readonly or admin AWS CLI commands with validation.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/mcp-postgres-bastion",
       "group": "operations",
       "summary": "MCP server letting AI tools query PostgreSQL RDS through AWS SSM bastion tunnels.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/message-contracts",
       "group": "shared",
       "summary": "Single source of truth for RabbitMQ exchange constants, event types and correlation helpers.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-message-contracts/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-message-contracts/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-message-contracts/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-message-contracts/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-message-contracts/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-message-contracts/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/milo-workspace",
       "group": "knowledge",
       "summary": "Git-backed identity, memory and log store for the Milo assistant, described against the historical OpenClaw gateway.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/music-store",
       "group": "products",
       "summary": "Cloud-backed DJ music library with web UI, S3 storage and a sync CLI.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-music-store/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-music-store/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-music-store/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-music-store/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-music-store/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-music-store/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/myrrs",
       "group": "products",
       "summary": "Routine scheduling web app combining probability-based selection, streak tracking and a rule engine.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-myrrs/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-myrrs/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-myrrs/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-myrrs/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-myrrs/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-myrrs/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/myrrs-domain-core",
       "group": "shared",
       "summary": "Domain core library encapsulating MYRRS business invariants, aggregates and domain events.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/nanoclaw",
       "group": "orchestration",
       "summary": "Personal assistant gateway on Beelink with Telegram channel, scheduler and agent runners, replacing OpenClaw.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-nanoclaw/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-nanoclaw/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-nanoclaw/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-nanoclaw/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-nanoclaw/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-nanoclaw/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/nof1",
       "group": "products",
       "summary": "Personal N-of-1 experiment tracker with phases, quick-log entries and computed insights.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-nof1/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-nof1/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-nof1/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-nof1/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-nof1/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-nof1/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/openclaw-bridge",
       "group": "orchestration",
       "summary": "Event bridge whose handlers forward RabbitMQ and webhook events to NanoClaw, with legacy OpenClaw routing.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-openclaw-bridge/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-openclaw-bridge/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-openclaw-bridge/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-openclaw-bridge/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-openclaw-bridge/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-openclaw-bridge/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/Pantry",
       "group": "products",
       "summary": "Kitchen management app for ingredients, AI receipt scanning and recipes, separate from Pantry Manager.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/pantry-domain-core",
       "group": "shared",
       "summary": "Domain library for Pantry item rules, categorization and domain events shared by frontend and backend.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/pantry-manager",
       "group": "products",
       "summary": "Standalone inventory service tracking products, stock and receipt-backed purchase history, distinct from Pantry.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-pantry-manager/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-pantry-manager/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-pantry-manager/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-pantry-manager/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-pantry-manager/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-pantry-manager/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/passthrough",
       "group": "orchestration",
       "summary": "Claude Code Web dispatch protocol that fetches action instructions from Prompt Registry and opens PRs.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/pay",
       "group": "platform",
       "summary": "Central authentication and payment backend providing JWT identity, guest login and Stripe processing.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-pay/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-pay/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-pay/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-pay/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-pay/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-pay/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/pay-api-types",
       "group": "shared",
       "summary": "TypeScript type definitions for Pay APIs shared between Pay and integrating packages.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/pay-auth-integration",
       "group": "shared",
       "summary": "Library adding Pay-backed sign-in and payments through server proxy middleware and React components.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-pay-auth-integration/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-pay-auth-integration/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-pay-auth-integration/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-pay-auth-integration/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-pay-auth-integration/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-pay-auth-integration/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/pay-domain-core",
       "group": "shared",
       "summary": "Domain-driven design core holding Pay aggregates, value objects, events and business logic.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/personal-ui-kit",
       "group": "shared",
       "summary": "Shared React component library and design system used by ecosystem frontends, with Storybook docs.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-personal-ui-kit/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-personal-ui-kit/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-personal-ui-kit/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-personal-ui-kit/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-personal-ui-kit/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-personal-ui-kit/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/ping",
       "group": "products",
       "summary": "Location, health and life-tracking service that resolves zones, records visits and publishes events.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-ping/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-ping/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-ping/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-ping/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-ping/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-ping/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/ping-mobile",
       "group": "clients",
       "summary": "Native iOS companion collecting background location, drives and health data for the Ping backend.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/presence-signal",
       "group": "products",
       "summary": "Local Wi-Fi presence proxy that polls the router and sends transition notices through NanoClaw.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-presence-signal/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-presence-signal/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-presence-signal/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-presence-signal/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-presence-signal/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-presence-signal/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/project-wiki",
       "group": "knowledge",
       "summary": "Central architecture and operations wiki serving source-cited repository guides with a RabbitMQ-driven updater.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/prompt-registry",
       "group": "knowledge",
       "summary": "Versioned key-value store holding reusable prompts for apps, agents and workflows.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-prompt-registry/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-prompt-registry/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-prompt-registry/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-prompt-registry/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-prompt-registry/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-prompt-registry/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/qa-patrol",
       "group": "platform",
       "summary": "QA-as-a-Service running Playwright workflow steps against apps and returning evidence-backed reports.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-qa-patrol/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-qa-patrol/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-qa-patrol/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-qa-patrol/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-qa-patrol/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-qa-patrol/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/redux-app-toolkit",
       "group": "shared",
       "summary": "Abstractions over Redux Toolkit and RTK Query patterns to reduce frontend boilerplate.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/serverless-web-infra",
       "group": "legacy",
       "summary": "Terraform module for CloudFront, S3, API Gateway and Lambda sites, kept for reference after self-hosting.",
-      "state": "legacy"
+      "state": "legacy",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/ServerlessWebTemplate",
       "group": "legacy",
       "summary": "Starter template for Lambda-based backends, legacy since most services moved to self-hosting.",
-      "state": "legacy"
+      "state": "legacy",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/shared-infra",
       "group": "legacy",
       "summary": "Core AWS Terraform infrastructure for publicly hosted sites, kept only for reference.",
-      "state": "legacy"
+      "state": "legacy",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/solo-vault",
       "group": "platform",
       "summary": "Self-hosted secrets service storing encrypted credentials behind scoped API keys, with a CLI.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-solo-vault/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-solo-vault/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-solo-vault/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-solo-vault/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-solo-vault/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-solo-vault/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/spanish-studio",
       "group": "products",
       "summary": "Voice-centric Spanish practice app with persona role-play, pronunciation review and a reading workbench.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-spanish-studio/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-spanish-studio/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-spanish-studio/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-spanish-studio/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-spanish-studio/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-spanish-studio/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/spanish-tutor",
       "group": "products",
       "summary": "Spaced repetition Spanish vocabulary system living as a schema and functions in the ping database.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/struct",
       "group": "platform",
       "summary": "Internal structured-completion service wrapping a local agent CLI to return schema-validated JSON responses.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-struct/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-struct/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-struct/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-struct/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-struct/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-struct/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/Switchboard",
       "group": "platform",
       "summary": "Feature flag and typed configuration service with admin UI and client SDK.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [
+        {
+          "label": "Overview",
+          "url": "/repos/jeffrey-keyser-switchboard/home/"
+        },
+        {
+          "label": "Architecture",
+          "url": "/repos/jeffrey-keyser-switchboard/architecture/"
+        },
+        {
+          "label": "Workflow",
+          "url": "/repos/jeffrey-keyser-switchboard/iteration-loop/"
+        },
+        {
+          "label": "Dependencies",
+          "url": "/repos/jeffrey-keyser-switchboard/services-and-dependencies/"
+        },
+        {
+          "label": "Operations",
+          "url": "/repos/jeffrey-keyser-switchboard/operations/"
+        },
+        {
+          "label": "Glossary",
+          "url": "/repos/jeffrey-keyser-switchboard/glossary/"
+        }
+      ],
+      "fullGuide": true
     },
     {
       "repo": "Jeffrey-Keyser/Whisperclip",
       "group": "clients",
       "summary": "Electron desktop app for hotkey-triggered voice recording and transcription for quick notes and dictation.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     },
     {
       "repo": "Jeffrey-Keyser/Workout",
       "group": "products",
       "summary": "Workout tracking application with Apple Shortcuts integration, built with personal-ui-kit.",
-      "state": "documented"
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
     }
   ]
 }
