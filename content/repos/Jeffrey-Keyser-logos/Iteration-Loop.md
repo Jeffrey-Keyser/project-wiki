@@ -53,18 +53,24 @@ New reconciliation goals should use `project-<project>-<goal>` context slugs ([R
 
 ## Merge to deploy
 
-The README documents auto-deploy by `beelink-deploy` on push to `main` ([README.md:L54](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/README.md#L54)). `deploy.sh` runs these steps in order:
+The README documents auto-deploy by `beelink-deploy` on push to `main`, using `deploymentMode: immutable-worktree` ([README.md](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/README.md)). Each commit is checked out clean at `~/releases/logos/<sha>`, and `deploy.sh` runs there. The source checkout `~/logos` holds only shared state (`.env`, `models/`, `.locks/`). Uncommitted edits in `~/logos` never deploy. See [Operations](../operations/) for the release lock, rollback and pruning details.
 
-1. `git pull origin main`.
-2. Hydrate secrets.
+`deploy.sh` runs these steps in order ([deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/deploy.sh)):
+
+1. Check that the release is a clean worktree at the revision `beelink-deploy` supplied. It refuses to run otherwise.
+2. Link the shared `.env` into the release, then hydrate secrets into it.
 3. `npm ci --include=dev`.
-4. `prepare:models`.
+4. `prepare:models`, using the shared model cache.
 5. `build`.
 6. `migrate`.
 7. `seed:prompts`. A failure here fails the deploy.
 8. `register-cron`. A failure here is non-fatal.
-9. Restart the service and smoke-test `/health`.
-
-([deploy.sh:L89-L152](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L89-L152))
+9. Switch `~/releases/logos/current` to the release. Install `logos.service` if it changed.
+10. Restart the service and smoke-test `/health`. On failure, roll back to the previous release and exit 1.
+11. Prune old release worktrees, keeping the three most recent.
 
 Migrations and prompt seeding therefore run on every deploy. Keep both idempotent.
+
+## Services-and-Dependencies.md
+
+See [Services & Dependencies](../services-and-dependencies/) for upstream services and downstream consumers.

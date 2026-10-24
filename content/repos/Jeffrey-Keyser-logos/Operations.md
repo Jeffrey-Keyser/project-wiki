@@ -12,30 +12,47 @@ Logos is a deployable HTTP service, not a library. Its entry point is `dist/bin/
 ## Start and stop
 
 - **Locally.** Use `npm run dev`. To run the compiled build, use `npm run build && npm start` ([package.json:L7-L9](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/package.json#L7-L9)).
-- **On the host, via the `logos.service` unit.** The unit ([logos.service:L7-L20](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/logos.service#L7-L20)):
-  - runs from `/home/jkeyser/logos`;
-  - sets `PORT=3070` and `NODE_ENV=production`;
+- **On the host, via the `logos.service` unit.** `deploy.sh` installs the repository copy of the unit ([logos.service](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/logos.service), [deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/deploy.sh)). The unit:
+  - runs from the `/home/jkeyser/releases/logos/current` symlink, which points at the immutable release for the deployed commit, not from the `~/logos` source checkout;
+  - sets `PORT=3070` and `NODE_ENV=production` ([logos.service:L7-L20](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/logos.service#L7-L20));
   - points `TRANSFORMERS_CACHE` at the models directory;
-  - loads `.env`;
+  - loads `.env`. Each release reaches the shared `/home/jkeyser/logos/.env` through a symlink that `deploy.sh` creates;
   - uses `Restart=on-failure`.
-- **Restart command.** The deploy script restarts the service with `systemctl --user restart logos` ([deploy.sh:L136-L137](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L136-L137)).
+- **Restart command.** `deploy.sh` restarts the service with `systemctl --user restart logos` after it has switched `current` ([deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/deploy.sh)). Running that command by hand restarts whichever release `current` points to.
 - **Shutdown.** On SIGTERM the process stops the worker and drains the bus best-effort, then closes the HTTP server ([src/bin/www.ts:L62-L80](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/www.ts#L62-L80)). Systemd allows 15s for this ([logos.service:L10](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/logos.service#L10)).
 - **Startup failures.** If the embedding warmup fails, the process exits ([src/bin/www.ts:L12-L13](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/www.ts#L12-L13), [src/bin/www.ts:L81-L84](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/www.ts#L81-L84)).
 
 ## Deploy
 
-`deploy.sh` runs these steps in order ([deploy.sh:L87-L152](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L87-L152)):
+Deploys are immutable and per commit. Under `beelink-deploy`'s `deploymentMode: immutable-worktree`, each merged commit is checked out clean at `~/releases/logos/<sha>`, and `deploy.sh` runs there ([README.md](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/README.md)). The script does not build the live `~/logos` checkout, so uncommitted edits there are never deployed ([deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/deploy.sh)).
 
-1. `git pull origin main`.
-2. Pull secrets with `solo-vault pull`. If that fails, fall back to Vault over HTTP. If that also fails, keep the existing `.env`.
+Before doing anything else, `deploy.sh` requires ([deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/deploy.sh)):
+
+- `BEELINK_DEPLOY_IMMUTABLE_REVISION` set to a 40-character lowercase commit SHA. Otherwise it refuses in-place deployment;
+- a `HEAD` equal to that SHA;
+- a clean worktree, with no untracked files;
+- a release that is not already `releases/logos/current`.
+
+It then takes a non-blocking lock on `~/releases/logos/.logos-deployment.lock`. The source checkout defaults to `/home/jkeyser/logos` and can be overridden with `BEELINK_DEPLOY_SOURCE_PATH`.
+
+Steps run in this order:
+
+1. Link the shared `~/logos/.env` into the release as `.env`.
+2. Pull secrets with `solo-vault pull` into the shared `.env`. If that fails, fall back to Vault over HTTP. If that also fails, keep the existing `.env`.
 3. `npm ci --include=dev`.
-4. `prepare:models`.
+4. `prepare:models`, which uses the shared model cache.
 5. `build`.
 6. `migrate`.
-7. `seed:prompts`.
+7. `seed:prompts`. A failure here fails the deploy.
 8. `register-cron`. A failure here is non-fatal.
-9. Restart the service.
-10. Poll `curl http://localhost:3070/health` up to 20 times.
+9. Switch `~/releases/logos/current` to this release, atomically. If the repository `logos.service` differs from `~/.config/systemd/user/logos.service`, copy it over and run `systemctl --user daemon-reload`.
+10. Restart `logos.service`.
+11. Poll `curl http://localhost:3070/health` up to 20 times. If it never answers, roll back and exit 1.
+12. On success, prune old releases.
+
+**Rollback.** Rollback repoints `current` to the previous release, or removes the link if there was none. It then restores the saved unit file, reloads systemd, restarts the service and checks `/health` again. Rollback does not run `migrate:down`, so migrations applied by the failed release stay in place.
+
+**Pruning.** After a healthy deploy, older release worktrees are removed from the source checkout with `git worktree remove --force`. The three most recently modified release directories are kept. The current and previous releases are never removed ([deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/deploy.sh)).
 
 Secret keys written into `.env` are `DATABASE_PASSWORD`, `LOGOS_SERVICE_TOKEN`, `LOGOS_STRUCT_TOKEN`, `RABBITMQ_URL` and optionally `CRON_API_KEY` ([deploy.sh:L68-L82](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L68-L82)).
 
