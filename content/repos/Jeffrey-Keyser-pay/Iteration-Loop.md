@@ -20,19 +20,19 @@ sequenceDiagram
   Dev->>Gate: "npm run lint then npm run build"
   Dev->>Git: "merge reviewed change to main"
   Dev->>Host: "run deploy.sh over SSH"
-  Host->>Host: "git pull, npm install, npm run build"
+  Host->>Host: "git pull, require NODE_AUTH_TOKEN, npm install, npm run build"
   Host->>Host: "npm run migrate:local then restart pay"
 ```
 
 ## Steps
 
-1. **Install and configure.** Run `npm install` in `server/`, copy `.env.example` to `.env`, and set database, Redis, JWT, and session values ([CONTRIBUTING.md:42-45](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CONTRIBUTING.md#L42-L45), [CONTRIBUTING.md:53-73](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CONTRIBUTING.md#L53-L73)).
+1. **Install and configure.** Run `npm install` in `server/`, copy `.env.example` to `.env`, and set database, Redis, JWT, and session values ([CONTRIBUTING.md:42-45](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CONTRIBUTING.md#L42-L45), [CONTRIBUTING.md:53-73](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CONTRIBUTING.md#L53-L73)). `server/.npmrc` reads the GitHub Packages token from `NODE_AUTH_TOKEN`, so that variable must be exported before installs that fetch scoped packages ([server/.npmrc](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/server/.npmrc)). Env files are git-ignored, while `.env.example` stays tracked ([.gitignore](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/.gitignore)).
 2. **Migrate.** `npm run migrate` maps to `db-migrate up` ([server/package.json:19](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L19)). The migration guide describes `node-pg-migrate`, but the package script is the source of truth ([docs/MIGRATION_SYSTEM_GUIDE.md:3](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/MIGRATION_SYSTEM_GUIDE.md#L3)).
 3. **Seed (optional).** `npm run seed:apps` is idempotent per the contributor guide ([server/package.json:38](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L38), [CONTRIBUTING.md:118-125](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CONTRIBUTING.md#L118-L125)).
 4. **Run locally.** `npm start` runs nodemon over `ts-node ./bin/www.ts` ([server/package.json:9](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L9)).
 5. **Test.** `npm test` runs Jest on unit paths ([server/jest.config.cjs:6-10](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/jest.config.cjs#L6-L10)). `npm run test:docker` brings up `docker-compose.test.yml` and runs the test runner ([server/package.json:15](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L15)). `npm run test:integration` runs Vitest against `tests/integration` ([server/package.json:14](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L14)).
 6. **Gate before commit.** `npm run lint` and `npm run build` are the documented checks ([CLAUDE.md:170-173](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/CLAUDE.md#L170-L173), [server/package.json:8](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L8)).
-7. **Deploy.** `deploy.sh` pulls `main`, installs, builds, applies repo SQL migrations, frees port 3017, and restarts `pay` ([deploy.sh:5-22](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L5-L22)).
+7. **Deploy.** `deploy.sh` pulls `main`, then requires `NODE_AUTH_TOKEN`, either exported or loaded from `~/.pay-deploy.env`, and aborts before `npm install` if it is missing ([deploy.sh:10-18](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/deploy.sh#L10-L18)). It then installs, builds, applies repo SQL migrations, frees port 3017, and restarts `pay` ([deploy.sh:5-22](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L5-L22)).
 
 ## CI status
 

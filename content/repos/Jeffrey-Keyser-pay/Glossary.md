@@ -27,9 +27,13 @@ description: "Project-specific Pay terms with source citations for where each te
 
 **Guest cleanup run**: a pass that removes expired guests and records a summary for reporting ([server/services/GuestCleanupService.ts:63-91](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/services/GuestCleanupService.ts#L63-L91)).
 
-**Admin token**: long-lived API token with a `type` of `api_key` and system-admin identity ([server/infrastructure/TokenService.ts:284-304](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/infrastructure/TokenService.ts#L284-L304)). It is the credential the app registry routes require.
+**Admin token**: API token with a `type` of `api_key` and system-admin identity, which is the credential the app registry routes require. Every admin token has a `jti` for revocation and always expires: the default is 30 days and the maximum is 365 days. Tokens minted before this change without an `exp` claim keep working until revoked ([server/infrastructure/TokenService.ts](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/server/infrastructure/TokenService.ts)).
 
-**Service token**: short-lived JWT for headless clients, issued from a shared secret ([docs/service-auth.md:7-9](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/service-auth.md#L7-L9)).
+**Service token**: short-lived JWT for headless clients, issued from a shared secret ([docs/service-auth.md:7-9](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/service-auth.md#L7-L9)). Each token carries a fingerprint of the current `SERVICE_ACCOUNT_SECRET`, so rotating the secret ends refresh chains. Revoked service tokens are rejected and cannot be refreshed ([docs/service-auth.md](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/docs/service-auth.md)).
+
+**Verified email (OAuth)**: the `emailVerified` flag on the provider user info. Sign-in joins an existing account by email only when this is true, so other sign-ins must link the provider explicitly ([server/infrastructure/oauth/OAuthProviderStrategy.ts](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/server/infrastructure/oauth/OAuthProviderStrategy.ts)).
+
+**Placeholder secret**: the published default values for `JWT_SECRET` and `REFRESH_TOKEN_SECRET`. They are development-only defaults; production startup refuses them ([server/config/env.ts](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/server/config/env.ts)).
 
 **Scopes claim**: JSON array of registered OAuth scope names added to access tokens ([docs/scopes.md:51-59](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/scopes.md#L51-L59)).
 
@@ -43,6 +47,8 @@ description: "Project-specific Pay terms with source citations for where each te
 
 **contact and billing schemas**: PostgreSQL schemas; `contact` holds customers and OAuth scopes, `billing` holds subscriptions ([docs/PROVIDER_AGNOSTIC_MIGRATION.md:22-27](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/PROVIDER_AGNOSTIC_MIGRATION.md#L22-L27), [docs/scopes.md:37](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/scopes.md#L37)).
 
-**deploy.sh**: VPS script that pulls `main`, builds, migrates, and restarts `pay` ([deploy.sh:1-23](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L1-L23)).
+**deploy.sh**: VPS script that pulls `main`, builds, migrates, and restarts `pay`. It requires `NODE_AUTH_TOKEN` before installing ([deploy.sh:1-23](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/deploy.sh#L1-L23), [deploy.sh:10-18](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/deploy.sh#L10-L18)).
+
+**NODE_AUTH_TOKEN**: environment variable that `server/.npmrc` reads as the GitHub Packages token. It is supplied at runtime rather than committed ([server/.npmrc](https://github.com/Jeffrey-Keyser/pay/blob/fa40c5038223c663f3410e91aa6fc807ad681b04/server/.npmrc)).
 
 **pay-auth-integration**: companion package listed as a server dependency ([server/package.json:48](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/package.json#L48), [README.md:29](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L29)).
