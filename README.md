@@ -61,6 +61,11 @@ updater consumer (`server/updater.js`, invoked via `npm run start:updater`).
   `PAY_AUTH_BASE_URL=https://pay.jeffreykeyser.net`; unauthenticated
   requests `302` to the Pay login UI and only admins can reach the
   Starlight pages.
+- **Production builds:** the updater rebuilds Astro on this host. Keep Playwright
+  as a production dependency: `rehype-mermaid` imports it through
+  `mermaid-isomorphic`, including when packages are installed with `--omit=dev`.
+  The matching Chromium headless browser must also be available to the service
+  user (on a new host, install it with `npx playwright install chromium`).
 - **Updater unit:** `~/.config/systemd/user/project-wiki-updater.service`
   runs `npm run start:updater` as a separate long-lived consumer. It
   binds durable queue `wiki.updater.queue` to durable topic exchange
