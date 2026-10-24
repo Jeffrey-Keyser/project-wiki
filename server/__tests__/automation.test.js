@@ -111,3 +111,13 @@ test('manual narrative changes invalidate ready global output without touching t
  await worker.apply();assert.equal(f.store.job(job.id).state,'stale');assert.equal(f.publications.length,0);
  assert.ok(fs.readFileSync(path.join(f.root,'content/ecosystem/overview.md'),'utf8').includes('Human-edited'));
 });
+test('guide changes during a global batch remain dirty after its older snapshot is published',async t=>{
+ const f=fixture(t),snapshot=await sourceSnapshot(f.root,f.fetcher),catalog=buildCatalog(f.root,'Repo: https://github.com/Owner/Repo\nService\n',{repositories:[]});
+ f.write('content/ecosystem/catalog.json',JSON.stringify(catalog));
+ const worker=new WikiWorker({...f,client:{submit:async()=>{throw Error('offline');}}});await worker.prepareGlobal(snapshot,catalog);
+ const job=f.store.jobs(['queued'])[0];f.store.patch(job.id,{state:'ready',draft:{markdown:f.original,catalogCorrections:[]}});
+ f.write('content/repos/Owner-Repo/Architecture.md','Updated guide while the batch ran.');
+ const newer=await sourceSnapshot(f.root,f.fetcher);f.store.set('observed-sources',newer);
+ await worker.apply();assert.equal(f.store.job(job.id).state,'completed');assert.equal(f.store.get('global-checkpoint').sources['content/repos/Owner-Repo/Architecture.md'],snapshot.sources['content/repos/Owner-Repo/Architecture.md']);
+ await worker.tick();const next=f.store.jobs(['queued']);assert.equal(next.length,1);assert.notEqual(next[0].id,job.id);assert.equal(next[0].snapshot.hash,newer.hash);
+});

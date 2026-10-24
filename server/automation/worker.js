@@ -76,7 +76,7 @@ export class WikiWorker{
   page=page.replace(/This page is a point-in-time map[^\n]*/,'This map is maintained by the Forge wiki worker. Source changes are coalesced before a background Claude batch refresh; repository and guide links are reconciled without an AI call.');
   // The former manual-refresh instructions are migrated once, independently of model output.
   const marker='## Keeping this map current';const start=page.indexOf(marker);
-  if(start>=0){const end=page.indexOf('\n## ',start+marker.length);page=page.slice(0,start)+marker+'\n\nThe Forge wiki worker checks the ecosystem and host registries daily and coalesces wiki changes for 30 minutes. Directory links come from checked-in guide files. Background narrative and repository updates use Claude Message Batches through AI Proxy; structural changes receive an Opus review. Updates are validated and built before publication. Failed or stale results keep the last published version. Paid submissions stop when the configured credit allowance expires; directory checks continue.\n'+(end>=0?page.slice(end):'');}
+  if(start>=0&&page.includes('and this page is refreshed manually.')){const end=page.indexOf('\n## ',start+marker.length);page=page.slice(0,start)+marker+'\n\nThe Forge wiki worker checks the ecosystem and host registries daily and coalesces wiki changes for 30 minutes. Directory links come from checked-in guide files. Background narrative and repository updates use Claude Message Batches through AI Proxy; structural changes receive an Opus review. Updates are validated and built before publication. Failed or stale results keep the last published version. Paid submissions stop when the configured credit allowance expires; directory checks continue.\n'+(end>=0?page.slice(end):'');}
   const files={[CATALOG]:JSON.stringify(catalog,null,2)+'\n',[GLOBAL]:page,'content/index.md':homeWithGuides(this.read('content/index.md'),catalog)};
   const result=await this.publisher.publish(files);if(result?.superseded)throw Error('publication-superseded');
   this.store.set('publish-intent',null);
@@ -156,7 +156,7 @@ export class WikiWorker{
   for(const id of ids){const job=this.store.job(id);if(!job)continue;
    this.store.patch(id,{state:'completed',published:sha,completedAt:new Date(this.clock()).toISOString()});
    if(job.kind==='repo'){this.store.set('repo:'+job.repo,{head:job.head,sha});this.store.clearEvent(job.repo,job.eventSeq);this.store.set('next-source-check',0);}
-   if(job.kind==='global')this.store.set('global-checkpoint',{...job.snapshot,hash:job.hash,sha});
+   if(job.kind==='global'){this.store.set('global-checkpoint',{...job.snapshot,hash:job.hash,sha});this.store.set('next-source-check',0);}
   }
  }
  async apply(snapshot){
@@ -183,7 +183,7 @@ export class WikiWorker{
      const page=narrative+'\n\n'+original.slice(original.indexOf('## Repository and wiki directory'));
      files={[GLOBAL]:withDirectory(page,catalog),[CATALOG]:JSON.stringify(catalog,null,2)+'\n'};
      // Catalog corrections become the next checkpoint, preventing a self-refresh loop.
-     this.store.patch(job.id,{hash:digest([now.hash,roles(catalog)])});
+     this.store.patch(job.id,{hash:digest([job.snapshot.hash,roles(catalog)])});
     }
    }catch{this.store.patch(job.id,{state:'stale',error:'source-or-document-guard'});continue;}
    const result=await this.publisher.publish(files,[job.id]);
@@ -204,7 +204,7 @@ export class WikiWorker{
    await this.publisher.sync();const snapshot=await sourceSnapshot(this.publisher.checkout,this.fetcher);
    const catalog=await this.directory(snapshot);
    const previous=this.store.get('observed-sources');
-   if(previous?.hash!==snapshot.hash){this.store.set('global-dirty-at',this.store.get('global-dirty-at')??now);this.store.set('observed-sources',snapshot);}
+   if(previous?.hash!==snapshot.hash||this.store.get('global-checkpoint')?.hash!==digest([snapshot.hash,roles(catalog)])){this.store.set('global-dirty-at',this.store.get('global-dirty-at')??now);this.store.set('observed-sources',snapshot);}
    const dirty=this.store.get('global-dirty-at');
    if(dirty!==null&&now-dirty>=Number(this.env.WIKI_COALESCE_MS??1800000)){await this.prepareGlobal(snapshot,catalog);this.store.set('global-dirty-at',null);}
    this.store.set('last-source-check',{at:new Date(now).toISOString(),hash:snapshot.hash,repositories:catalog.repositories.length});
