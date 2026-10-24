@@ -63,7 +63,7 @@ flowchart TB
 
 - **Apply.** `applyProposal` writes page, sections, themes and re-embedded chunks in one transaction. Only `create_page` and `update_page` are supported ([src/proposals/apply.ts:L71-L102](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/apply.ts#L71-L102)).
 - **Known limitation.** New pages still land in the `default` context ([src/proposals/apply.ts:L141-L154](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/apply.ts#L141-L154)).
-- **Revise.** A revision creates a new pending proposal and supersedes the original ([src/proposals/revise.ts:L33-L44](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/revise.ts#L33-L44)).
+- **Revise.** A revision creates a new pending proposal and supersedes the original ([src/proposals/revise.ts:L33-L44](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/proposals/revise.ts#L33-L44)). It then publishes `logos.proposal.created` for the new proposal, so subscribers such as Agency HQ review cards see it. The `page_slug` follows the same rule as ingest: the original page's slug for `update_page`, otherwise the proposed slug ([src/proposals/revise.ts:L154-L164](https://github.com/Jeffrey-Keyser/logos/blob/f139002e56295725f1f6cfa266eac667e7a5cb7f/src/proposals/revise.ts#L154-L164)).
 
 ### Query
 

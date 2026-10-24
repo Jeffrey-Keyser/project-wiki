@@ -75,6 +75,7 @@ Logos emits eight routing keys ([src/bus/rabbit.ts:L175-L205](https://github.com
 Known subscribers by event:
 
 - **`logos.digest.ready`:** a code comment names NanoClaw as the only consumer ([src/bus/rabbit.ts:L18-L19](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bus/rabbit.ts#L18-L19)).
+- **`logos.proposal.created`:** published when ingest creates a proposal and when a comment revision creates one. A revision is published after the original is marked `superseded` ([src/proposals/revise.ts:L154-L164](https://github.com/Jeffrey-Keyser/logos/blob/f139002e56295725f1f6cfa266eac667e7a5cb7f/src/proposals/revise.ts#L154-L164)). The commit that added this describes Agency HQ review cards as the subscriber; that subscription is not verified in this repository.
 - **`logos.context.changed`:**
   - Documented consumers must still refetch the full snapshot after the event ([docs/project-documents.md:L17-L19](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/docs/project-documents.md#L17-L19)).
   - Agency HQ is described as running standard contexts ([docs/project-documents.md:L76-L80](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/docs/project-documents.md#L76-L80)).
