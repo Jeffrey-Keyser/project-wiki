@@ -18,6 +18,8 @@ This page separates what the source confirms from what is only documented or exp
 
 - Supported providers are Claude, Codex, Copilot, Gemini, Kimi, and OpenCode ([README.md:L21](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L21)).
 - `internal/providers` owns selection, health, fallback order, and retry ([docs/inference-layer.md:L33-L36](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/inference-layer.md#L33-L36)).
+  - The spawn retry delay is part of that retry ownership. `plan-managerd providers spawn-retry-delay` computes the jittered `base * 4^(attempt-1)` duration, implemented in `internal/providers/spawnretry.go`.
+  - `scripts/lib/spawn-retry.sh` only locates the binary, forwards the raw attempt and base values, validates the returned two-decimal duration, and sleeps. If the command is unavailable or rejected, it skips only the additional helper delay rather than rebuilding the timing in Bash.
 - **Optional API lane.** The single-shot synthesizers can send requests through an AI Proxy `/v1/chat` instead of the CLI ([docs/model-completion-api-lane.md:L3](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/model-completion-api-lane.md#L3)).
   - It is off by default, or whenever the config file is absent ([docs/model-completion-api-lane.md:L22](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/model-completion-api-lane.md#L22)).
   - The proxy URL appears only in a config example.
