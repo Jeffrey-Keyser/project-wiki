@@ -17,11 +17,17 @@ description: "Project-specific Pay terms with source citations for where each te
 
 **ProviderCustomerId**: domain value object for a provider's customer identifier, validated without provider-specific format rules ([docs/PAYMENT_PROVIDER_ABSTRACTION.md:37-40](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/PAYMENT_PROVIDER_ABSTRACTION.md#L37-L40)).
 
+**Payment ownership**: check that a provider customer, subscription, or payment intent belongs to the authenticated user. A resource owned by someone else is reported as not found ([server/services/PaymentOwnershipService.ts](https://github.com/Jeffrey-Keyser/pay/blob/3691e055cf05ba49dd332e6125b4f11e7497eb09/server/services/PaymentOwnershipService.ts)).
+
+**pay_user_id**: metadata key Pay stamps on payment intents to record the creating user. Client metadata cannot override it ([server/services/PaymentOwnershipService.ts](https://github.com/Jeffrey-Keyser/pay/blob/3691e055cf05ba49dd332e6125b4f11e7497eb09/server/services/PaymentOwnershipService.ts), [server/routes/payment/intents.ts](https://github.com/Jeffrey-Keyser/pay/blob/3691e055cf05ba49dd332e6125b4f11e7497eb09/server/routes/payment/intents.ts)).
+
+**Public catalog**: anonymous `GET /apps?visibility=public` listing of active EXTERNAL apps. Every other app registry request requires an admin token ([server/routes/apps.ts:22-36](https://github.com/Jeffrey-Keyser/pay/blob/3691e055cf05ba49dd332e6125b4f11e7497eb09/server/routes/apps.ts#L22-L36)).
+
 **Guest session**: temporary session created by `POST /users/guest`, with a 24-hour expiry and IP rate limiting ([README.md:109-116](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L109-L116), [README.md:123-125](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/README.md#L123-L125)).
 
 **Guest cleanup run**: a pass that removes expired guests and records a summary for reporting ([server/services/GuestCleanupService.ts:63-91](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/services/GuestCleanupService.ts#L63-L91)).
 
-**Admin token**: long-lived API token with a `type` of `api_key` and system-admin identity ([server/infrastructure/TokenService.ts:284-304](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/infrastructure/TokenService.ts#L284-L304)).
+**Admin token**: long-lived API token with a `type` of `api_key` and system-admin identity ([server/infrastructure/TokenService.ts:284-304](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/infrastructure/TokenService.ts#L284-L304)). It is the credential the app registry routes require.
 
 **Service token**: short-lived JWT for headless clients, issued from a shared secret ([docs/service-auth.md:7-9](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/service-auth.md#L7-L9)).
 

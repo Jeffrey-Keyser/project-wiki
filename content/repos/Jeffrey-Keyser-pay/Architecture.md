@@ -1,6 +1,6 @@
 ---
 title: "Architecture"
-description: "Components and contracts of the Pay server: Express entry points, the domain service container, ports and adapters, and external systems."
+description: "Components and contracts of the Pay server: Express entry points, the domain service container, ports and adapters, access control, and external systems."
 ---
 
 # Architecture
@@ -44,6 +44,12 @@ flowchart TD
 - **Payment provider** is an interface with a Stripe implementation; `PAYMENT_PROVIDER` selects the default ([docs/PAYMENT_PROVIDER_ABSTRACTION.md:13-16](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/PAYMENT_PROVIDER_ABSTRACTION.md#L13-L16), [server/services/DomainServiceContainer.ts:105-106](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/services/DomainServiceContainer.ts#L105-L106)).
 - **Tokens** are issued by `TokenServiceImpl`, which checks revocation and refresh sessions on verification ([server/infrastructure/TokenService.ts:132-143](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/server/infrastructure/TokenService.ts#L132-L143)).
 - **Schemas**: the migration notes name `contact` and `billing` schemas ([docs/PROVIDER_AGNOSTIC_MIGRATION.md:22-27](https://github.com/Jeffrey-Keyser/pay/blob/b20e905b08aa915debd6fa262a1f8015368cdb05/docs/PROVIDER_AGNOSTIC_MIGRATION.md#L22-L27)).
+
+## Access control
+
+- **App registry:** the `/apps` routes are admin-only. `server/routes/apps.ts` applies `authenticateToken` and `requireAdmin()` at router level, so routes added later inherit the guard ([server/routes/apps.ts:22-36](https://github.com/Jeffrey-Keyser/pay/blob/3691e055cf05ba49dd332e6125b4f11e7497eb09/server/routes/apps.ts#L22-L36)). The only anonymous request is `GET /apps?visibility=public`, the public catalog of active EXTERNAL apps (same source).
+- **User profiles:** `GET /users/:userId` requires authentication. Users can read their own profile, and admins can read any profile ([server/routes/users/profile.ts](https://github.com/Jeffrey-Keyser/pay/blob/3691e055cf05ba49dd332e6125b4f11e7497eb09/server/routes/users/profile.ts)).
+- **Payment resources:** the payment routes changed in this commit require `authenticateToken`. Customers, subscriptions, and payment intents are checked against the caller through `PaymentOwnershipService`, and a resource owned by someone else is reported as not found ([server/services/PaymentOwnershipService.ts](https://github.com/Jeffrey-Keyser/pay/blob/3691e055cf05ba49dd332e6125b4f11e7497eb09/server/services/PaymentOwnershipService.ts)).
 
 ## Module-resolution constraint
 
