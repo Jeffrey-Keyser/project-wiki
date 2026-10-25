@@ -57,6 +57,11 @@ flowchart TD
   - `plan-managerd project` can recreate a missing compatible artifact, but it never replaces a writer-of-record artifact.
   - Waits are event-tail only, and orchestration emits no `tmux wait-for -S` signals ([CLAUDE.md:L14](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/CLAUDE.md#L14)).
   - tmux is only a display surface ([README.md:L152-L154](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/README.md#L152-L154)).
+- **Result finalization.** Host-owned finalization of synthesized `result.json` (commit `96e8b338d26f`):
+  - An admitted model keeps its narrative, but `startedAt` and `completedAt` are replaced with the host attempt start and the finalizer's completion clock ([internal/resultsynthesis/resultsynthesis.go](https://github.com/Jeffrey-Keyser/dev-inbox/blob/96e8b338d26f/internal/resultsynthesis/resultsynthesis.go)).
+  - Each result carries the host's normalized `generation`. `finalizationProvenance` is bound only to a finalization receipt matching that generation, run, task, repository, worktree, and branch; model-supplied provenance is discarded ([internal/resultsynthesis/provenance.go](https://github.com/Jeffrey-Keyser/dev-inbox/blob/96e8b338d26f/internal/resultsynthesis/provenance.go)).
+  - Before canonical replacement, publication keeps a private, redacted, create-only `result-<generation>-<content-key>.json` snapshot. If the snapshot cannot be written, the canonical `result.json` is not replaced ([internal/resultsynthesis/provenance.go](https://github.com/Jeffrey-Keyser/dev-inbox/blob/96e8b338d26f/internal/resultsynthesis/provenance.go)).
+  - Incident evidence and regression coverage: [docs/issue-132-result-completion.md](https://github.com/Jeffrey-Keyser/dev-inbox/blob/96e8b338d26f/docs/issue-132-result-completion.md).
 - **Aggregates.**
   - Orchestration: `plan → slices → run → tasks`.
   - Queue: `batch → jobs → attempts → intent` ([docs/DOMAIN-GLOSSARY.md:L9-L10](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/DOMAIN-GLOSSARY.md#L9-L10), [docs/DOMAIN-GLOSSARY.md:L36-L42](https://github.com/Jeffrey-Keyser/dev-inbox/blob/9a72cd60e5068bd14367dc5f7f9acd50e387b650/docs/DOMAIN-GLOSSARY.md#L36-L42)).
