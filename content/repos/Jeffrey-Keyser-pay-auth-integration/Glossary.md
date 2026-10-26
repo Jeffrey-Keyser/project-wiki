@@ -12,7 +12,7 @@ description: "Project-specific terms for the Pay auth and payment integration pa
 - defaults `authPath` to `/auth`;
 - returns `{ middleware, routes, applyTo }`.
 
-([src/server/index.ts:L31-L126](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/index.ts#L31-L126))
+([src/server/index.ts:L31-L126](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/index.ts#L31-L126))
 
 **createPayProxyRoutes / PayProxyClient.** The Express router that forwards requests to Pay. It adds correlation IDs and a `/health` route ([src/server/pay-proxy-routes.ts:L28-L90](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/pay-proxy-routes.ts#L28-L90)).
 
@@ -28,7 +28,11 @@ description: "Project-specific terms for the Pay auth and payment integration pa
 
 **ActionResponse error format.** The standard error body: `{ status: 'error', message, code, details, correlationId }` ([src/server/pay-proxy-routes.ts:L108-L135](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/pay-proxy-routes.ts#L108-L135), [CHANGELOG.md:L321-L344](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/CHANGELOG.md#L321-L344)).
 
-**Public routes.** Paths that skip authentication. They are matched exactly or with `*` wildcards ([src/server/services/route-matcher-service.ts:L9-L33](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/services/route-matcher-service.ts#L9-L33)). `setupPayAuth` adds `${authPath}/*` to the list automatically ([src/server/index.ts:L59-L63](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/index.ts#L59-L63)).
+**Public routes.** Paths that skip authentication. They are matched exactly or with `*` wildcards ([src/server/services/route-matcher-service.ts:L9-L33](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/services/route-matcher-service.ts#L9-L33)). `setupPayAuth` no longer adds a `${authPath}/*` wildcard. Wildcards such as `'/*'` and `'*'` are rejected with `PayAuthConfigurationError` ([src/server/index.ts:L61-L80](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/index.ts#L61-L80), [src/server/validation.ts:L70-L100](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/validation.ts#L70-L100)).
+
+**Public endpoints.** Exact paths that skip authentication, passed through the `publicEndpoints` option. A `:param` segment matches one path segment, and sub-paths are not included. `isPublicEndpoint()` performs the check ([src/server/auth-middleware.ts:L192-L208](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/auth-middleware.ts#L192-L208)).
+
+**Anonymous proxy endpoints.** The proxy endpoints that are called without Pay credentials, such as login, register, refresh, ping and the product and price catalog. `ANONYMOUS_PROXY_ENDPOINTS` lists them, and `proxyPublicEndpoints(authPath)` adds the mount path ([src/server/pay-proxy-client.ts:L19-L56](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/pay-proxy-client.ts#L19-L56)).
 
 **ValidatedPayAuthConfig / PayAuthConfigurationError.** The server configuration shape, and the error thrown when that configuration fails validation ([src/server/validation.ts:L13-L49](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/validation.ts#L13-L49)).
 

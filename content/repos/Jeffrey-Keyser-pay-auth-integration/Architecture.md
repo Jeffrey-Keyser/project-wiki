@@ -40,9 +40,16 @@ flowchart LR
 `setupPayAuth` accepts either a config object or a `PayAuthConfigBuilder` ([src/server/index.ts:L37-L126](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/index.ts#L37-L126)). It then:
 
 - merges `DEFAULT_PUBLIC_ROUTES` and `DEFAULT_AUTH_ENDPOINTS` with the caller's values;
-- adds `${authPath}/*` to the public routes;
+- passes only the proxy's anonymous endpoints under `authPath` to the gate as `publicEndpoints` (see below), instead of a `${authPath}/*` wildcard. Other routes under `authPath`, including the consumer's own, still require a token ([src/server/index.ts:L61-L80](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/index.ts#L61-L80));
+- throws `PayAuthConfigurationError` if `authPath` is `''`, `'/'` or otherwise not a dedicated mount path, or if `publicRoutes` contains `'/*'` or `'*'`, which would make every route public ([src/server/index.ts:L61-L80](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/index.ts#L61-L80), [src/server/validation.ts:L70-L100](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/validation.ts#L70-L100));
 - throws `PayAuthConfigurationError` if validation fails;
 - returns `{ middleware, routes, applyTo }`.
+
+### Anonymous proxy endpoints
+
+`ANONYMOUS_PROXY_ENDPOINTS` lists the proxy endpoints that are called without Pay credentials: login, register, guest, refresh, password reset and validation, ping, OAuth sign-in, and the product and price catalog. `proxyPublicEndpoints(authPath)` prefixes that list with the mount path. Manual setups can pass the result as `publicEndpoints` ([src/server/pay-proxy-client.ts:L19-L56](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/pay-proxy-client.ts#L19-L56)).
+
+Matching is exact. `:param` segments match one path segment, and sub-paths are not included. `isPublicEndpoint()` implements this check ([src/server/auth-middleware.ts:L192-L208](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/auth-middleware.ts#L192-L208)).
 
 ### Proxy router
 
