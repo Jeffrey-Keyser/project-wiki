@@ -17,12 +17,30 @@ Ping is a deployed application, not a library. It has a server entry point and a
 ## Test commands
 
 - `npm test` in `server/` runs Vitest once ([server/package.json:L14](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L14)).
-- `npm run test:integration` in `server/` uses the integration config ([server/package.json:L17](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L17)).
+- `npm run test:integration` in `server/` uses the integration config ([server/package.json:L17](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L17)). The integration suite for the API key helper runs the executable adapter through `ts-node` against the isolated database ([server/tests/integration/api-key-generation.test.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/tests/integration/api-key-generation.test.ts)).
 - `npm run test` in `client/` runs Vitest with jsdom ([client/package.json:L41](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/package.json#L41), [client/vitest.config.ts:L9](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/vitest.config.ts#L9)).
 
 ## Grocery zone provisioning
 
 This is a manual bulk command, not a service. It is run from `server/` with both `--user-id` and `--zones-file` ([README.md:L80](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L80)). Missing or invalid input prints help and performs no writes ([server/scripts/groceryZoneProvisioning.ts:L4-L18](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/scripts/groceryZoneProvisioning.ts#L4-L18)). The README recommends creating zones on the Map page for normal setup ([README.md:L97](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L97)).
+
+## API key credential helper
+
+This is a manual operator command, not a service. It creates exactly one API credential for one explicitly selected existing account. Run it from `server/`:
+
+```bash
+npx ts-node --project tsconfig.json scripts/gen-key.ts --user-id 42
+```
+
+The account id is illustrative only. There is no default account, so `--user-id` must be supplied exactly once with a positive safe integer ([server/scripts/apiKeyGeneration.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/scripts/apiKeyGeneration.ts), [README.md](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/README.md)).
+
+- Missing, malformed, repeated, or unknown arguments exit nonzero with help text and create no credential. `--help` exits zero without account lookup or writes ([server/scripts/apiKeyGeneration.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/scripts/apiKeyGeneration.ts)).
+- The selected account is resolved first through `UsersDal.getUserById`. A missing account or a lookup failure exits nonzero and creates no credential ([server/scripts/apiKeyGeneration.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/scripts/apiKeyGeneration.ts)).
+- On success, one credential is created for that account through `ApiKeyService.createApiKeyForUser` with the neutral label `operator-generated`. A `NEW_API_KEY` event is logged with the account id ([server/scripts/gen-key.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/scripts/gen-key.ts), [server/scripts/apiKeyGeneration.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/scripts/apiKeyGeneration.ts)).
+- Existing active credentials, including those of other accounts, are left unchanged ([server/tests/integration/api-key-generation.test.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/tests/integration/api-key-generation.test.ts)).
+- The earlier version of `gen-key.ts` hard-coded user id 1 and a `Generated-2026-01-31` label. That behavior was removed in this change ([server/scripts/gen-key.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/scripts/gen-key.ts)).
+
+For normal setup, sign in and open Setup to view your API key. No command run is needed ([README.md](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/README.md)).
 
 ## Deploy
 
@@ -54,6 +72,6 @@ This is a manual bulk command, not a service. It is run from `server/` with both
 
 ## Documented versus verified
 
-- **Verified in source:** the scripts, the health route, the deploy steps, and the config rules above.
+- **Verified in source:** the scripts, the health route, the deploy steps, the API key helper argument rules, and the config rules above.
 - **Documented only:** the Beelink host, Cloudflare routing, the webhook, and the release marker's use by incident reporting.
 - **Unknown from excerpts:** the production `PORT`, systemd unit contents, webhook setup, and whether Analytics Pulse or the incident transport is live.
