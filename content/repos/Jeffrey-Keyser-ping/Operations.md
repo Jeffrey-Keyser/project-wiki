@@ -13,12 +13,14 @@ Ping is a deployed application, not a library. It has a server entry point and a
 - **Server development:** `npm run dev` runs `ts-node ./bin/www.ts` ([server/package.json:L8](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L8)). The port defaults to 3001 when `PORT` is unset ([server/config/env.ts:L103](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/config/env.ts#L103)).
 - **Client development:** `npm run dev` runs Vite on port 3002 ([client/package.json:L38](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/package.json#L38), [client/vite.config.js:L21](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/vite.config.js#L21)).
 - **Client build:** `npm run build` runs `vite build` ([client/package.json:L39](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/package.json#L39)).
+- **Background worker:** `server/bin/www.ts` starts `arrivalDwellWorker` after the HTTP server is listening. It checks pending arrivals every 15 seconds and once at start ([server/bin/www.ts](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/bin/www.ts), [server/services/ArrivalDwellWorker.ts](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/services/ArrivalDwellWorker.ts)).
 
 ## Test commands
 
 - `npm test` in `server/` runs Vitest once ([server/package.json:L14](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L14)).
 - `npm run test:integration` in `server/` uses the integration config ([server/package.json:L17](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/package.json#L17)). The integration suite for the API key helper runs the executable adapter through `ts-node` against the isolated database ([server/tests/integration/api-key-generation.test.ts](https://github.com/Jeffrey-Keyser/ping/blob/50c5a050885a5c2ddb4b79cd32cb387947b4c73b/server/tests/integration/api-key-generation.test.ts)).
 - `npm run test` in `client/` runs Vitest with jsdom ([client/package.json:L41](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/package.json#L41), [client/vitest.config.ts:L9](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/client/vitest.config.ts#L9)).
+- Dwell Postgres tests live in `server/tests/dwell/` with `server/vitest.config.dwell.ts`. The diff does not show an npm script that runs them ([server/tests/dwell/dwell.postgres.test.ts](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/tests/dwell/dwell.postgres.test.ts)).
 
 ## Grocery zone provisioning
 
@@ -45,7 +47,7 @@ For normal setup, sign in and open Setup to view your API key. No command run is
 ## Deploy
 
 - Push to `main` triggers `deploy.sh` via the webhook ([README.md:L63](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L63)).
-- The script pulls, builds the server and client, applies three migration helpers, writes a release marker, and restarts `ping` and `ping-frontend` ([deploy.sh:L8-L45](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/deploy.sh#L8-L45)).
+- The script pulls, builds the server and client, applies four migration helpers (including `applyVisitDwell.js` for migration 027), writes a release marker, and restarts `ping` and `ping-frontend` ([deploy.sh:L8-L45](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/deploy.sh#L8-L45), [deploy.sh](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/deploy.sh)).
 - The script's health probe checks `127.0.0.1:3020/health` and `127.0.0.1:3021/` ([deploy.sh:L48](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/deploy.sh#L48)). The production `PORT` value is not in the excerpts, so the link between those probe ports and the server config is unknown.
 - systemd unit files are not in the repo. The unit names appear only in `deploy.sh` ([deploy.sh:L44-L45](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/deploy.sh#L44-L45)).
 
@@ -62,6 +64,7 @@ For normal setup, sign in and open Setup to view your API key. No command run is
 - Each request gets a child logger with a request ID ([server/middleware/requestLogger.ts:L9-L12](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/middleware/requestLogger.ts#L9-L12)).
 - Endpoint telemetry is wired through `telemetryMiddleware` ([server/app.ts:L293](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L293)). Its middleware body is not in the excerpts.
 - Runtime incident capture is controlled by environment flags, as described in the README ([README.md:L142-L144](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L142-L144)).
+- Arrival dwell scan failures are logged as errors and retried on the next tick ([server/services/ArrivalDwellWorker.ts](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/services/ArrivalDwellWorker.ts)).
 
 ## Configuration and limits
 
@@ -69,6 +72,7 @@ For normal setup, sign in and open Setup to view your API key. No command run is
 - The rate limit is 200 requests per minute ([server/app.ts:L156-L159](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L156-L159)).
 - CORS allows `X-Ping-Key` ([server/app.ts:L166](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/app.ts#L166)).
 - Terraform (Lambda, RDS, S3, CloudFront) is documented as unused fallback ([README.md:L139](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L139)).
+- Zone `dwellMinutes` is a whole number from 0 to 1440. The default is 5 minutes ([server/routes/zones.ts](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/routes/zones.ts), [server/db/schema/027-visit-dwell.sql](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/db/schema/027-visit-dwell.sql)).
 
 ## Documented versus verified
 

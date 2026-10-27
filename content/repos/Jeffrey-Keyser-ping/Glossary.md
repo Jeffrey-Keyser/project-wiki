@@ -13,9 +13,15 @@ description: "Project-specific Ping terms with source citations."
 
 **Compound signal context.** Combining several weak signals into one specific inference, such as leaving home plus car Bluetooth at a given time ([README.md:L16](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L16)).
 
-**Zone.** A named geographic area. `ZoneResolutionService` picks the closest zone whose radius contains a point, and prefers the smaller radius on ties ([server/domain/services/ZoneResolutionService.ts:L9-L14](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/domain/services/ZoneResolutionService.ts#L9-L14)).
+**Zone.** A named geographic area. `ZoneResolutionService` picks the closest zone whose radius contains a point, and prefers the smaller radius on ties ([server/domain/services/ZoneResolutionService.ts:L9-L14](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/domain/services/ZoneResolutionService.ts#L9-L14)). A location request can also name a zone by `zoneId`, which bypasses coordinate matching ([server/domain/services/PingService.ts](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/domain/services/PingService.ts)).
 
-**Visit.** A stay in a zone with arrival and departure pings. At most one active visit per user is enforced by a partial unique index ([server/dal/VisitDal.ts:L49-L58](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/VisitDal.ts#L49-L58)).
+**Minimum stay (`dwellMinutes`).** A per-zone setting, a whole number from 0 to 1440 with a default of 5. An arrival counts as a visit only after this many minutes. Zero counts arrivals immediately ([server/routes/zones.ts](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/routes/zones.ts), [server/db/schema/027-visit-dwell.sql](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/db/schema/027-visit-dwell.sql)).
+
+**Pending arrival.** An arrival saved in `ping.pending_arrivals` while its minimum stay runs. It ends as `confirmed`, `passing_through`, or `superseded` ([server/services/ArrivalDwellService.ts](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/services/ArrivalDwellService.ts), [server/db/schema/027-visit-dwell.sql](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/server/db/schema/027-visit-dwell.sql)).
+
+**Passing through.** A short stop whose departure comes before the minimum stay ends. It creates no visit and no arrival event ([docs/MOBILE_INTEGRATION.md](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/docs/MOBILE_INTEGRATION.md)).
+
+**Visit.** A stay in a zone with arrival and departure pings. At most one active visit per user is enforced by a partial unique index ([server/dal/VisitDal.ts:L49-L58](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/VisitDal.ts#L49-L58)). With the minimum stay in place, a visit starts at the original arrival time once it qualifies ([docs/MOBILE_INTEGRATION.md](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/docs/MOBILE_INTEGRATION.md)).
 
 **Drive.** A car trip recorded by a drive row and optional waypoints. Drives start and end on Bluetooth events and can stream over WebSocket ([docs/DRIVE_TRACKING.md:L7-L13](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/DRIVE_TRACKING.md#L7-L13), [server/dal/DriveDal.ts:L40-L44](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/dal/DriveDal.ts#L40-L44)).
 
@@ -23,7 +29,7 @@ description: "Project-specific Ping terms with source citations."
 
 **X-Ping-Key.** The header carrying the API key used by Shortcuts. The connectivity route checks presence only ([server/routes/connectivity.ts:L8](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/server/routes/connectivity.ts#L8), [README.md:L73](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/README.md#L73)).
 
-**X-Idempotency-Key.** An optional client key for safe resends of location captures ([docs/MOBILE_INTEGRATION.md:L78](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/MOBILE_INTEGRATION.md#L78)).
+**X-Idempotency-Key.** An optional client key for safe resends of location captures ([docs/MOBILE_INTEGRATION.md:L78](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/MOBILE_INTEGRATION.md#L78)). Retries should reuse the same key and the original `capturedAt` value ([docs/MOBILE_INTEGRATION.md](https://github.com/Jeffrey-Keyser/ping/blob/c7a003f89bb14a959bb433f8aa02a61ac81775ed/docs/MOBILE_INTEGRATION.md)).
 
 **Replay completion.** The rule that a keyed capture returns its saved result, and an unfinished one returns HTTP 500 for retry or 409 for reconciliation ([docs/MOBILE_INTEGRATION.md:L345-L351](https://github.com/Jeffrey-Keyser/ping/blob/86038591cb036f4b90ee00318760515952cc0ab2/docs/MOBILE_INTEGRATION.md#L345-L351)).
 
