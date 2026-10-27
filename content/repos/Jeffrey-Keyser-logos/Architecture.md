@@ -39,7 +39,7 @@ flowchart TB
 ### HTTP surface
 
 - **Mounts.** `/` serves the health routes. `/v1` is guarded by bearer auth. `/proposals` is an HTML router with query-token auth ([src/app.ts:L49-L54](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/app.ts#L49-L54)).
-- **Routers.** `/v1` aggregates status, ingest, proposals, pages, query, feeds, themes, contexts and project-documents ([src/routes/v1/index.ts:L14-L22](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/index.ts#L14-L22)).
+- **Routers.** `/v1` aggregates status, ingest, proposals, pages, query, retrieve, feeds, themes, contexts and project-documents ([src/routes/v1/index.ts:L14-L22](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/index.ts#L14-L22), [src/routes/v1/retrieve.ts](https://github.com/Jeffrey-Keyser/logos/blob/f4020b0b94ba14499dac2c1f7beba27d1a9bffe4/src/routes/v1/retrieve.ts)).
 - **Browser approvals.** The HTML router does not write proposals directly. It calls back into `/v1` over HTTP using the service token ([src/routes/proposals-html.ts:L53-L74](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/proposals-html.ts#L53-L74)).
 
 ### Ingest service and worker
@@ -71,6 +71,8 @@ flowchart TB
 - **Distance gate.** Semantic hits farther than cosine distance 0.5 are dropped before fusion.
 - **Failure modes.** An empty hub short-circuits with a fixed message. If synthesis fails, the API returns retrieval results only ([src/query/run.ts:L141-L204](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/run.ts#L141-L204)).
 - **Streaming.** A client that sends `Accept: text/event-stream` gets Server-Sent Events: `progress`, then `result` or `error` ([src/routes/v1/query.ts:L105-L113](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/routes/v1/query.ts#L105-L113)).
+- **Shared scope resolution.** Context scope parsing lives in `resolveContextScope`, which both `/v1/query` and `/v1/retrieve` use ([src/query/scope.ts](https://github.com/Jeffrey-Keyser/logos/blob/f4020b0b94ba14499dac2c1f7beba27d1a9bffe4/src/query/scope.ts)).
+- **Bounded evidence.** `POST /v1/retrieve` and `logos retrieve` return exact whole-section text with provenance and no synthesis. The path reuses the hybrid retriever, writes no query log, and never calls Struct. It is capped at 20 pages, 20 entries and 65,536 UTF-8 bytes of evidence per response. Failures return 503 `retrieval-unavailable`, not an empty result ([src/query/evidence.ts](https://github.com/Jeffrey-Keyser/logos/blob/f4020b0b94ba14499dac2c1f7beba27d1a9bffe4/src/query/evidence.ts), [src/routes/v1/retrieve.ts](https://github.com/Jeffrey-Keyser/logos/blob/f4020b0b94ba14499dac2c1f7beba27d1a9bffe4/src/routes/v1/retrieve.ts), [docs/bounded-retrieval.md](https://github.com/Jeffrey-Keyser/logos/blob/f4020b0b94ba14499dac2c1f7beba27d1a9bffe4/docs/bounded-retrieval.md)).
 
 ### Project documents
 

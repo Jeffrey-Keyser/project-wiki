@@ -37,6 +37,8 @@ description: "Project-specific terms: contexts, pages, proposals, project docume
 
 **Degraded answer.** The retrieval-only response returned when synthesis fails ([src/query/run.ts:L68-L78](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/run.ts#L68-L78)).
 
+**Bounded retrieval.** A read-only `POST /v1/retrieve` or `logos retrieve` call. It returns whole page sections with exact text, UTF-8 byte counts, SHA-256 digests and source provenance, with no answer synthesis and no query-log write. Its `status` is `ok`, `empty` or `unavailable`, and each result is marked `authority: research` ([docs/bounded-retrieval.md](https://github.com/Jeffrey-Keyser/logos/blob/f4020b0b94ba14499dac2c1f7beba27d1a9bffe4/docs/bounded-retrieval.md), [src/query/evidence.ts](https://github.com/Jeffrey-Keyser/logos/blob/f4020b0b94ba14499dac2c1f7beba27d1a9bffe4/src/query/evidence.ts)).
+
 **Project document.** A stable-ID document whose revisions are immutable. Kinds are `markdown`, `text` or `url`, and documents can be reversibly deactivated ([src/db/repos/project-document.ts:L3-L17](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/db/repos/project-document.ts#L3-L17)).
 
 **Corpus snapshot / fingerprint.** A snapshot is the complete set of active documents in a context. The fingerprint is a `sha256:` hash over the sorted document IDs, content hashes and titles ([src/project-documents/service.ts:L49-L54](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/project-documents/service.ts#L49-L54)).
