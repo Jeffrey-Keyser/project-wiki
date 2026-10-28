@@ -13,6 +13,12 @@ description: "Project-specific terms used in beelink-deploy, each tied to the so
 
 **Immutable worktree.** `deploymentMode: immutable-worktree` checks the revision into a detached release under `releaseRoot`. The operator checkout is not reset ([README.md:L92-L97](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L92-L97), [src/deploy.ts:L245-L268](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L245-L268)).
 
+**Checkout deployment.** A repo without immutable-worktree mode, deployed from its live checkout ([src/deploy.ts:L294-L299](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/69c67435cab42acd0c3be42fedee39e71eafac55/src/deploy.ts#L294-L299)).
+
+**Deploy lag.** How many commits a checkout deployment's `HEAD` trails the fetched `origin/<branch>`, plus the age of the oldest undeployed commit. It is reported only in failed-deploy Telegram messages ([src/deploy-lag.ts:L8-L33](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/69c67435cab42acd0c3be42fedee39e71eafac55/src/deploy-lag.ts#L8-L33), [src/server.ts:L38-L44](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/69c67435cab42acd0c3be42fedee39e71eafac55/src/server.ts#L38-L44)).
+
+**Lockfile drift.** Host-side changes to tracked `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock` or `pnpm-lock.yaml` left by install steps. Checkout deployments restore them to `HEAD` before updating so `git pull --ff-only` is not blocked ([src/deploy.ts:L335-L362](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/69c67435cab42acd0c3be42fedee39e71eafac55/src/deploy.ts#L335-L362)).
+
 **Drain.** The shutdown window that waits for queued or active deploys, up to 240 s ([src/index.ts:L7](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L7), [src/deploy.ts:L124-L137](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L124-L137)).
 
 **`packages.events`.** Durable topic exchange for `package.push.<owner>.<repo>` events ([src/rabbit.ts:L10](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L10), [src/rabbit.ts:L144](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L144)).
