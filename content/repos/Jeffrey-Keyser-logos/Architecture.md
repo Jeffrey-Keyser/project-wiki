@@ -57,7 +57,7 @@ flowchart TB
 
 - **Struct.** `structRun` POSTs `{prompt, schema}` to `/api/v1/run`, with one retry on 5xx or timeout. The input is serialized into the prompt ([src/llm/struct.ts:L45-L70](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/llm/struct.ts#L45-L70)).
 - **Struct async.** `structRunAsync` polls a Struct job. Streaming queries use it to send progress heartbeats ([src/llm/struct.ts:L215-L222](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/llm/struct.ts#L215-L222)).
-- **Native CLI dispatch.** It tries Codex, Copilot and Gemini in order. Each provider has two lockfile slots, and the call falls through to the next provider on failure ([src/agents/native-cli.ts:L181-L226](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/agents/native-cli.ts#L181-L226)).
+- **Native CLI dispatch.** It tries Codex, Copilot and Gemini in order. Each provider has two lockfile slots, and the call falls through to the next provider on failure ([src/agents/native-cli.ts:L181-L226](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/agents/native-cli.ts#L181-L226)). Because the prompt can carry untrusted page HTML, Codex runs with `--sandbox read-only` and `--ephemeral`, and passes only core environment variables to commands it runs. Gemini is pinned to `--approval-mode default` so confirmation-gated tools such as shell and writes stay unavailable headless ([src/agents/native-cli.ts:L38-L67](https://github.com/Jeffrey-Keyser/logos/blob/49d48f2acb59a1dad12b6004f2de3b6aee4ea0b0/src/agents/native-cli.ts#L38-L67)).
 
 ### Proposals
 
