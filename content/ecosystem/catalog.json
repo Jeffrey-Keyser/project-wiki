@@ -4,7 +4,7 @@
     {
       "repo": "Jeffrey-Keyser/agency-hq",
       "group": "orchestration",
-      "summary": "Strategic agent control plane on Forge that dispatches dev-inbox runs and tracks Runs and Topology outcomes.",
+      "summary": "Agent orchestration control plane on Forge that dispatches dev-inbox runs and shows Runs and Topology views; legacy meeting, CEO-agent, sprint and persona surfaces are under audit during a product reset.",
       "state": "documented",
       "pages": [
         {
@@ -53,7 +53,7 @@
     {
       "repo": "Jeffrey-Keyser/ai-proxy",
       "group": "platform",
-      "summary": "Central LLM gateway giving apps per-application keys, quotas, model controls, usage tracking and a Claude budget guard.",
+      "summary": "Central LLM gateway giving apps per-application keys, quotas, model controls, usage tracking, a Claude budget guard and durable Claude Message Batches for allowed applications.",
       "state": "documented",
       "pages": [
         {
@@ -86,7 +86,7 @@
     {
       "repo": "Jeffrey-Keyser/analytics-pulse",
       "group": "platform",
-      "summary": "Privacy-focused analytics platform with tracking library, admin dashboard and telemetry ingestion for ecosystem applications.",
+      "summary": "Privacy-focused web analytics platform with a React admin client, Express API, tracking library and Pay sign-in; production topology is not verified by the supplied guides.",
       "state": "documented",
       "pages": [
         {
@@ -593,7 +593,7 @@
     {
       "repo": "Jeffrey-Keyser/Life",
       "group": "products",
-      "summary": "Voice-first journal that transcribes, structures and links entries into a people and tag graph.",
+      "summary": "Voice-first journal that transcribes, structures and links entries into a people and tag graph, using Pay sign-in, AI Proxy and Struct.",
       "state": "documented",
       "pages": [
         {
@@ -1348,7 +1348,7 @@
     {
       "repo": "Jeffrey-Keyser/Switchboard",
       "group": "platform",
-      "summary": "Feature flag and typed configuration service with admin UI and client SDK.",
+      "summary": "Feature flag and typed configuration service with an Express API, admin UI and client SDK; documented as a systemd service behind Cloudflare Tunnel, with no confirmed consuming applications in source.",
       "state": "documented",
       "pages": [
         {
