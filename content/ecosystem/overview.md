@@ -10,7 +10,7 @@ The self-hosted core of the ecosystem lives on **two small Linux boxes with sepa
 
 Around those two hosts sit a set of shared npm building blocks and a few cross-cutting services: Pay for identity, Solo Vault for credentials, Prompt Registry for prompts, AI Proxy and Struct for model inference, and Logos for knowledge.
 
-> **Snapshot: 29 October 2026.** Based on the ecosystem registry and the current host reference, plus repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy and Analytics Pulse, and the Agency HQ architecture guide. Agency HQ's curated Projects notes cite deployed revision 4523d08, observed on 2026-10-29.
+> **Snapshot: 29 October 2026.** Based on the ecosystem registry and the current host reference, plus repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox and Ping, and the Agency HQ architecture guide. Agency HQ's curated Projects notes cite deployed revision 4523d08, observed on 2026-10-29.
 
 ## The big picture
 
@@ -110,6 +110,8 @@ Pay-integrated examples include:
 
 Life is a documented self-hosted voice-first journal. Its Pay SSO middleware guards journal routes, and it also serves guest creation and share-token readers on public routes ([Life home](/repos/jeffrey-keyser-life/home/)).
 
+Ping is a Pay-integrated location and health service. Its Express API in `server/` serves shortcut-facing routes that check an `X-Ping-Key` header, and a Vite-built React single-page app uses JWT or session access. A user-resolution guard returns 401 for Pay principals whose id is not a Ping user UUID, so system tokens cannot reach user-scoped routes ([Ping architecture](/repos/jeffrey-keyser-ping/architecture/)).
+
 Authentication varies by service: some use Pay, others accept API keys or expose selected public routes. The service-specific guides document those boundaries. Ping Mobile uses a Ping key; Pantry Manager adds its own API-key policy.
 
 ## Flow 2: scheduled and domain events
@@ -117,7 +119,7 @@ Authentication varies by service: some use Pay, others accept API keys or expose
 ```mermaid
 flowchart TB
   cron["Cron Service"] -->|"CronJobTriggered on cron.jobs"| mq["RabbitMQ"]
-  ping["Ping"] -->|"arrive and depart on ping.events"| mq
+  ping["Ping (event publishing inactive)"] -.->|"not currently published"| mq
   deploy["Beelink Deploy"] -->|"packages.events and wiki.events"| mq
   logos["Logos"] -->|"logos.proposal.created"| mq
   mq --> bridge["OpenClaw Bridge handlers"]
@@ -132,9 +134,11 @@ flowchart TB
 
 Subscribers do the actual work:
 
-- [OpenClaw Bridge](/repos/jeffrey-keyser-openclaw-bridge/architecture/) runs handlers for cron alerts, Ping events, briefings, Flights, Spanish lessons, Agency decisions and Cream City Web.
+- [OpenClaw Bridge](/repos/jeffrey-keyser-openclaw-bridge/architecture/) runs handlers for cron alerts, Ping events when they are published, briefings, Flights, Spanish lessons, Agency decisions and Cream City Web.
 - Business HQ, Logos, QA Patrol, Feedback Registry and NanoClaw bind their own keys.
 - [Agency HQ](/repos/jeffrey-keyser-agency-hq/architecture/) binds queue `agency-hq.logos-proposal-cards` to `logos.proposal.created` and sends one Telegram approve or reject card per proposal. If enrichment from the Logos API fails, the card is still sent with the event fields. Its orchestration, heartbeat, ops-events, probe-failed, runstream and project-reconciliation consumers register after the broker connects, and a failed connect logs and reconnects.
+
+Ping's own RabbitMQ publisher is currently inactive. Its `EventPublisher` keeps its interface, but publishing methods resolve without connecting to RabbitMQ or sending messages, so no arrive or depart events are emitted from Ping today ([Ping architecture](/repos/jeffrey-keyser-ping/architecture/)). Ping's other background work is local: a dwell worker confirms pending arrivals before a visit is created, and when VAPID keys are configured a capture-attention worker sends web push alerts for automatic collection sources that need attention, at most once per episode.
 
 The bridge's routing defaults to NanoClaw. NanoClaw delivery is gated by a configuration flag.
 
@@ -180,6 +184,10 @@ An outside-finding intake CLI reads one authored GitHub issue at a time into a l
 6. review
 7. bounded revision (three revisions by default; a reject is never auto-revised)
 8. land
+
+The run manager is a shell entry point that takes a per-run lease, so a second active manager for the same run exits instead of running. Planners, scouts, workers, reviewers, prospectors and the observer run as development agent CLI sessions, started in tmux by default or as transient systemd units when configured. These are development agents on Forge, not product runtime CLIs.
+
+State and policy for planning sit in `plan-managerd`, a Go binary that is now the sole plan-manager runtime. It handles the state machine, wake routing, projection, provider selection, recovery and supervision; the older Bash plan-manager fallback has been removed. Worker and manager verification run through a task-bound verification host that accepts only list, run and status operations, and verification receipts are kept per task with the most recent actionable failure preserved ([dev-inbox architecture](/repos/jeffrey-keyser-dev-inbox/architecture/)).
 
 Operator gates stay in front of destructive or production-sensitive actions. Queue preapproval authorizes execution only, never a merge or a production deploy.
 
@@ -241,6 +249,7 @@ The AWS Terraform repos remain as legacy reference.
 - *How does an agent run plan, review and land work?* → [dev-inbox architecture](/repos/jeffrey-keyser-dev-inbox/architecture/) and [Agency HQ home](/repos/jeffrey-keyser-agency-hq/home/)
 - *Why isn't an Agency HQ run dispatching?* → [Agency HQ architecture](/repos/jeffrey-keyser-agency-hq/architecture/)
 - *Why didn't a scheduled job do anything?* → [Cron Service](/repos/jeffrey-keyser-cron-service/services-and-dependencies/), then [OpenClaw Bridge](/repos/jeffrey-keyser-openclaw-bridge/services-and-dependencies/)
+- *Why doesn't Ping emit arrive or depart events?* → [Ping architecture](/repos/jeffrey-keyser-ping/architecture/)
 - *What message shape does an exchange expect?* → [Message Contracts](/repos/jeffrey-keyser-message-contracts/architecture/)
 - *How do I add sign-in to an app?* → [pay-auth-integration](/repos/jeffrey-keyser-pay-auth-integration/home/)
 - *Where should an AI call go?* → [AI Proxy](/repos/jeffrey-keyser-ai-proxy/home/) or [Struct](/repos/jeffrey-keyser-struct/home/)
@@ -277,7 +286,7 @@ This directory covers **69 repositories**, including **33 complete six-page wiki
 | --- | --- | --- | --- |
 | [agency-hq](https://github.com/Jeffrey-Keyser/agency-hq) | Agent orchestration control plane on Forge that dispatches dev-inbox runs and shows Runs and Topology views; legacy meeting, CEO-agent, sprint and persona surfaces are under audit during a product reset. | documented | [Overview](/repos/jeffrey-keyser-agency-hq/home/) · [Architecture](/repos/jeffrey-keyser-agency-hq/architecture/) · [Workflow](/repos/jeffrey-keyser-agency-hq/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-agency-hq/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-agency-hq/operations/) · [Glossary](/repos/jeffrey-keyser-agency-hq/glossary/) · [Projects Guide](/repos/jeffrey-keyser-agency-hq/projects-guide/) · [Projects Troubleshooting](/repos/jeffrey-keyser-agency-hq/projects-troubleshooting/) · [Reconciliation Lifecycle](/repos/jeffrey-keyser-agency-hq/reconciliation-lifecycle/) · [Requirements and Acceptance](/repos/jeffrey-keyser-agency-hq/requirements-and-acceptance/) |
 | [business-hq](https://github.com/Jeffrey-Keyser/business-hq) | Financial layer tracking products, revenue, costs and daily snapshots from Pay, Agency and cron events. | documented | [Overview](/repos/jeffrey-keyser-business-hq/home/) · [Architecture](/repos/jeffrey-keyser-business-hq/architecture/) · [Workflow](/repos/jeffrey-keyser-business-hq/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-business-hq/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-business-hq/operations/) · [Glossary](/repos/jeffrey-keyser-business-hq/glossary/) |
-| [dev-inbox](https://github.com/Jeffrey-Keyser/dev-inbox) | Multi-provider agent orchestration on Forge that plans, implements, verifies, reviews and lands software changes. | documented | [Overview](/repos/jeffrey-keyser-dev-inbox/home/) · [Architecture](/repos/jeffrey-keyser-dev-inbox/architecture/) · [Workflow](/repos/jeffrey-keyser-dev-inbox/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-dev-inbox/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-dev-inbox/operations/) · [Glossary](/repos/jeffrey-keyser-dev-inbox/glossary/) |
+| [dev-inbox](https://github.com/Jeffrey-Keyser/dev-inbox) | Multi-provider agent orchestration on Forge that plans, implements, verifies, reviews and lands software changes; a Go plan-managerd runtime owns plan state, wake routing and supervision, and development agent CLIs run the planner, worker and reviewer roles. | documented | [Overview](/repos/jeffrey-keyser-dev-inbox/home/) · [Architecture](/repos/jeffrey-keyser-dev-inbox/architecture/) · [Workflow](/repos/jeffrey-keyser-dev-inbox/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-dev-inbox/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-dev-inbox/operations/) · [Glossary](/repos/jeffrey-keyser-dev-inbox/glossary/) |
 | [nanoclaw](https://github.com/Jeffrey-Keyser/nanoclaw) | Personal assistant gateway on Beelink with Telegram channel, scheduler and agent runners, replacing OpenClaw. | documented | [Overview](/repos/jeffrey-keyser-nanoclaw/home/) · [Architecture](/repos/jeffrey-keyser-nanoclaw/architecture/) · [Workflow](/repos/jeffrey-keyser-nanoclaw/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-nanoclaw/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-nanoclaw/operations/) · [Glossary](/repos/jeffrey-keyser-nanoclaw/glossary/) |
 | [openclaw-bridge](https://github.com/Jeffrey-Keyser/openclaw-bridge) | Event bridge whose handlers forward RabbitMQ and webhook events to NanoClaw, with legacy OpenClaw routing. | documented | [Overview](/repos/jeffrey-keyser-openclaw-bridge/home/) · [Architecture](/repos/jeffrey-keyser-openclaw-bridge/architecture/) · [Workflow](/repos/jeffrey-keyser-openclaw-bridge/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-openclaw-bridge/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-openclaw-bridge/operations/) · [Glossary](/repos/jeffrey-keyser-openclaw-bridge/glossary/) |
 | [passthrough](https://github.com/Jeffrey-Keyser/passthrough) | Claude Code Web dispatch protocol that fetches action instructions from Prompt Registry and opens PRs. | documented | Not scaffolded |
@@ -308,7 +317,7 @@ This directory covers **69 repositories**, including **33 complete six-page wiki
 | [nof1](https://github.com/Jeffrey-Keyser/nof1) | Personal N-of-1 experiment tracker with phases, quick-log entries and computed insights. | documented | [Overview](/repos/jeffrey-keyser-nof1/home/) · [Architecture](/repos/jeffrey-keyser-nof1/architecture/) · [Workflow](/repos/jeffrey-keyser-nof1/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-nof1/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-nof1/operations/) · [Glossary](/repos/jeffrey-keyser-nof1/glossary/) |
 | [Pantry](https://github.com/Jeffrey-Keyser/Pantry) | Kitchen management app for ingredients, AI receipt scanning and recipes, separate from Pantry Manager. | documented | Not scaffolded |
 | [pantry-manager](https://github.com/Jeffrey-Keyser/pantry-manager) | Standalone inventory service tracking products, stock and receipt-backed purchase history, distinct from Pantry. | documented | [Overview](/repos/jeffrey-keyser-pantry-manager/home/) · [Architecture](/repos/jeffrey-keyser-pantry-manager/architecture/) · [Workflow](/repos/jeffrey-keyser-pantry-manager/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-pantry-manager/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-pantry-manager/operations/) · [Glossary](/repos/jeffrey-keyser-pantry-manager/glossary/) |
-| [ping](https://github.com/Jeffrey-Keyser/ping) | Location, health and life-tracking service that resolves zones, records visits and publishes events. | documented | [Overview](/repos/jeffrey-keyser-ping/home/) · [Architecture](/repos/jeffrey-keyser-ping/architecture/) · [Workflow](/repos/jeffrey-keyser-ping/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-ping/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-ping/operations/) · [Glossary](/repos/jeffrey-keyser-ping/glossary/) |
+| [ping](https://github.com/Jeffrey-Keyser/ping) | Location, health and life-tracking service that resolves zones, records visits and dwell arrivals, and sends capture-attention web push alerts when VAPID keys are configured; its RabbitMQ event publisher is currently inactive. | documented | [Overview](/repos/jeffrey-keyser-ping/home/) · [Architecture](/repos/jeffrey-keyser-ping/architecture/) · [Workflow](/repos/jeffrey-keyser-ping/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-ping/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-ping/operations/) · [Glossary](/repos/jeffrey-keyser-ping/glossary/) |
 | [presence-signal](https://github.com/Jeffrey-Keyser/presence-signal) | Local Wi-Fi presence proxy that polls the router and sends transition notices through NanoClaw. | documented | [Overview](/repos/jeffrey-keyser-presence-signal/home/) · [Architecture](/repos/jeffrey-keyser-presence-signal/architecture/) · [Workflow](/repos/jeffrey-keyser-presence-signal/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-presence-signal/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-presence-signal/operations/) · [Glossary](/repos/jeffrey-keyser-presence-signal/glossary/) |
 | [spanish-studio](https://github.com/Jeffrey-Keyser/spanish-studio) | Voice-centric Spanish practice app with persona role-play, pronunciation review and a reading workbench. | documented | [Overview](/repos/jeffrey-keyser-spanish-studio/home/) · [Architecture](/repos/jeffrey-keyser-spanish-studio/architecture/) · [Workflow](/repos/jeffrey-keyser-spanish-studio/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-spanish-studio/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-spanish-studio/operations/) · [Glossary](/repos/jeffrey-keyser-spanish-studio/glossary/) |
 | [spanish-tutor](https://github.com/Jeffrey-Keyser/spanish-tutor) | Spaced repetition Spanish vocabulary system living as a schema and functions in the ping database. | documented | Not scaffolded |

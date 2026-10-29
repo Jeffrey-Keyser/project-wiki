@@ -356,7 +356,7 @@
     {
       "repo": "Jeffrey-Keyser/dev-inbox",
       "group": "orchestration",
-      "summary": "Multi-provider agent orchestration on Forge that plans, implements, verifies, reviews and lands software changes.",
+      "summary": "Multi-provider agent orchestration on Forge that plans, implements, verifies, reviews and lands software changes; a Go plan-managerd runtime owns plan state, wake routing and supervision, and development agent CLIs run the planner, worker and reviewer roles.",
       "state": "documented",
       "pages": [
         {
@@ -1061,7 +1061,7 @@
     {
       "repo": "Jeffrey-Keyser/ping",
       "group": "products",
-      "summary": "Location, health and life-tracking service that resolves zones, records visits and publishes events.",
+      "summary": "Location, health and life-tracking service that resolves zones, records visits and dwell arrivals, and sends capture-attention web push alerts when VAPID keys are configured; its RabbitMQ event publisher is currently inactive.",
       "state": "documented",
       "pages": [
         {
