@@ -10,7 +10,7 @@ The self-hosted core of the ecosystem lives on **two small Linux boxes with sepa
 
 Around those two hosts sit a set of shared npm building blocks and a few cross-cutting services: Pay for identity, Solo Vault for credentials, Prompt Registry for prompts, AI Proxy and Struct for model inference, and Logos for knowledge.
 
-> **Snapshot: 29 October 2026.** Based on the ecosystem registry, the current host reference, and repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox (including its [architecture guide](/repos/jeffrey-keyser-dev-inbox/architecture/)), Ping and the Ping architecture guide, and from the openclaw-bridge, Logos, Struct, Pay, pay-auth-integration and Insta Travel Map guides. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
+> **Snapshot: 29 October 2026.** Based on the ecosystem registry, the current host reference, and repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox (including its [architecture guide](/repos/jeffrey-keyser-dev-inbox/architecture/)), Ping and the Ping architecture guide, and from the openclaw-bridge, Logos, Struct, Pay, pay-auth-integration, Insta Travel Map, Life architecture and Solo Vault architecture guides. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
 
 ## The big picture
 
@@ -113,7 +113,7 @@ Pay-integrated examples include:
 - [Analytics Pulse](/repos/jeffrey-keyser-analytics-pulse/home/) and the Switchboard admin routes, which use Pay sign-in with the Pay URL configured in their code
 - [AI Proxy](/repos/jeffrey-keyser-ai-proxy/architecture/), whose `/v1/applications` routes accept Pay-service JWTs
 
-Life is a documented self-hosted voice-first journal. Its Pay SSO middleware guards journal routes, and it also serves guest creation and share-token readers on public routes ([Life home](/repos/jeffrey-keyser-life/home/)).
+Life is a documented self-hosted voice-first journal. Its Pay SSO middleware guards journal routes, and it also serves guest creation and share-token readers on public routes. Its architecture guide scopes entry image, audio and person-group routes to the journal in the URL, so resources a journal does not own return 404 ([Life architecture](/repos/jeffrey-keyser-life/architecture/), [Life home](/repos/jeffrey-keyser-life/home/)).
 
 Ping is a Pay-integrated location and health service. Its Express API in `server/` serves shortcut-facing routes that check an `X-Ping-Key` header, and a Vite-built React single-page app uses JWT or session access. A user-resolution guard returns 401 for Pay principals whose id is not a Ping user UUID, so system tokens cannot reach user-scoped routes ([Ping architecture](/repos/jeffrey-keyser-ping/architecture/)).
 
@@ -147,7 +147,7 @@ Ping's own RabbitMQ publisher is currently inactive. Its `EventPublisher` keeps 
 
 OpenClaw Bridge forwards each handler's event to a configured target: `openclaw`, `nanoclaw` or `both`. The supplied excerpts do not show the default target. NanoClaw delivery runs only when `NANOCLAW_ENABLED` is `true` ([OpenClaw Bridge services and dependencies](/repos/jeffrey-keyser-openclaw-bridge/services-and-dependencies/)).
 
-[NanoClaw](/repos/jeffrey-keyser-nanoclaw/home/) is the personal assistant gateway. It is a single process with a Telegram channel, a scheduler and agent runners. It replaces the historical OpenClaw gateway. Some services also notify NanoClaw directly through its message API or IPC files. Examples are Presence Signal, Image Studio import notices and Cream City Web run summaries.
+[NanoClaw](/repos/jeffrey-keyser-nanoclaw/home/) is the personal assistant gateway. It is a single process with a Telegram channel, a scheduler and agent runners. It replaces the historical OpenClaw gateway. Some services also notify NanoClaw directly through its message API or IPC files. Examples are Presence Signal, Image Studio import notices, Cream City Web run summaries and Solo Vault expiry alerts.
 
 ## Flow 3: from strategy to shipped code
 
@@ -216,7 +216,7 @@ Not every AI call goes through one gateway. There are two lanes.
   - Named callers in source: Life (Whisper and chat) and Image Studio. Dev-inbox failover and Agency HQ read its Claude budget status from loopback. Earlier notes also name QA Patrol and Spanish Studio; the supplied AI Proxy pages do not confirm them.
   - dev-inbox has an optional API lane, off by default.
 - **CLI lane.**
-  - [Struct](/repos/jeffrey-keyser-struct/architecture/) wraps a local agent CLI to return schema-validated JSON. It is internal only, on port 3032. Logos, Life, Feedback Registry triage and Spanish Studio use it. Logos confirms its calls to Struct in source. Life sends its structuring prompts, and its synopsis, edge-explanation and insight calls, to Struct through `STRUCT_URL` ([Life services and dependencies](/repos/jeffrey-keyser-life/services-and-dependencies/)).
+  - [Struct](/repos/jeffrey-keyser-struct/architecture/) wraps a local agent CLI to return schema-validated JSON. It is internal only, on port 3032. Logos, Life, Feedback Registry triage and Spanish Studio use it. Logos confirms its calls to Struct in source. Life sends its structuring prompts, and its synopsis, edge-explanation and insight calls, to Struct through `STRUCT_URL` ([Life services and dependencies](/repos/jeffrey-keyser-life/services-and-dependencies/), [Life architecture](/repos/jeffrey-keyser-life/architecture/)).
   - dev-inbox and NanoClaw run agent CLIs directly.
   - Logos sends free-form calls, such as extraction fallback, to native Codex, Copilot or Gemini CLIs, trying each provider in order.
 
@@ -236,7 +236,7 @@ Logos also stores project contexts, such as product intent for Beelink Steward.
 
 **Prompts** live in [Prompt Registry](/repos/jeffrey-keyser-prompt-registry/home/), a versioned key-value store. Logos, Struct templates, Agency HQ personas, Passthrough actions and OpenClaw Bridge read from it.
 
-**Credentials** live in [Solo Vault](/repos/jeffrey-keyser-solo-vault/home/). It encrypts secrets and serves them to services at deploy or boot time, using scoped API keys. On-host services prefer its loopback address. This page deliberately lists no secret names, paths or values.
+**Credentials** live in [Solo Vault](/repos/jeffrey-keyser-solo-vault/home/). It encrypts secrets and serves them to services at deploy or boot time, using scoped API keys. On-host services prefer its loopback address. Its [architecture guide](/repos/jeffrey-keyser-solo-vault/architecture/) documents API-key authorization by project and environment scope, rotation policies with 5-field cron schedules, a rotation scheduler that checks every 60 seconds and skips duplicate runs within two minutes, webhook delivery signed with HMAC-SHA256 with up to three attempts, and an expiry check that routes alerts to NanoClaw. The supplied excerpts show no caller for the webhook delivery module. This page deliberately lists no secret names, paths, salts or values.
 
 ## Operations at a glance
 
@@ -263,6 +263,7 @@ The AWS Terraform repos remain as legacy reference.
 - *Where should an AI call go?* → [AI Proxy](/repos/jeffrey-keyser-ai-proxy/home/) or [Struct](/repos/jeffrey-keyser-struct/home/)
 - *Why isn't the assistant replying on Telegram?* → [NanoClaw operations](/repos/jeffrey-keyser-nanoclaw/operations/)
 - *How does knowledge get into Logos?* → [Logos home](/repos/jeffrey-keyser-logos/home/)
+- *How do credential rotation and expiry alerts work?* → [Solo Vault architecture](/repos/jeffrey-keyser-solo-vault/architecture/)
 - *What does a term mean?* → each repo's glossary, for example [dev-inbox glossary](/repos/jeffrey-keyser-dev-inbox/glossary/)
 
 ## Keeping this map current
@@ -284,7 +285,7 @@ This directory covers **69 repositories**, including **33 complete six-page wiki
 | [feedback-registry](https://github.com/Jeffrey-Keyser/feedback-registry) | Collects user bug reports and feature requests, auto-triages them and creates linked GitHub issues. | documented | [Overview](/repos/jeffrey-keyser-feedback-registry/home/) · [Architecture](/repos/jeffrey-keyser-feedback-registry/architecture/) · [Workflow](/repos/jeffrey-keyser-feedback-registry/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-feedback-registry/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-feedback-registry/operations/) · [Glossary](/repos/jeffrey-keyser-feedback-registry/glossary/) |
 | [pay](https://github.com/Jeffrey-Keyser/pay) | Central authentication and payment backend providing JWT identity, guest login and Stripe processing. | documented | [Overview](/repos/jeffrey-keyser-pay/home/) · [Architecture](/repos/jeffrey-keyser-pay/architecture/) · [Workflow](/repos/jeffrey-keyser-pay/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-pay/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-pay/operations/) · [Glossary](/repos/jeffrey-keyser-pay/glossary/) |
 | [qa-patrol](https://github.com/Jeffrey-Keyser/qa-patrol) | QA-as-a-Service running Playwright workflow steps against apps and returning evidence-backed reports. | documented | [Overview](/repos/jeffrey-keyser-qa-patrol/home/) · [Architecture](/repos/jeffrey-keyser-qa-patrol/architecture/) · [Workflow](/repos/jeffrey-keyser-qa-patrol/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-qa-patrol/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-qa-patrol/operations/) · [Glossary](/repos/jeffrey-keyser-qa-patrol/glossary/) |
-| [solo-vault](https://github.com/Jeffrey-Keyser/solo-vault) | Self-hosted secrets service storing encrypted credentials behind scoped API keys, with a CLI. | documented | [Overview](/repos/jeffrey-keyser-solo-vault/home/) · [Architecture](/repos/jeffrey-keyser-solo-vault/architecture/) · [Workflow](/repos/jeffrey-keyser-solo-vault/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-solo-vault/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-solo-vault/operations/) · [Glossary](/repos/jeffrey-keyser-solo-vault/glossary/) |
+| [solo-vault](https://github.com/Jeffrey-Keyser/solo-vault) | Self-hosted secrets service storing encrypted credentials behind scoped API keys, with rotation policies on 5-field cron schedules, a rotation scheduler, expiry alerts, HMAC-signed webhook delivery module and a CLI. | documented | [Overview](/repos/jeffrey-keyser-solo-vault/home/) · [Architecture](/repos/jeffrey-keyser-solo-vault/architecture/) · [Workflow](/repos/jeffrey-keyser-solo-vault/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-solo-vault/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-solo-vault/operations/) · [Glossary](/repos/jeffrey-keyser-solo-vault/glossary/) |
 | [struct](https://github.com/Jeffrey-Keyser/struct) | Internal structured-completion service wrapping a local agent CLI to return schema-validated JSON; reads dispatch configuration from Agency HQ when AGENCY_HQ_URL is set. | documented | [Overview](/repos/jeffrey-keyser-struct/home/) · [Architecture](/repos/jeffrey-keyser-struct/architecture/) · [Workflow](/repos/jeffrey-keyser-struct/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-struct/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-struct/operations/) · [Glossary](/repos/jeffrey-keyser-struct/glossary/) |
 | [Switchboard](https://github.com/Jeffrey-Keyser/Switchboard) | Feature flag and typed configuration service with an Express API, admin UI and client SDK; documented as a systemd service behind Cloudflare Tunnel, with no confirmed consuming applications in source. | documented | [Overview](/repos/jeffrey-keyser-switchboard/home/) · [Architecture](/repos/jeffrey-keyser-switchboard/architecture/) · [Workflow](/repos/jeffrey-keyser-switchboard/iteration-loop/) · [Dependencies](/repos/jeffrey-keyser-switchboard/services-and-dependencies/) · [Operations](/repos/jeffrey-keyser-switchboard/operations/) · [Glossary](/repos/jeffrey-keyser-switchboard/glossary/) |
 

@@ -1241,7 +1241,7 @@
     {
       "repo": "Jeffrey-Keyser/solo-vault",
       "group": "platform",
-      "summary": "Self-hosted secrets service storing encrypted credentials behind scoped API keys, with a CLI.",
+      "summary": "Self-hosted secrets service storing encrypted credentials behind scoped API keys, with rotation policies on 5-field cron schedules, a rotation scheduler, expiry alerts, HMAC-signed webhook delivery module and a CLI.",
       "state": "documented",
       "pages": [
         {
