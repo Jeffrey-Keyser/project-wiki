@@ -30,6 +30,22 @@
         {
           "label": "Glossary",
           "url": "/repos/jeffrey-keyser-agency-hq/glossary/"
+        },
+        {
+          "label": "Projects Guide",
+          "url": "/repos/jeffrey-keyser-agency-hq/projects-guide/"
+        },
+        {
+          "label": "Projects Troubleshooting",
+          "url": "/repos/jeffrey-keyser-agency-hq/projects-troubleshooting/"
+        },
+        {
+          "label": "Reconciliation Lifecycle",
+          "url": "/repos/jeffrey-keyser-agency-hq/reconciliation-lifecycle/"
+        },
+        {
+          "label": "Requirements and Acceptance",
+          "url": "/repos/jeffrey-keyser-agency-hq/requirements-and-acceptance/"
         }
       ],
       "fullGuide": true
