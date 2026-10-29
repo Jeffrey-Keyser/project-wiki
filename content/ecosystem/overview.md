@@ -134,7 +134,7 @@ Subscribers do the actual work:
 
 - [OpenClaw Bridge](/repos/jeffrey-keyser-openclaw-bridge/architecture/) runs handlers for cron alerts, Ping events, briefings, Flights, Spanish lessons, Agency decisions and Cream City Web.
 - Business HQ, Logos, QA Patrol, Feedback Registry and NanoClaw bind their own keys.
-- [Agency HQ](/repos/jeffrey-keyser-agency-hq/architecture/) binds queue `agency-hq.logos-proposal-cards` to `logos.proposal.created` and sends one Telegram approve or reject card per proposal. If enrichment from the Logos API fails, the card is still sent with the event fields.
+- [Agency HQ](/repos/jeffrey-keyser-agency-hq/architecture/) binds queue `agency-hq.logos-proposal-cards` to `logos.proposal.created` and sends one Telegram approve or reject card per proposal. If enrichment from the Logos API fails, the card is still sent with the event fields. Its orchestration, heartbeat, ops-events, probe-failed, runstream and project-reconciliation consumers register after the broker connects, and a failed connect logs and reconnects.
 
 The bridge's routing defaults to NanoClaw. NanoClaw delivery is gated by a configuration flag.
 
@@ -162,7 +162,11 @@ flowchart TD
 
 **Agency HQ decides; dev-inbox executes.**
 
-[Agency HQ](/repos/jeffrey-keyser-agency-hq/home/) is the strategic and supervisory layer. It is in a product reset centred on Runs and Topology views and a small supervised control plane for proposals, decisions, dev-inbox dispatch and outcome reporting. Its older dashboard, Kanban, sprint, meeting, CEO-agent, persona and memory mechanisms are legacy surfaces under audit, not parity requirements. Its dispatcher runs admission gates and then spawns dev-inbox's manager script, and a result watcher reconciles plan, result and review files into task status ([Agency HQ architecture](/repos/jeffrey-keyser-agency-hq/architecture/)).
+[Agency HQ](/repos/jeffrey-keyser-agency-hq/home/) is the strategic and supervisory layer. It is in a product reset centred on Runs and Topology views and a small supervised control plane for proposals, decisions, dev-inbox dispatch and outcome reporting. Its older dashboard, Kanban, sprint, meeting, CEO-agent, persona and memory mechanisms are legacy surfaces under audit, not parity requirements. Its dispatcher runs admission gates and then spawns dev-inbox's manager script, and a result watcher reconciles plan, result and review files into task status. Startup attests the release and holds a singleton session before admitting work, and project acceptance scripts run in clean shared clones at bound commit SHAs with a minimal environment and secret redaction ([Agency HQ architecture](/repos/jeffrey-keyser-agency-hq/architecture/)).
+
+Governed completion resolves the implementation repository for each task. A plan whose tasks span several governed repositories still needs the policy sign-off, and each task's verified and reviewed commit must be merged in the repository where it was implemented ([Agency HQ architecture](/repos/jeffrey-keyser-agency-hq/architecture/)).
+
+An outside-finding intake CLI reads one authored GitHub issue at a time into a local findings directory and records assessor decisions. It is not a running service, and GitHub polling and automatic semantic assessment are not implemented ([Agency HQ architecture](/repos/jeffrey-keyser-agency-hq/architecture/)).
 
 [dev-inbox](/repos/jeffrey-keyser-dev-inbox/architecture/) moves each run through these steps:
 
