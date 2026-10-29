@@ -39,6 +39,7 @@ export function parseBatchJson(text){
  return data;
 }
 const RESULT_ERROR_CODES=new Set(['model-output-token-limit','incomplete-model-output','empty-model-output','invalid-result-json','invalid-result-shape','invalid-global-result-shape','global-narrative-too-short','global-frontmatter-missing','global-diagram-count','global-generated-directory-present','curated-content-changed','active-content','active-mermaid-content','credential-literal','invalid-review-result-shape','opus-review-rejected','batch-errored','batch-canceled','batch-expired']);
+const PUBLISH_ERROR_CODES=new Set(['wiki-render-failed','broken-internal-link','broken-internal-anchor','invalid-exported-diagram','invalid-link-protocol','invalid-publish-path']);
 function resultErrorCode(error){return RESULT_ERROR_CODES.has(error?.message)?error.message:'result-validation-failed';}
 export function repoFiles(job,pages,text){
  if(docHash(pages)!==job.docsHash)throw Error('stale-document-base');
@@ -209,7 +210,18 @@ export class WikiWorker{
      this.store.patch(job.id,{hash:digest([job.snapshot.hash,roles(catalog)])});
     }
    }catch{this.store.patch(job.id,{state:'stale',error:'source-or-document-guard'});continue;}
-   const result=await this.publisher.publish(files,[job.id]);
+   let result;
+   try{result=await this.publisher.publish(files,[job.id]);}
+   catch(error){
+    // A saved intent means the commit exists and recover() must retry it.
+    if(this.store.get('publish-intent'))throw error;
+    // Build, render, or link-check failures happen before any intent; retrying
+    // the same output would fail forever and starve every later tick step.
+    const code=PUBLISH_ERROR_CODES.has(error?.message)?error.message:'render-or-link-check-failed';
+    this.store.patch(job.id,{state:'failed',error:code});
+    this.store.set('last-publish-error',{at:new Date(this.clock()).toISOString(),jobId:job.id,kind:job.kind,code});
+    continue;
+   }
    if(result?.superseded)this.store.patch(job.id,{state:'stale',error:'publication-superseded'});
    else this.complete([job.id],result.sha);
    this.store.set('publish-intent',null);
@@ -221,7 +233,12 @@ export class WikiWorker{
   if(recovered){if(recovered.superseded)for(const id of recovered.jobs)this.store.patch(id,{state:'stale',error:'publication-superseded'});else this.complete(recovered.jobs,recovered.sha);this.store.set('publish-intent',null);}
   await this.publisher.sync();
   try{await this.poll();this.store.set('poll-error',null);}catch{this.store.set('poll-error',{at:new Date(this.clock()).toISOString(),code:'proxy-poll-failed'});}
-  await this.apply();
+  try{await this.apply();this.store.set('apply-error',null);}
+  catch(error){
+   // A pending intent is retried by recover() first on the next tick.
+   if(this.store.get('publish-intent'))throw error;
+   this.store.set('apply-error',{at:new Date(this.clock()).toISOString(),code:'apply-failed'});
+  }
   const now=this.clock();
   if(now>=this.store.get('next-source-check',0)){
    await this.publisher.sync();const snapshot=await sourceSnapshot(this.publisher.checkout,this.fetcher);
