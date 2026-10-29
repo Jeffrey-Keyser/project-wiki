@@ -59,7 +59,19 @@ The last delivery attempt per handler name, recorded on each forward ([src/servi
 
 ### Loopback-only email routes
 
-The `/email` routes require a loopback socket and a local host header. Public tunnel traffic must not reach them ([src/index.js:L265-L287](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L265-L287)).
+The `/email` proxy routes require a loopback socket and a local host header. Public tunnel traffic must not reach them ([src/index.js:L265-L287](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/index.js#L265-L287)). This is separate from `/email/inbound`, which is a public route.
+
+### Public edge gate
+
+Middleware in `src/publicEdge.js`. A request is tunnel traffic when it has `CF-Ray` or `CF-Connecting-IP` headers, or a public `Host`. Tunnel traffic reaches only an exact list of webhook and health routes. Every other route returns 404 ([src/publicEdge.js @ 9e9b630e](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/9e9b630e3a0a58bb36de7556f272c792165adb94/src/publicEdge.js)).
+
+### Twilio signature validation
+
+The check that every `/twilio/*` webhook passes before its handler runs. It validates `X-Twilio-Signature` against `TWILIO_AUTH_TOKEN` and fails closed with 503 when the token is unset ([src/handlers/twilio.js @ 9e9b630e](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/9e9b630e3a0a58bb36de7556f272c792165adb94/src/handlers/twilio.js)).
+
+### Untrusted block
+
+Text from an outside sender (contact form fields, email body, SMS body). The bridge puts it in the agent instruction as quoted data, inside a fence longer than any backtick run in the text. Such text is never placed into SQL or shell commands ([src/services/untrusted.js @ 9e9b630e](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/9e9b630e3a0a58bb36de7556f272c792165adb94/src/services/untrusted.js)).
 
 ### Dev inbox
 
