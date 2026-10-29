@@ -78,9 +78,13 @@ The upstream `HttpClient` retries with exponential backoff ([src/server/services
 
 ### Token validation
 
-`TokenValidator` calls `${payUrl}` plus a ping endpoint, which defaults to `/auth/ping`. It then decodes the JWT to build the user object ([src/server/services/token-validator.ts:L15-L163](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/services/token-validator.ts#L15-L163)).
+Two token validators live in `src/server/services/`. Both confirm a bearer token against Pay's protected `/auth/me` endpoint and take the user identity from that response. Neither takes it from the JWT payload, which is unverified. A `/auth/ping` 200 is not enough to establish identity ([src/server/services/token-validator.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/src/server/services/token-validator.ts), [src/server/services/token-validation-service.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/src/server/services/token-validation-service.ts)).
 
-The `auth-middleware.ts` source is not in this snapshot. Which validator the middleware actually wires in is therefore unverified.
+- `TokenValidator` requests `${payUrl}` plus `/auth/me` by default. A non-OK response is rejected. A 200 is accepted only if its body parses as a profile, so a `pong` or malformed body fails with `Invalid profile response`.
+- `TokenValidationService` applies the same rule and caches its results. Its cache key is a SHA-256 digest of the full token, not a prefix and suffix of it ([src/server/services/token-validation-service.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/src/server/services/token-validation-service.ts)).
+- Both use `userFromProfile`, moved into `src/server/utils/profile-user.ts` so that the default middleware and both validators share one parser ([src/server/utils/profile-user.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/src/server/utils/profile-user.ts)). It accepts only a `success: true` envelope whose `data` (or legacy `result`) object has a string or finite-number `id`, a non-empty `email`, and a string `role`. `roles` and `permissions`, if present, must be string arrays.
+
+The changeset in this release says the default `setupPayAuth` / `authMiddleware` gate has validated through `/auth/me` since 6.10.2. Consumers still on 6.10.1 or earlier trust forged token claims and should upgrade ([.changeset/validators-use-profile-identity.md](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/.changeset/validators-use-profile-identity.md)). The merged PR notes that neither validator class is imported by the gate or exported through the package `exports` map.
 
 ## Client (`./client`)
 
@@ -93,7 +97,7 @@ The `auth-middleware.ts` source is not in this snapshot. Which validator the mid
 - `AuthOperations` and `UserOperations`
 - an `AuthStateMachine`
 
-Its HTTP client refreshes the access token automatically when it receives a 401. The refresh token lives in an httpOnly cookie, not in client storage ([src/client/pay-auth.ts:L313-L353](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/pay-auth.ts#L313-L353)).
+Its HTTP client refreshes the access token automatically when it receives a 401. The refresh token lives in an httpOnly cookie, not in client storage ([src/client/pay-auth.ts:L313-L353](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/pay-auth.ts#L313-L353)). A request that is still 401 after a successful refresh returns that 401 and does not retry again ([src/core/http/fetch-http-client.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/src/core/http/fetch-http-client.ts)).
 
 Default endpoint paths are defined in `ConfigurationManager` ([src/client/services/configuration-manager.ts:L38-L63](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/services/configuration-manager.ts#L38-L63)).
 
