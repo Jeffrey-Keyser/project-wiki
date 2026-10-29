@@ -41,6 +41,8 @@ description: "Project-specific Agency HQ terms with source citations."
 
 **External access gate.** Middleware requiring Pay admin or owner credentials for public-hostname requests ([src/app.ts:L112-L114](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/app.ts#L112-L114)).
 
+**Owner chat.** The one Telegram chat that Agency HQ accepts input from. It is `TELEGRAM_CEO_CHAT_ID` when that variable is set, and otherwise the owner chat the bot already delivers to, so the gate never fails open. The check runs right after the webhook signature check. Messages and button presses from any other chat are ignored and recorded as a webhook trace, before any classification, session or task effect ([src/lib/telegram-owner-chat.ts:L1-L12](https://github.com/Jeffrey-Keyser/agency-hq/blob/bca4e89488972ddc434582f8538d697c3718cb36/src/lib/telegram-owner-chat.ts#L1-L12), [src/routes/versions/v1/webhook-telegram.ts:L106-L121](https://github.com/Jeffrey-Keyser/agency-hq/blob/bca4e89488972ddc434582f8538d697c3718cb36/src/routes/versions/v1/webhook-telegram.ts#L106-L121)).
+
 **Acceptance workspace.** Temporary shared clones at bound SHAs where acceptance scripts run ([src/services/project-acceptance.ts:L93-L98](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/services/project-acceptance.ts#L93-L98)).
 
 **Ratchet.** An acceptance check printing its count as the last stdout line ([src/services/project-acceptance.ts:L305-L311](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/services/project-acceptance.ts#L305-L311)).
