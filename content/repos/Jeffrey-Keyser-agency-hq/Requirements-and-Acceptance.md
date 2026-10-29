@@ -5,7 +5,7 @@ description: How authoritative Logos documents, the indexed ledger, acceptance c
 
 # Requirements and acceptance checks
 
-This guide explains how the Requirements view on a project page fits together. It covers what each dimension means, how owner-governed acceptance checks change a verdict, and why a parity receipt is not always the same as sustained parity. Everything here describes deployed revision `4523d08`, observed 2026-10-29. It does not report whether any project is currently healthy. For the page itself, start from [the overview](../home/) and the [Projects guide](../projects-guide/).
+This guide explains how the Requirements view on a project page fits together. It covers what each dimension means, how owner-governed acceptance checks change a verdict, and why a parity receipt is not always the same as sustained parity. Everything here describes deployed revision `4523d08`, observed 2026-10-29, except where a later source revision is cited. It does not report whether any project is currently healthy. For the page itself, start from [the overview](../home/) and the [Projects guide](../projects-guide/).
 
 ## Four dimensions that do not collapse
 
@@ -68,7 +68,19 @@ Trend lines drop repeated values, so a flat run of the same count is shown once 
 
 An environment decides where evidence comes from. A drafted check contributes only what must be true. Environments carry an evidence strength: `simulated` is weaker than `source`, which is weaker than `deployed`. Weaker environments are dropped when a requirement's `minEvidence` is higher ([docs/project-reconciliation.md L209-L234](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L209-L234)). The environment table lists what each one provides ([L236-L247](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L236-L247)).
 
-Before a check is locked, its assertion must pass a mechanical gate with no imports, process access, network, or dynamic code. Each check then has to fail under named known-bad faults. The check locks only if every fault raises the count above the clean run ([L262-L290](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L262-L290)).
+Before a check is locked, its assertion must pass a mechanical gate with no imports, process access, network, or dynamic code. Each check then has to fail under named known-bad faults, one per distinct part of its requirement, up to sixteen. The check locks only if every fault raises the count above the clean run ([L262-L290](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L262-L290); [docs/project-reconciliation.md](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/docs/project-reconciliation.md)).
+
+### Proof controls for a currently failing existential
+
+An existential requirement ("at least one X exists") that already fails in production counts its maximum of one violation, so no fault can raise the count above the clean run. For that case only, an environment may declare named `proofControls`, each with fixed owner-authored setup (`fault`, `args`, `description`), and the requirement's manifest params must explicitly list the control name in `proofControls` ([docs/project-reconciliation.md](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/docs/project-reconciliation.md)).
+
+A proof can then name `control`. Agency first runs the assertion in a fresh world set up by the control's own fault and args (the author cannot override them) and requires a count of exactly zero. It then runs the adverse fault in a separate fresh world and requires a count greater than that zero. Unknown control names, names the requirement does not allow, and nonzero or failed controls are rejected. The actual production count, baseline, floor and pass/fail outcome are unchanged; the proof outcome records `productionClean`, `control` and the control execution separately from the control count ([src/services/project-acceptance-environments.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/src/services/project-acceptance-environments.ts), [src/types/project-acceptance.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/src/types/project-acceptance.ts)). The owner API and the drafter both reject proofs naming a control that is not allowed for the requirement ([src/services/project-acceptance-admin.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/src/services/project-acceptance-admin.ts), [src/services/project-acceptance-environment-drafting.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/src/services/project-acceptance-environment-drafting.ts)).
+
+The drafting prompt lists allowed controls only for requirements that permit them. A drafter can dry-run a control through the try endpoint by sending `{assertion, environment, control}`; the result reports mode `control`. Combining `control` with `fault` or `args` returns HTTP 400, because control setup is owner-defined ([src/services/project-acceptance-try.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/src/services/project-acceptance-try.ts)).
+
+Control definitions and the allowlist are part of the environment version only for requirements that allow controls. Requirements without controls, and unrelated environments, keep their previous versions and proof behavior ([src/services/project-acceptance-environments.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/src/services/project-acceptance-environments.ts)). `project-ecosystem-commerce` allows a control only for DONE-08, with a captured [production preflight](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/docs/operations/ecosystem-readings-done08-preflight.json) and [owner assertion](https://github.com/Jeffrey-Keyser/agency-hq/blob/8598a9473789582e2b8276e9bc7fd00a5bcb418d/docs/operations/ecosystem-readings-paying-customer.mjs); see [Architecture](../architecture/).
+
+### Declines
 
 Some requirements cannot be measured yet. The drafter declines with a typed reason, and the owner routes the decline to an action:
 
@@ -117,6 +129,7 @@ The older blanket three-receipt wording in the source document does not describe
 | Result unavailable | The harness could not measure | The product fails |
 | Census role check failing | Coverage is incomplete | A gate failure with a target |
 | Declined with measure_absent | The product does not yet record the fact | A broken check |
+| Proof against a control | The assertion counts zero in an owner-defined valid world and more under the fault | The production count or floor changed |
 | One parity receipt | Sustained only if all rows are executable | Sustained parity for judged projects |
 
 ## Worked example with placeholders
