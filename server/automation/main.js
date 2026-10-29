@@ -11,7 +11,7 @@ const root=process.env.WIKI_WORKER_STATE??path.join(os.homedir(),'.local/state/p
 const store=new Store(path.join(root,'worker.sqlite'));
 const action=process.argv[2]??'run';
 if(action==='status'){
- console.log(JSON.stringify({jobs:store.counts(),pendingBatches:store.batches().map(({id,remoteId,state})=>({id,remoteId,state})),events:store.events().length,lastSourceCheck:store.get('last-source-check'),lastSubmission:store.get('last-submission'),lastSuccessfulTick:store.get('last-successful-tick'),submitError:store.get('submit-error'),pollError:store.get('poll-error'),tickError:store.get('tick-error'),publishPending:Boolean(store.get('publish-intent'))},null,2));store.close();
+ console.log(JSON.stringify({jobs:store.counts(),pendingBatches:store.batches().map(({id,remoteId,state})=>({id,remoteId,state})),events:store.events().length,lastSourceCheck:store.get('last-source-check'),lastSubmission:store.get('last-submission'),lastSuccessfulTick:store.get('last-successful-tick'),lastResultError:store.get('last-result-error'),submitError:store.get('submit-error'),pollError:store.get('poll-error'),tickError:store.get('tick-error'),publishPending:Boolean(store.get('publish-intent'))},null,2));store.close();
 }else{
  const publisher=new Publisher({checkout:path.join(root,'checkout'),artifacts:path.join(root,'artifacts'),store});
  const client=new BatchClient({url:process.env.AI_PROXY_URL??'http://127.0.0.1:3005',key:process.env.AI_PROXY_API_KEY??''});

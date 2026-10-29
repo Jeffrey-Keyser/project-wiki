@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {Store} from '../automation/store.js';
 import {digest,buildCatalog,repoPages,safeMarkdown,sourceSnapshot,narrativeOf,globalPrompt} from '../automation/catalog.js';
-import {WikiWorker,repoFiles,selectedModel,REPOSITORY_GUIDES_BYTE_LIMIT} from '../automation/worker.js';
+import {WikiWorker,repoFiles,selectedModel,REPOSITORY_GUIDES_BYTE_LIMIT,parseBatchJson} from '../automation/worker.js';
 
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'wiki-worker-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -106,7 +106,46 @@ test('unordered partial results survive restart and never apply truncated output
  const worker=new WikiWorker({...f,client:{results:async()=>({state:'in_progress',results:[result('two')]})}});await worker.poll();
  assert.equal(f.store.job('two').state,'ready');assert.equal(f.store.job('one').state,'submitted');
  worker.client={results:async()=>({state:'ended',results:[result('one','length'),result('two')]})};await worker.poll();
- assert.equal(f.store.job('one').state,'failed');assert.equal(f.store.job('two').state,'ready');assert.equal(f.store.batches().length,0);
+ assert.equal(f.store.job('one').state,'failed');assert.equal(f.store.job('one').error,'model-output-token-limit');assert.equal(f.store.job('two').state,'ready');assert.equal(f.store.batches().length,0);
+});
+test('batch JSON accepts a whole-response fence but rejects ambiguous approvals and invalid shapes',()=>{
+ assert.deepEqual(parseBatchJson(' {"approved":true} '),{approved:true});
+ assert.deepEqual(parseBatchJson('```json\n{"approved":false,"reason":"Evidence missing"}\n```'),{approved:false,reason:'Evidence missing'});
+ assert.deepEqual(parseBatchJson('```\r\n{"approved":true}\r\n```'),{approved:true});
+ assert.throws(()=>parseBatchJson('Denied.\n```json\n{"approved":true}\n```'),/invalid-result-json/);
+ assert.throws(()=>parseBatchJson('{"approved":false}\n{"approved":true}'),/invalid-result-json/);
+ for(const raw of ['[]','null','true','"approved"'])assert.throws(()=>parseBatchJson(raw),/invalid-result-shape/);
+});
+test('fenced global drafts retain validation and the independent review boundary',async t=>{
+ const f=fixture(t),snapshot=await sourceSnapshot(f.root,f.fetcher),catalog=buildCatalog(f.root,'Repo: https://github.com/Owner/Repo\nService\n',{repositories:[]});
+ const worker=new WikiWorker({...f,client:{}});await worker.prepareGlobal(snapshot,catalog);
+ const job=f.store.jobs(['queued'])[0];
+ assert.equal(job.params.reasoning_effort,'low');assert.equal(job.params.max_tokens,24000);assert.equal(job.generationPolicy,'low-effort-json-v1');
+ await worker.prepareGlobal(snapshot,catalog);assert.equal(f.store.jobs(['queued']).length,1);
+ f.store.patch(job.id,{state:'submitted',batch:'global-batch'});f.store.saveBatch({id:'global-batch',remoteId:'remote',state:'submitted',jobs:[job.id]});
+ const response=(content)=>({state:'ended',results:[{custom_id:job.id,status:'succeeded',response:{choices:[{finish_reason:'stop',message:{content}}]}}]});
+ worker.client={results:async()=>response('```json\n'+JSON.stringify({markdown:f.original,catalogCorrections:[]})+'\n```')};
+ await worker.poll();assert.equal(f.store.job(job.id).state,'awaiting_review');assert.equal(f.publications.length,0);
+ const review=f.store.jobs(['queued'])[0];f.store.patch(review.id,{state:'submitted',batch:'review-batch'});f.store.saveBatch({id:'review-batch',remoteId:'review',state:'submitted',jobs:[review.id]});
+ worker.client={results:async()=>({state:'ended',results:[{custom_id:review.id,status:'succeeded',response:{choices:[{finish_reason:'stop',message:{content:'```json\n{"approved":false,"reason":"SECRET PROVIDER TEXT"}\n```'}}]}}]})};
+ await worker.poll();assert.equal(f.store.job(review.id).error,'opus-review-rejected');assert.equal(f.store.job(job.id).error,'opus-review-rejected');assert.equal(f.store.job(job.id).state,'failed');
+ assert.equal(f.store.get('last-result-error').code,'opus-review-rejected');assert.ok(!JSON.stringify(f.store.get('last-result-error')).includes('SECRET'));assert.equal(f.publications.length,0);
+ await worker.prepareGlobal(snapshot,catalog);assert.equal(f.store.jobs(['queued']).length,0);assert.equal(f.store.job(job.id).state,'failed');
+});
+test('fenced reviewer approval advances only its reviewed parent',async t=>{
+ const f=fixture(t);f.store.add({id:'parent',kind:'global',state:'awaiting_review'});f.store.add({id:'review',kind:'review',parent:'parent',state:'submitted',batch:'b'});f.store.saveBatch({id:'b',remoteId:'remote',state:'submitted',jobs:['review']});
+ const worker=new WikiWorker({...f,client:{results:async()=>({state:'ended',results:[{custom_id:'review',status:'succeeded',response:{choices:[{finish_reason:'stop',message:{content:'```json\n{"approved":true}\n```'}}]}}]})}});
+ await worker.poll();assert.equal(f.store.job('parent').state,'ready');assert.equal(f.store.job('review').state,'completed');assert.equal(f.publications.length,0);
+});
+test('global result failures retain stable diagnostics without storing raw output',async t=>{
+ const f=fixture(t);
+ const cases=[['truncated','length','{"markdown":"partial','model-output-token-limit'],['empty','stop',' ','empty-model-output'],['malformed','stop','SECRET PROVIDER TEXT','invalid-result-json'],['shape','stop','{"markdown":42}','invalid-global-result-shape'],['diagram','stop',JSON.stringify({markdown:f.original.replace('```mermaid','```text')}),'global-diagram-count'],['curated','stop',JSON.stringify({markdown:f.original.replace('Keep this exact.','Changed.')}),'curated-content-changed']];
+ for(const [id]of cases)f.store.add({id,kind:'global',original:f.original,state:'submitted',batch:'b'});
+ f.store.saveBatch({id:'b',remoteId:'remote',state:'submitted',jobs:cases.map(([id])=>id)});
+ const worker=new WikiWorker({...f,client:{results:async()=>({state:'ended',results:cases.map(([id,finish,content])=>({custom_id:id,status:'succeeded',response:{choices:[{finish_reason:finish,message:{content}}]}}))})}});
+ await worker.poll();
+ for(const [id,,,code]of cases){assert.equal(f.store.job(id).error,code);assert.ok(!f.store.job(id).output);}
+ assert.ok(!JSON.stringify(f.store.get('last-result-error')).includes('SECRET'));assert.equal(f.publications.length,0);
 });
 test('repository guards reject stale docs, unknown pages, active content, and curated edits',t=>{
  const f=fixture(t),pages=repoPages(f.root,'Owner/Repo'),job={repo:'Owner/Repo',docsHash:digest(pages.map(p=>[p.relativePath,p.content]))};
