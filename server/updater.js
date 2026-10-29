@@ -100,8 +100,8 @@ export function parseUpdateMessage(content) {
   };
 }
 
-export function buildPromptPayload({ repoFullName, repoDirName, update, existingPages, sourceDiff = null }) {
-  const existingPagesText = renderExistingPages(existingPages);
+export function buildPromptPayload({ repoFullName, repoDirName, update, existingPages, sourceDiff = null, existingPagesByteLimit = EXISTING_PAGES_CHAR_LIMIT }) {
+  const existingPagesText = renderExistingPages(existingPages, existingPagesByteLimit);
   return [
     `Repository: ${repoFullName}`,
     `Wiki directory: content/repos/${repoDirName}/`,
@@ -116,7 +116,7 @@ export function buildPromptPayload({ repoFullName, repoDirName, update, existing
       : 'Changed files:\n- (not provided)',
     sourceDiff ? renderSourceDiff(sourceDiff) : null,
     '',
-    `Existing wiki pages (truncated to ${EXISTING_PAGES_CHAR_LIMIT} bytes total):`,
+    `Existing wiki pages (bounded to ${existingPagesByteLimit} bytes total):`,
     existingPagesText || '(none)',
   ]
     .filter(Boolean)
@@ -769,18 +769,18 @@ function renderSourceDiff({ label, stat, patch, omitted = [], truncated }) {
   ].filter(Boolean).join('\n');
 }
 
-function renderExistingPages(pages) {
+function renderExistingPages(pages, byteLimit) {
   let total = 0;
   const parts = [];
   for (const page of pages) {
     const block = `## ${page.name}\n${page.content.trim()}\n`;
     const blockBytes = Buffer.byteLength(block, 'utf8');
-    if (total + blockBytes > EXISTING_PAGES_CHAR_LIMIT) {
-      const remaining = EXISTING_PAGES_CHAR_LIMIT - total;
+    if (total + blockBytes > byteLimit) {
+      const remaining = byteLimit - total;
       if (remaining <= 0) break;
       const truncated = truncateUtf8(block, remaining);
       parts.push(`${truncated}\n[truncated]\n`);
-      total = EXISTING_PAGES_CHAR_LIMIT;
+      total = byteLimit;
       break;
     }
     parts.push(block);

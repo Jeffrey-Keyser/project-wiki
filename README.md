@@ -194,6 +194,10 @@ The `project-wiki-worker.service` unit in `deploy/` replaces the legacy Beelink 
 
 Background generation uses AI Proxy's application-owned `/v1/batches` endpoints. Routine global updates use Haiku 5.5; structural registry/host/allowlist changes require a second batch with an Opus 5.5 approval. Repository updates resolve the existing `project-wiki-generator` central selection and accept Haiku/Opus 5.5 only. A non-Claude or unsupported selection blocks that update visibly. Interactive onboarding/reindex commands keep their immediate path. There is no background CLI or synchronous fallback. Batch results can take up to 24 hours per stage.
 
+Repository refreshes discover existing Markdown guides directly under each repository's wiki directory, including additional pages such as the Agency HQ Projects guides. The six standard pages keep their order; additional pages follow alphabetically and appear in the generated directory. Only regular `.md` files with letters, digits, hyphens or underscores in their names are included (starting with a letter or digit); symlinks, hidden files and nested directories are excluded. Duplicate case-insensitive page slugs block discovery. A complete standard guide still means all six standard pages exist, regardless of extra pages.
+
+Batch repository prompts include every discovered page in full within a 256 KiB guide budget. A repository that exceeds the budget is held before inference instead of silently omitting later pages; the event remains pending and worker status reports a refresh error. Existing-page validation, curated blocks, source/document guards and normal publication checks still apply. Onboarding creates the six standard pages; additional guides must first be authored and published before the refresh worker can maintain them. Paid refreshes remain subject to the configured allowance and submission cutoff below.
+
 Configure a private `~/.config/project-wiki-worker.env` (mode 600) on Forge:
 
 ```dotenv

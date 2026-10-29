@@ -26,7 +26,17 @@ export function repoPages(checkout,repo){
  const canonical=repo.replace('/','-').toLowerCase();
  const directory=dirs.find(d=>d.toLowerCase()===canonical)??dirs.find(d=>d.toLowerCase()===repo.split('/')[1].toLowerCase());
  if(!directory)return [];
- return PAGES.filter(([,file])=>fs.existsSync(path.join(base,directory,file))).map(([label,file,slug])=>({label,slug,path:path.join(base,directory,file),relativePath:`content/repos/${directory}/${file}`,url:`/repos/${directory.toLowerCase()}/${slug}/`,content:fs.readFileSync(path.join(base,directory,file),'utf8')}));
+ const standard=new Map(PAGES.map(([label,,slug],order)=>[slug,{label,order}]));
+ const seen=new Set();
+ const pages=fs.readdirSync(path.join(base,directory),{withFileTypes:true})
+  .filter(entry=>entry.isFile()&&/^[A-Za-z0-9][A-Za-z0-9_-]*\.md$/.test(entry.name))
+  .map(({name:file})=>{
+   const slug=file.slice(0,-3).toLowerCase();
+   if(seen.has(slug))throw Error('duplicate-guide-slug');seen.add(slug);
+   const label=standard.get(slug)?.label??file.slice(0,-3).replace(/[-_]+/g,' ');
+   return {label,slug,path:path.join(base,directory,file),relativePath:`content/repos/${directory}/${file}`,url:`/repos/${directory.toLowerCase()}/${slug}/`,content:fs.readFileSync(path.join(base,directory,file),'utf8')};
+  });
+ return pages.sort((a,b)=>(standard.get(a.slug)?.order??PAGES.length)-(standard.get(b.slug)?.order??PAGES.length)||a.slug.localeCompare(b.slug));
 }
 function cell(s){return String(s).replace(/[|\r\n]/g,' ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\[/g,'\\[').replace(/\]/g,'\\]');}
 export function buildCatalog(checkout,ecosystem,previous){
@@ -40,7 +50,7 @@ export function buildCatalog(checkout,ecosystem,previous){
   const first=entry?.body.split('\n').find(line=>line.trim()&&!/^[\w_ -]+:/.test(line))??'Registered repository; responsibility awaits documentation.';
   const state=/^status:\s*deprecated/im.test(entry?.body??'')?'deprecated':/^status:\s*legacy/im.test(entry?.body??'')?'legacy':/not yet built/i.test(entry?.body??'')?'planned':prior?.state??'documented';
   const pages=repoPages(checkout,repo);
-  return {repo,group:prior?.group??'unclassified',summary:prior?.summary??redact(first).slice(0,220),state,pages:pages.map(p=>({label:p.label,url:p.url})),fullGuide:pages.length===6};
+  return {repo,group:prior?.group??'unclassified',summary:prior?.summary??redact(first).slice(0,220),state,pages:pages.map(p=>({label:p.label,url:p.url})),fullGuide:PAGES.every(([, ,slug])=>pages.some(page=>page.slug===slug))};
  });
  return {version:1,repositories};
 }

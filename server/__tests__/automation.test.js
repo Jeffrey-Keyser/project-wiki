@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {Store} from '../automation/store.js';
 import {digest,buildCatalog,repoPages,safeMarkdown,sourceSnapshot,narrativeOf,globalPrompt} from '../automation/catalog.js';
-import {WikiWorker,repoFiles,selectedModel} from '../automation/worker.js';
+import {WikiWorker,repoFiles,selectedModel,REPOSITORY_GUIDES_BYTE_LIMIT} from '../automation/worker.js';
 
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'wiki-worker-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -31,6 +31,52 @@ test('catalog prefers canonical pages and includes registry repositories without
  assert.equal(c.repositories.length,3);assert.equal(c.repositories.find(x=>x.repo==='Owner/Repo').pages.length,6);
  assert.ok(c.repositories.find(x=>x.repo==='Owner/Repo').pages[0].url.includes('owner-repo'));
  assert.equal(c.repositories.find(x=>x.repo==='Owner/Other').state,'planned');
+});
+test('additional repository guides are discovered safely and retain standard guide completeness',t=>{
+ const f=fixture(t);
+ for(const name of ['Projects-Guide','Reconciliation-Lifecycle','Requirements-and-Acceptance','Projects-Troubleshooting'])f.write(`content/repos/Owner-Repo/${name}.md`,'---\ntitle: Guide\n---\n\nGuide content.');
+ for(const name of ['.hidden.md','_draft.md','bad name.md','Other.mdx','nested/Nested.md'])f.write('content/repos/Owner-Repo/'+name,'Not a refresh guide');
+ f.write('outside.md','Must not be read through a symlink');
+ fs.symlinkSync(path.join(f.root,'outside.md'),path.join(f.root,'content/repos/Owner-Repo/Outside.md'));
+ const pages=repoPages(f.root,'Owner/Repo');
+ assert.deepEqual(pages.map(p=>p.slug),['home','architecture','iteration-loop','services-and-dependencies','operations','glossary','projects-guide','projects-troubleshooting','reconciliation-lifecycle','requirements-and-acceptance']);
+ assert.equal(pages[6].label,'Projects Guide');
+ assert.equal(pages[9].url,'/repos/owner-repo/requirements-and-acceptance/');
+ const catalog=()=>buildCatalog(f.root,'Repo: https://github.com/Owner/Repo\nService\n',{repositories:[]}).repositories.find(r=>r.repo==='Owner/Repo');
+ assert.equal(catalog().pages.length,10);assert.equal(catalog().fullGuide,true);
+ fs.unlinkSync(path.join(f.root,'content/repos/Owner-Repo/Glossary.md'));
+ assert.equal(catalog().fullGuide,false);
+});
+test('duplicate case-insensitive repository guide slugs fail closed',t=>{
+ const f=fixture(t);f.write('content/repos/Owner-Repo/home.md','Ambiguous duplicate');
+ assert.throws(()=>repoPages(f.root,'Owner/Repo'),/duplicate-guide-slug/);
+});
+test('repository batch prompts and guards include all additional guides beyond the legacy prompt cap',async t=>{
+ const f=fixture(t),extra=['Projects-Guide','Projects-Troubleshooting','Reconciliation-Lifecycle','Requirements-and-Acceptance'];
+ const content='---\ntitle: Guide\n---\n\n## Architecture\n\n'+'Source-supported content. '.repeat(500);
+ for(const page of repoPages(f.root,'Owner/Repo'))f.write(page.relativePath,content);
+ for(const name of extra)f.write(`content/repos/Owner-Repo/${name}.md`,content+`\nComplete ending for ${name}.\n`);
+ f.store.event('Owner/Repo',{sha:'b'.repeat(40),title:'Requirements behavior changed',files:[{path:'src/requirements.ts'}]},1);
+ const worker=new WikiWorker({...f,env:{...f.env,PROJECT_WIKI_MODEL_SOURCE:'env',PROJECT_WIKI_GENERATOR_PROVIDER:'claude',PROJECT_WIKI_GENERATOR_MODEL:'haiku'},client:{},sourceDiff:async()=>({label:'old..new',patch:'diff --git a/src/requirements.ts b/src/requirements.ts\n+new behavior',stat:'src/requirements.ts | 1 +'} )});
+ worker.head=async()=> 'b'.repeat(40);
+ await worker.prepareRepo(f.store.events()[0]);
+ const job=f.store.jobs(['queued'])[0],pages=repoPages(f.root,'Owner/Repo'),prompt=job.params.messages.at(-1).content;
+ assert.ok(Buffer.byteLength(prompt)>50*1024);
+ assert.ok(prompt.includes(`bounded to ${REPOSITORY_GUIDES_BYTE_LIMIT} bytes`));
+ for(const name of extra){assert.ok(prompt.includes('## '+name+'.md'));assert.ok(prompt.includes('Complete ending for '+name+'.'));}
+ assert.ok(!prompt.includes('[truncated]'));
+ const output=JSON.stringify({pages:pages.filter(p=>extra.some(name=>name.toLowerCase()===p.slug)).map(p=>({page_slug:p.slug,content:p.content+'\nUpdated from the source diff.\n'}))});
+ assert.equal(Object.keys(repoFiles(job,pages,output)).length,4);
+ f.write('content/repos/Owner-Repo/Projects-Guide.md',content+'Concurrent owner edit.');
+ assert.throws(()=>repoFiles(job,repoPages(f.root,'Owner/Repo'),output),/stale-document-base/);
+});
+test('oversized repository guides stay pending without source fetches or model jobs',async t=>{
+ const f=fixture(t);f.write('content/repos/Owner-Repo/Projects-Guide.md','x'.repeat(REPOSITORY_GUIDES_BYTE_LIMIT));
+ f.store.event('Owner/Repo',{sha:'b'.repeat(40),files:[]},1);
+ let fetched=false;
+ const worker=new WikiWorker({...f,client:{},sourceDiff:async()=>{fetched=true;}});
+ await assert.rejects(worker.prepareRepo(f.store.events()[0]),/repository-guides-exceed-context-budget/);
+ assert.equal(fetched,false);assert.equal(f.store.jobs(['queued']).length,0);assert.equal(f.store.events().length,1);
 });
 test('source hashing excludes generated global/home output and detects changed guide input',async t=>{
  const f=fixture(t);const a=await sourceSnapshot(f.root,f.fetcher);
