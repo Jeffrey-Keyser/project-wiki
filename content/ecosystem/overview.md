@@ -10,7 +10,7 @@ The self-hosted core of the ecosystem lives on **two small Linux boxes with sepa
 
 Around those two hosts sit a set of shared npm building blocks and a few cross-cutting services: Pay for identity, Solo Vault for credentials, Prompt Registry for prompts, AI Proxy and Struct for model inference, and Logos for knowledge.
 
-> **Snapshot: 29 October 2026.** Based on the ecosystem registry and the current host reference, plus repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox and Ping, and the Agency HQ architecture guide. Agency HQ's curated Projects notes cite deployed revision 4523d08, observed on 2026-10-29.
+> **Snapshot: 29 October 2026.** Based on the ecosystem registry and the current host reference, plus repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox, Ping and the Ping architecture guide. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
 
 ## The big picture
 
@@ -138,7 +138,7 @@ Subscribers do the actual work:
 - Business HQ, Logos, QA Patrol, Feedback Registry and NanoClaw bind their own keys.
 - [Agency HQ](/repos/jeffrey-keyser-agency-hq/architecture/) binds queue `agency-hq.logos-proposal-cards` to `logos.proposal.created` and sends one Telegram approve or reject card per proposal. If enrichment from the Logos API fails, the card is still sent with the event fields. Its orchestration, heartbeat, ops-events, probe-failed, runstream and project-reconciliation consumers register after the broker connects, and a failed connect logs and reconnects.
 
-Ping's own RabbitMQ publisher is currently inactive. Its `EventPublisher` keeps its interface, but publishing methods resolve without connecting to RabbitMQ or sending messages, so no arrive or depart events are emitted from Ping today ([Ping architecture](/repos/jeffrey-keyser-ping/architecture/)). Ping's other background work is local: a dwell worker confirms pending arrivals before a visit is created, and when VAPID keys are configured a capture-attention worker sends web push alerts for automatic collection sources that need attention, at most once per episode.
+Ping's own RabbitMQ publisher is currently inactive. Its `EventPublisher` keeps its interface, but publishing methods resolve without connecting to RabbitMQ or sending messages, so no arrive or depart events are emitted from Ping today ([Ping architecture](/repos/jeffrey-keyser-ping/architecture/)). Ping's other background work is local: a dwell worker confirms pending arrivals before a visit is created, and when VAPID keys are configured a capture-attention worker sends web push alerts for automatic collection sources that need attention, at most once per episode. A push endpoint that answers 404 or 410 has its subscription removed, and an episode whose send did not succeed is retried on the next check ([Ping architecture](/repos/jeffrey-keyser-ping/architecture/)).
 
 The bridge's routing defaults to NanoClaw. NanoClaw delivery is gated by a configuration flag.
 
@@ -236,6 +236,7 @@ Logos also stores project contexts, such as product intent for Beelink Steward.
 - **Homelab** holds the host setup, ingress config and the Forge bootstrap.
 - **Beelink Backup** runs a weekly encrypted off-site backup, triggered by Cron Service.
 - **QA Patrol** runs Playwright checks against apps.
+- **Clipboard buffer** is a single-slot copy site run by dev-inbox on Forge (port 3053). The current host reference places it on Forge; the older registry entry placed it on Beelink. It is served publicly through Cloudflare Tunnel, and its buffer is readable by anyone with the hostname, so do not push secrets through it without Cloudflare Access in front ([dev-inbox](https://github.com/Jeffrey-Keyser/dev-inbox)).
 - **Analytics Pulse** is a privacy-focused web analytics platform with a React admin client, an Express 5 API and a tracking library. Its README lists no cookies, Do Not Track handling and hashed IP addresses. Its guides do not verify the production topology ([Analytics Pulse home](/repos/jeffrey-keyser-analytics-pulse/home/)).
 - **Switchboard** provides feature flags and typed configuration with an admin UI and client SDK. Its deployment guide documents a systemd-managed process behind Cloudflare Tunnel. The supplied pages do not confirm any consuming application ([Switchboard home](/repos/jeffrey-keyser-switchboard/home/)).
 - **[Beelink Steward](/repos/jeffrey-keyser-beelink-steward/home/)** is an advisory host-care agent. It is **not yet built**. Its units exist in the repo but are not established as installed.
