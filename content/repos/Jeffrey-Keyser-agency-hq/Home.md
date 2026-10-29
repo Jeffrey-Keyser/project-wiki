@@ -30,6 +30,17 @@ Agency HQ is an agent orchestration system, described as a "company of agents" f
 3. dev-inbox writes plan, result and review files that the result watcher reconciles into task status ([docs/execution-architecture.md:L85-L102](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/execution-architecture.md#L85-L102)).
 4. Run events are projected into `agency.run_*` tables and served to the Runs view through `/api/v1/run-analyses` ([src/dal/run-analyses.ts:L145-L178](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/dal/run-analyses.ts#L145-L178), [src/routes/dashboard/templates/runs-plan-groups.ts:L65](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/routes/dashboard/templates/runs-plan-groups.ts#L65)).
 
+<!-- curated:start -->
+## Projects documentation
+
+The Projects workspace governs a project from its Logos intent documents through requirement evidence, reconciliation, design review, implementation, and verified completion. These source-backed guides cover the deployed Agency HQ revision `4523d08`, observed on 2026-10-29.
+
+- [Projects guide](../projects-guide/) — registration, configuration, and all eight workspace tabs.
+- [Reconciliation lifecycle](../reconciliation-lifecycle/) — triggers, admissions, analysis, challenge, design publication, execution, and parity.
+- [Requirements and acceptance checks](../requirements-and-acceptance/) — indexing, verdicts, coverage, check roles, measurements, and pass history.
+- [Projects troubleshooting](../projects-troubleshooting/) — diagnose missing evidence, held runs, capacity limits, queue failures, and completion gaps.
+<!-- curated:end -->
+
 ## Wiki pages
 
 - [Architecture](../architecture/) — components, contracts and process layout.

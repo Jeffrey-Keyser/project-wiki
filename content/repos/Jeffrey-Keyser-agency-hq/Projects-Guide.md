@@ -1,0 +1,123 @@
+---
+title: Projects guide
+description: Owner walkthrough of the Agency HQ Projects workspace at deployed revision 4523d08 (observed 2026-10-29), covering registration, governed repositories, configuration, the eight workspace tabs, storyboard preview, the governing-corpus restriction, and external execution ownership.
+---
+
+# Projects guide
+
+This guide explains the owner journey through the Projects workspace as documented and implemented at deployed revision 4523d08, observed 2026-10-29. It describes what the workspace does and how to read it. It is not a statement about live project health. Agency HQ and Dev Inbox run on Forge; the user-facing wiki runs on Beelink. Examples use placeholders such as `project-example`.
+
+## Access and sign-in
+
+Open the Projects page with a Pay account whose current role is `admin`. The browser session is an encrypted, HttpOnly cookie that expires with the Pay access token, and browser writes also need the page CSRF token ([access rules](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L3-L12)). Agency checks each session against Pay and fails closed when Pay is unavailable ([session verification](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L14-L18)).
+
+Automated read-only clients do not use the browser session. They send an existing Agency HQ JWT with an allowed role ([automated callers](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L20-L23)).
+
+Two owner actions, `leave-paused` and `resubmit`, need a named verified identity. Requests without one receive HTTP 403 with `owner-identity-required` before any heartbeat, cron, admission, or scheduling mutation. Reactivate keeps its existing access rules ([identity gate](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L26-L34)).
+
+## Register a project
+
+The Projects menu registers a project. Registration persists governed repository paths and cadence in a `configured` heartbeat and keeps Cron disabled. The first distinct `logos.context.changed` event activates the project and schedules its initial run ([registration](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L36-L55)).
+
+Events for a context with no configured heartbeat fail closed. Agency never invents repository paths from a Logos event, and replayed events with the same `event_id` are ignored ([fail-closed behavior](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L51-L55)).
+
+Registration also takes an optional automatic design approval setting, which defaults to on. Re-registering without the field preserves the current setting ([approval default](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L57-L63)).
+
+## Governed repositories and Logos context
+
+Each project binds one Logos context to governed repositories, each with a name, an absolute path, and a default branch. Every run records an immutable application SHA map, and failed runs keep their SHAs and a diagnostic receipt ([failure receipts](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L130-L135)). Acceptance checks run against `git clone --shared` checkouts at those SHAs, so canonical checkouts are not modified ([checkout model](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L157-L163)).
+
+Repository and context edits affect future runs only. The Configuration panel says this directly ([configuration copy](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1126-L1126)).
+
+Requirement coverage is stored per project as `unknown`, `indexed`, `unindexed`, `stale`, or `intentionally-loopless`. Normal projects need a Dev Inbox ledger loop for their context before activation or admission. An owner can allow loopless runs, but parity receipts then stay inconclusive until an index exists. Health shows the current state and its update time ([coverage states](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L65-L74)).
+
+## Configuration, cadence, design capacity, and automatic approval
+
+The Schedule popover holds cadence, the next run time, the automatic design approval toggle, the execution owner control, and recurrence controls. The Configuration popover edits the Logos context, cadence, design capacity, repositories, the loopless allowance, and automatic approval ([controls](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1126-L1126)).
+
+Design capacity is an integer from 1 to 100, or blank to inherit the global limit. The nullable value is the shared policy for locked admission, the workspace display, and the WIP budget sent to the Go reconciler. Changing one project does not raise any other project's limit ([capacity policy](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L115-L123)). When the open-design projection is at capacity, Agency declines the trigger before invoking either reconciliation agent ([capacity decline](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L125-L128)).
+
+Automatic approval matters only for eligible designs. For an active project with it enabled, a completed, conflict-free run whose blocking proposal was published advances that proposal to accepted. With it off, the manual Telegram review card remains the path ([automatic acceptance](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L637-L647)). Turning it on scans existing eligible proposals immediately ([enable scan](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L61-L63)).
+
+Run now requests one run through the normal admission gates. Repeated operational failures pause recurrence and disable the synchronized Cron job; the default threshold is three. Inspect the retained failure receipts and the pause cause. Recovery can reactivate an operationally paused project after the design store checks clean and an exponential cooldown has elapsed (30 minutes initially by default). Automatic reactivation has a bounded budget, default three until a run completes; when it is spent, the owner must fix the cause and reactivate. An explicit owner pause is separate from this operational recovery policy ([operational failure threshold](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/services/project-reconciliation.ts#L627-L650), [automatic recovery](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/services/project-reconciliation.ts#L568-L607), [recovery budget](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/services/project-reconciliation.ts#L40-L51)).
+
+## Reading the workspace
+
+The header shows the project status, next run, design capacity as occupied over total, the parity streak as n of 3, and the last finished result. Alerts appear for an active run, a stalled admission, full capacity, or unknown capacity ([header and alerts](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1099-L1104)). The Policy panel summarizes approval mode, execution owner, cadence, and capacity ([policy panel](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1128-L1128)). Current Work sits above the tabs and is separate from them ([current work](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1130-L1130)).
+
+The eight tabs are Activity, Health, Documents, Requirements, Storyboards, Designs, Admissions, and Runs. Tabs with a number show a count, described below ([tab set](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1131-L1131)).
+
+### Activity
+
+Activity is a newest-first timeline of attention items. Each item can link to its run and evidence receipt. An empty timeline means nothing has been recorded yet ([timeline](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1083-L1085)). This tab is display only.
+
+### Health
+
+Health shows requirement coverage with its update time, Cron authority status, drift findings, and recovery receipts. Its badge is the drift count. The refresh control reloads admission history ([health pane](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1131-L1133)). Any drift finding means the stored heartbeat and observed state differ and deserve review before you trust a run.
+
+### Documents
+
+Documents lists active Logos documents with key, kind, revision, a revealable content hash, and a source link. The count is the number of active documents. The pane says documents are administered through the Logos CLI, not here, and shows a Logos unavailable badge when the source cannot be read ([documents pane](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1004-L1004)). Editing a document is a Logos workflow, not a Projects mutation.
+
+### Requirements
+
+The Requirements badge shows requirements not open over the total, computed from the satisfaction summary; read it as progress, not as a parity verdict ([count](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1092-L1096)). Requirements with at least one locked check are decided by those checks alone. Requirements without one stay model-judged and appear as judged with weak evidence ([satisfaction](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L363-L371)).
+
+Check outcomes are pass, fail, inconclusive, or unavailable. Inconclusive means measured but not decidable, and unavailable means the harness or environment could not measure. Neither is a product failure ([outcomes](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L386-L393)). Check roles are gate, census, or lead. Only a failed gate nominates an implementation target. Changing a role requires a named owner and a reason ([check roles](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L377-L397)). Creating, editing, running, or re-roling a check are all mutations on the owner API ([owner API](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L547-L564)).
+
+Target selection is where discovery starts, not a fence. A target can be deferred by explicit unresolved `blocked_on` requirement IDs or a typed, verified runtime-binding problem tied to that requirement, and the row then shows as blocked rather than failed ([target deferral](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-target-selection.md#L14-L25)). If every remaining target is deferred, neither expensive agent runs and the server records a typed target-evidence-blocked wait ([no eligible target](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-target-selection.md#L43-L51)).
+
+### Storyboards
+
+The Storyboards tab lists published storyboards with the fixed Image Studio version link, digest, Logos document ID and revision, linked requirement IDs, and the latest conformance verdict with its observed commit ([storyboard rows](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1248-L1248)). A storyboard with no conformance run shows UI evidence pending.
+
+Preview takes a storyboard UUID, a version, and a sha256 digest, then shows the exact body. The Publish button stays disabled until the preview matches the current form values. Editing any field clears the preview ([preview gating](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1237-L1247)). Preview makes no Logos request, so it is safe even for the governing corpus ([preview scope](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/storyboard-governing-corpus.md#L16-L19)).
+
+For Agency's own governing corpus, the canonical project and context are both `project-agency-hq`. The publisher cannot create or revise documents there. The button becomes Reconcile existing receipt, which only confirms that the exact content already exists in the correct context and records a receipt. An absent or changed document returns 403, and no receipt is fabricated ([governing restriction](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/storyboard-governing-corpus.md#L8-L14)). The owner workflow is to preview, change the Logos document through the owner Logos workflow, then reconcile ([owner workflow](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/storyboard-governing-corpus.md#L18-L34)). The page copy reflects this mode ([button copy](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1136-L1136)).
+
+Unrelated registered projects keep create, update, and no-op publication ([other projects](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/storyboard-governing-corpus.md#L36-L40)). Preview responses carry the context slug and publication mode, and the page sends them back as pins. A rebound context returns 409 and requires a fresh preview. Pins restrict but never authorize ([accepted-preview binding](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/storyboard-governing-corpus.md#L44-L56)).
+
+### Designs
+
+Designs lists proposals newest first. Each card shows status, blocking or non-blocking, design capacity (slot occupied, no slot, or not verified), last review, the owner action text, supporting documents, and a canonical link once published ([design cards](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1081-L1081)). The owner action text depends on execution owner, the automatic approval setting, and publication state ([owner action](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1054-L1061)). A staged badge means the design is local only and has no canonical link yet. The count is the number of design records ([count](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1087-L1087)).
+
+Design controls for external execution (claim, completion receipt, pause, reject, transfer) are mutations and appear only when the design's state allows them. See the execution ownership section below.
+
+### Admissions
+
+Admissions is the attempt history. The page labels its model: delivery is not admission, and admission is not execution ([admissions](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1138-L1138)). The count is the number of attempts. A latest attempt with status rejected-no-progress raises a stall alert ([stall](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1090-L1102)). An admission hold is durable and holds automatic runs after three inconclusive visits to the same cited seam or five consecutive inconclusive runs at the same binding ([no-progress hold](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L590-L599)). Recording a hold does not assert parity or resolve a conflict.
+
+### Runs
+
+Runs lists history newest first, with a Load more control ([run history](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1139-L1139)). Each run persists its phase sequence (queued, preflight, primary, challenge, materialization, then completed or failed), phase timing, correlation ID, and bounded diagnostics. It records no prompt or document bodies ([phase history](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L568-L574)). Usage and cost are shown only when the provider reported them. Missing usage means unknown, not zero ([usage](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/project-reconciliation.md#L576-L581)).
+
+## Display versus mutation
+
+Switching tabs, expanding rows, following run links, reading the Requirements summary, and viewing the storyboard body are display actions. They change nothing. The refresh buttons on Health and Admissions reload data without changing state.
+
+These controls mutate state: Run now, cadence changes, automatic approval toggles, recurrence pause and reactivate, resubmit, the Configuration form, the execution owner selector, check creation, editing, running and role changes, storyboard publish or reconcile, and every design control that writes an ownership, completion, pause, rejection, or transfer decision. Browser owner-only mutations require sign-in and CSRF; automated API callers use their authenticated Agency JWT. Some are disabled while a reconciliation run is active, such as changing execution owner ([execution owner control](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1122-L1122)).
+
+## Execution ownership
+
+`execution_owner` decides who implements a generated design. It does not change how the design is generated ([ownership](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/external-project-execution.md#L3-L6)). Existing designs keep their owner and existing work is not cancelled. An external design stays `proposed` while it is implemented, and Agency does not auto-accept it or enqueue planning for it ([external lifecycle](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/external-project-execution.md#L16-L32)).
+
+An owner can transfer an unexecuted Dev Inbox proposal to external execution. The transfer is a one-time, separate decision that does not claim or start work. The project must already be external, the design must still be proposed, and the originating run must have been admitted after durable execution fencing ([transfer rules](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/external-project-execution.md#L36-L53)). Claiming a proposal is then a separate step; there is no automatic expiry ([claims](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/external-project-execution.md#L67-L70)).
+
+To complete external work, commit to the configured repository's default branch, then submit a completion receipt with commit SHAs and test evidence. Agency verifies ancestry and records the receipt, but test evidence is an owner or executor attestation and the submitted commands are never rerun ([completion receipt](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/external-project-execution.md#L79-L115)). A pending result keeps the design's capacity occupied until recovery finishes ([pending](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/docs/operations/external-project-execution.md#L120-L123)).
+
+Pause requests preserve lifecycle and claims. They release a slot only for verified, never-dispatched native external work. Claimed or unverifiable work keeps its slot, and the interface states that execution is not confirmed stopped ([pause semantics](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/routes/dashboard/templates/projects.ts#L1125-L1125)).
+
+## Parity receipts: one or three
+
+A parity outcome means the analysis and independent challenge found no uncovered actionable mismatch. It is accepted as verified only when the requirement index and current evidence support it and no blocking design, paused unfinished work, or implemented work awaiting verification remains ([completion evidence gate](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/dal/project-reconciliation.ts#L1024-L1053)).
+
+When every indexed requirement is satisfied by an executed acceptance check at the bound corpus and application revisions, one verified parity receipt reaches sustained parity. The transition sets the displayed streak to 3 and moves the project to `awaiting-owner`. If any requirement still uses judged evidence, three agreeing verified parity receipts at the same binding are required. A changed application binding resets the streak ([implemented parity transition](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/lib/project-reconciliation-state.ts#L20-L44)).
+
+The older blanket three-receipt wording in the source document does not describe the fully executable fast path. The implementation above resolves that ambiguity. Sustained parity disables recurrence and requests an owner decision; it is a conclusion about the bound evidence, not a guarantee about every possible product behavior ([owner notification](https://github.com/Jeffrey-Keyser/agency-hq/blob/4523d08c221914ed3ae6c036d227fb64c95f2566/src/services/project-reconciliation.ts#L423-L435)).
+
+## Related guides
+
+- [Agency HQ overview](../home/) for the wider wiki home.
+- [Reconciliation lifecycle](../reconciliation-lifecycle/) for run phases, admissions, and publication.
+- [Requirements and acceptance](../requirements-and-acceptance/) for checks, roles, and parity rules.
+- [Projects troubleshooting](../projects-troubleshooting/) for stalls, pauses, and unavailable sources.
