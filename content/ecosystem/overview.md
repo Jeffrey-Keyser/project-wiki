@@ -10,7 +10,7 @@ The self-hosted core of the ecosystem lives on **two small Linux boxes with sepa
 
 Around those two hosts sit a set of shared npm building blocks and a few cross-cutting services: Pay for identity, Solo Vault for credentials, Prompt Registry for prompts, AI Proxy and Struct for model inference, and Logos for knowledge.
 
-> **Snapshot: 29 October 2026.** Based on the ecosystem registry and the current host reference, plus repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox, Ping and the Ping architecture guide. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
+> **Snapshot: 29 October 2026.** Based on the ecosystem registry, the current host reference, and repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox (including its [architecture guide](/repos/jeffrey-keyser-dev-inbox/architecture/)), Ping and the Ping architecture guide. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
 
 ## The big picture
 
@@ -187,7 +187,9 @@ An outside-finding intake CLI reads one authored GitHub issue at a time into a l
 
 The run manager is a shell entry point that takes a per-run lease, so a second active manager for the same run exits instead of running. Planners, scouts, workers, reviewers, prospectors and the observer run as development agent CLI sessions, started in tmux by default or as transient systemd units when configured. These are development agents on Forge, not product runtime CLIs.
 
-State and policy for planning sit in `plan-managerd`, a Go binary that is now the sole plan-manager runtime. It handles the state machine, wake routing, projection, provider selection, recovery and supervision; the older Bash plan-manager fallback has been removed. Worker and manager verification run through a task-bound verification host that accepts only list, run and status operations, and verification receipts are kept per task with the most recent actionable failure preserved ([dev-inbox architecture](/repos/jeffrey-keyser-dev-inbox/architecture/)).
+State and policy for planning sit in `plan-managerd`, a Go binary that is now the sole plan-manager runtime. It handles the state machine, wake routing, projection, provider selection, recovery and supervision; the older Bash plan-manager fallback has been removed. Worker and manager verification run through a task-bound verification host that accepts only list, run and status operations, and verification receipts are kept per task with the most recent actionable failure preserved. A receipt classified as a failure is also published beside the canonical receipt, so a later infrastructure or stale run does not erase the last actionable failure. Freshness and status read only the canonical receipt ([dev-inbox architecture](/repos/jeffrey-keyser-dev-inbox/architecture/)).
+
+Manager verification can project a plan into one task's verification request through `plan-managerd manager-verify render-plan-request`. A pinned binary that rejects that operation records a configuration-failure receipt and runs no verification commands. The elapsed-budget check for the manager's worker poll loop is answered by a `worker-budget` verdict that credits recorded verification run time, and it is consulted only after the base timeout is spent ([dev-inbox architecture](/repos/jeffrey-keyser-dev-inbox/architecture/)).
 
 Operator gates stay in front of destructive or production-sensitive actions. Queue preapproval authorizes execution only, never a merge or a production deploy.
 
