@@ -10,7 +10,7 @@ The self-hosted core of the ecosystem lives on **two small Linux boxes with sepa
 
 Around those two hosts sit a set of shared npm building blocks and a few cross-cutting services: Pay for identity, Solo Vault for credentials, Prompt Registry for prompts, AI Proxy and Struct for model inference, and Logos for knowledge.
 
-> **Snapshot: 29 October 2026.** Based on the ecosystem registry and the current host reference, plus repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy and Analytics Pulse. Agency HQ's curated Projects notes cite deployed revision 4523d08, observed on 2026-10-29.
+> **Snapshot: 29 October 2026.** Based on the ecosystem registry and the current host reference, plus repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy and Analytics Pulse, and the Agency HQ architecture guide. Agency HQ's curated Projects notes cite deployed revision 4523d08, observed on 2026-10-29.
 
 ## The big picture
 
@@ -163,6 +163,8 @@ flowchart TD
 **Agency HQ decides; dev-inbox executes.**
 
 [Agency HQ](/repos/jeffrey-keyser-agency-hq/home/) is the strategic and supervisory layer. It is in a product reset centred on Runs and Topology views and a small supervised control plane for proposals, decisions, dev-inbox dispatch and outcome reporting. Its older dashboard, Kanban, sprint, meeting, CEO-agent, persona and memory mechanisms are legacy surfaces under audit, not parity requirements. Its dispatcher runs admission gates and then spawns dev-inbox's manager script, and a result watcher reconciles plan, result and review files into task status. Startup attests the release and holds a singleton session before admitting work, and project acceptance scripts run in clean shared clones at bound commit SHAs with a minimal environment and secret redaction ([Agency HQ architecture](/repos/jeffrey-keyser-agency-hq/architecture/)).
+
+Project acceptance environments can declare owner-authored control worlds. A proof must show zero failures in a known-valid control world and more under an adverse fault in a separate fresh world before it counts, and the production measurement is still recorded separately ([Agency HQ architecture](/repos/jeffrey-keyser-agency-hq/architecture/)). For an accepted design, Agency HQ holds a merge-pending handoff for ten minutes before raising a review item, because normal terminal completion applies the policy sign-off and merges about a minute later.
 
 Governed completion resolves the implementation repository for each task. A plan whose tasks span several governed repositories still needs the policy sign-off, and each task's verified and reviewed commit must be merged in the repository where it was implemented ([Agency HQ architecture](/repos/jeffrey-keyser-agency-hq/architecture/)).
 
