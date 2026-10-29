@@ -626,7 +626,7 @@
     {
       "repo": "Jeffrey-Keyser/logos",
       "group": "knowledge",
-      "summary": "Knowledge hub ingesting URLs into reviewed themed pages and answering agent queries with citations.",
+      "summary": "Knowledge hub ingesting URLs and RSS feeds into reviewed themed pages, answering agent queries with citations, and offering bounded whole-section retrieval without synthesis.",
       "state": "documented",
       "pages": [
         {
@@ -856,7 +856,7 @@
     {
       "repo": "Jeffrey-Keyser/openclaw-bridge",
       "group": "orchestration",
-      "summary": "Event bridge whose handlers forward RabbitMQ and webhook events to NanoClaw, with legacy OpenClaw routing.",
+      "summary": "Event bridge whose handlers forward RabbitMQ and webhook events to OpenClaw, NanoClaw or both per handler target, with NanoClaw delivery gated by NANOCLAW_ENABLED and a public edge gate limiting tunnel traffic to a short allow-list.",
       "state": "documented",
       "pages": [
         {
@@ -987,7 +987,7 @@
     {
       "repo": "Jeffrey-Keyser/pay-auth-integration",
       "group": "shared",
-      "summary": "Library adding Pay-backed sign-in and payments through server proxy middleware and React components.",
+      "summary": "Library adding Pay-backed sign-in and payments through server proxy middleware and React components; the default gate validates bearer tokens against Pay /auth/me, and versions 6.10.1 and earlier should be upgraded.",
       "state": "documented",
       "pages": [
         {
@@ -1315,7 +1315,7 @@
     {
       "repo": "Jeffrey-Keyser/struct",
       "group": "platform",
-      "summary": "Internal structured-completion service wrapping a local agent CLI to return schema-validated JSON responses.",
+      "summary": "Internal structured-completion service wrapping a local agent CLI to return schema-validated JSON; reads dispatch configuration from Agency HQ when AGENCY_HQ_URL is set.",
       "state": "documented",
       "pages": [
         {
