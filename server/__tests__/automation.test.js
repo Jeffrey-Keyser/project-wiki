@@ -213,3 +213,25 @@ test('guide changes during a global batch remain dirty after its older snapshot 
  await worker.apply();assert.equal(f.store.job(job.id).state,'completed');assert.equal(f.store.get('global-checkpoint').sources['content/repos/Owner-Repo/Architecture.md'],snapshot.sources['content/repos/Owner-Repo/Architecture.md']);
  await worker.tick();const next=f.store.jobs(['queued']);assert.equal(next.length,1);assert.notEqual(next[0].id,job.id);assert.equal(next[0].snapshot.hash,newer.hash);
 });
+test('a ready job whose build or link check fails before any intent fails without wedging the tick',async t=>{
+ const f=fixture(t),pages=repoPages(f.root,'Owner/Repo');
+ f.store.add({id:'broken',kind:'repo',repo:'Owner/Repo',head:'a'.repeat(40),docsHash:digest(pages.map(p=>[p.relativePath,p.content])),eventSeq:1,state:'ready',output:'{"pages":[]}'});
+ let attempts=0;const publish=f.publisher.publish;
+ f.publisher.publish=async(files,jobs=[])=>{if(jobs.includes('broken')){attempts+=1;throw Error('broken-internal-link');}return publish(files,jobs);};
+ const worker=new WikiWorker({...f,client:{results:async()=>({state:'ended',results:[]}),submit:async()=>({id:'r',state:'in_progress'})}});
+ worker.head=async()=> 'a'.repeat(40);worker.ancestor=async()=>true;
+ await worker.tick();
+ assert.equal(f.store.job('broken').state,'failed');assert.equal(f.store.job('broken').error,'broken-internal-link');
+ assert.equal(f.store.get('last-publish-error').code,'broken-internal-link');
+ // The rest of the tick still ran: the free directory refresh published and the tick completed.
+ assert.equal(f.publications.length,1);assert.ok(f.store.get('last-successful-tick'));
+ await worker.tick();assert.equal(attempts,1);
+});
+test('a publication failure after the intent is saved stays pending for recovery',async t=>{
+ const f=fixture(t),pages=repoPages(f.root,'Owner/Repo');
+ f.store.add({id:'pending',kind:'repo',repo:'Owner/Repo',head:'a'.repeat(40),docsHash:digest(pages.map(p=>[p.relativePath,p.content])),eventSeq:1,state:'ready',output:'{"pages":[]}'});
+ f.publisher.publish=async(files,jobs=[])=>{f.store.set('publish-intent',{sha:'c'.repeat(40),jobs});throw Error('publication-not-confirmed');};
+ const worker=new WikiWorker({...f,client:{}});worker.head=async()=> 'a'.repeat(40);worker.ancestor=async()=>true;
+ await assert.rejects(worker.tick(),/publication-not-confirmed/);
+ assert.equal(f.store.job('pending').state,'ready');assert.equal(f.store.get('publish-intent').sha,'c'.repeat(40));
+});
