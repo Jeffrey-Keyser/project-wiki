@@ -8,7 +8,7 @@ import {fetchSourceDiff} from '../source-diff.js';
 import {resolveGeneratorConfig} from '../model-control.js';
 
 const ACTIVE=['queued','submitted','ready','awaiting_review'];
-const GLOBAL_GENERATION_POLICY='low-effort-json-v1';
+const GLOBAL_GENERATION_POLICY='low-effort-json-date-v2';
 export const REPOSITORY_GUIDES_BYTE_LIMIT=256*1024;
 const docHash=pages=>digest(pages.map(p=>[p.relativePath,p.content]));
 const roles=c=>digest(c.repositories.map(({repo,group,summary,state})=>({repo,group,summary,state})));
@@ -124,7 +124,7 @@ export class WikiWorker{
   const until=Date.parse(this.env.WIKI_BATCH_UNTIL??'');
   if(!Number.isFinite(until)||this.clock()>=until-(structural?86400_000:0))return;
   const original=this.read(GLOBAL),id=digest(['global',GLOBAL_GENERATION_POLICY,hash,digest(narrativeOf(original))]);
-  this.store.add({id,kind:'global',generationPolicy:GLOBAL_GENERATION_POLICY,hash,structural,snapshot:{hash:snapshot.hash,sources:snapshot.sources,structuralHash:snapshot.structuralHash},narrativeHash:digest(narrativeOf(original)),catalogRoles:roles(catalog),original:narrativeOf(original),params:{model:'claude-haiku-5-5',max_tokens:24000,reasoning_effort:'low',messages:[{role:'user',content:globalPrompt(original,catalog,snapshot,last?.sources??{})}]}});
+  this.store.add({id,kind:'global',generationPolicy:GLOBAL_GENERATION_POLICY,hash,structural,snapshot:{hash:snapshot.hash,sources:snapshot.sources,structuralHash:snapshot.structuralHash},narrativeHash:digest(narrativeOf(original)),catalogRoles:roles(catalog),original:narrativeOf(original),params:{model:'claude-haiku-5-5',max_tokens:24000,reasoning_effort:'low',messages:[{role:'user',content:globalPrompt(original,catalog,snapshot,last?.sources??{},new Date(this.clock()).toISOString())}]}});
  }
  async submit(){
   // Persist the complete request and stable key before crossing the network.

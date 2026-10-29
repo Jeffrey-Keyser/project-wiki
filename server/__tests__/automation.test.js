@@ -85,6 +85,13 @@ test('source hashing excludes generated global/home output and detects changed g
  f.write('content/repos/Owner-Repo/Architecture.md','New architecture');
  assert.notEqual((await sourceSnapshot(f.root,f.fetcher)).hash,a.hash);
 });
+test('global prompts bind snapshot dates to the current observation without changing source hashes',async t=>{
+ const f=fixture(t),snapshot=await sourceSnapshot(f.root,f.fetcher),catalog=buildCatalog(f.root,'Repo: https://github.com/Owner/Repo\nService\n',{repositories:[]});
+ const prompt=globalPrompt(f.original,catalog,snapshot,{},'2026-10-29T02:00:00Z');
+ assert.ok(prompt.startsWith('EVIDENCE OBSERVATION DATE: 2026-10-29 (UTC).'));
+ assert.ok(prompt.includes('an older date in CURRENT NARRATIVE belongs to the previous snapshot'));
+ assert.equal((await sourceSnapshot(f.root,f.fetcher)).hash,snapshot.hash);
+});
 test('durable coalescing preserves first dirty time and compare-and-delete protects newer events',t=>{
  const f=fixture(t);f.store.event('Owner/Repo',{sha:'one'},100);f.store.event('Owner/Repo',{sha:'two'},200);
  assert.equal(f.store.events()[0].dirty_at,100);f.store.clearEvent('Owner/Repo',1);assert.equal(f.store.events().length,1);
@@ -120,7 +127,7 @@ test('fenced global drafts retain validation and the independent review boundary
  const f=fixture(t),snapshot=await sourceSnapshot(f.root,f.fetcher),catalog=buildCatalog(f.root,'Repo: https://github.com/Owner/Repo\nService\n',{repositories:[]});
  const worker=new WikiWorker({...f,client:{}});await worker.prepareGlobal(snapshot,catalog);
  const job=f.store.jobs(['queued'])[0];
- assert.equal(job.params.reasoning_effort,'low');assert.equal(job.params.max_tokens,24000);assert.equal(job.generationPolicy,'low-effort-json-v1');
+ assert.equal(job.params.reasoning_effort,'low');assert.equal(job.params.max_tokens,24000);assert.equal(job.generationPolicy,'low-effort-json-date-v2');
  await worker.prepareGlobal(snapshot,catalog);assert.equal(f.store.jobs(['queued']).length,1);
  f.store.patch(job.id,{state:'submitted',batch:'global-batch'});f.store.saveBatch({id:'global-batch',remoteId:'remote',state:'submitted',jobs:[job.id]});
  const response=(content)=>({state:'ended',results:[{custom_id:job.id,status:'succeeded',response:{choices:[{finish_reason:'stop',message:{content}}]}}]});
