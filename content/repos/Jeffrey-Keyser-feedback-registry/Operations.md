@@ -17,6 +17,18 @@ From `server/`:
 
 On startup the process logs the port and environment, then listens and logs the health and API-docs URLs ([server/bin/www.ts:L18-L26](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/bin/www.ts#L18-L26)). Exit on `EADDRINUSE` or `EACCES` is explicit ([server/bin/www.ts:L40-L46](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/bin/www.ts#L40-L46)).
 
+## Container image builds
+
+The Dockerfiles that run `npm ci` against the private GitHub Packages registry receive the token as a BuildKit secret with id `github_token`, not as a build argument or a persistent `ENV`. The secret is mounted only for the `npm ci` step, so it is not meant to appear in the image config, in container environments or in `docker history` ([Dockerfile_Server](https://github.com/Jeffrey-Keyser/feedback-registry/blob/795b1222e7ce729d803824d389980e4847bedd51/Dockerfile_Server), [Dockerfile.dev.server](https://github.com/Jeffrey-Keyser/feedback-registry/blob/795b1222e7ce729d803824d389980e4847bedd51/Dockerfile.dev.server), [Dockerfile.dev.client](https://github.com/Jeffrey-Keyser/feedback-registry/blob/795b1222e7ce729d803824d389980e4847bedd51/Dockerfile.dev.client)).
+
+The production-style server image is built with a secret sourced from the environment:
+
+```sh
+GITHUB_TOKEN=... docker build --secret id=github_token,env=GITHUB_TOKEN -f Dockerfile_Server .
+```
+
+The comment that gives this command is in the Dockerfile itself ([Dockerfile_Server](https://github.com/Jeffrey-Keyser/feedback-registry/blob/795b1222e7ce729d803824d389980e4847bedd51/Dockerfile_Server)). `docker-compose.dev.yml` declares a `github_token` secret that reads the `GITHUB_TOKEN` environment variable, and attaches it to the backend and frontend dev builds ([docker-compose.dev.yml](https://github.com/Jeffrey-Keyser/feedback-registry/blob/795b1222e7ce729d803824d389980e4847bedd51/docker-compose.dev.yml)). Build secrets require BuildKit; the sources here do not show how the host Docker engine is configured.
+
 ## Configuration
 
 - `PORT` defaults to 3001 ([server/config/env.ts:L79-L80](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L79-L80)).
