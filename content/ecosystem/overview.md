@@ -10,7 +10,7 @@ The self-hosted core of the ecosystem lives on **two small Linux boxes with sepa
 
 Around those two hosts sit a set of shared npm building blocks and a few cross-cutting services: Pay for identity, Solo Vault for credentials, Prompt Registry for prompts, AI Proxy and Struct for model inference, and Logos for knowledge.
 
-> **Snapshot: 29 October 2026.** Based on the ecosystem registry, the current host reference, and repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox (including its [architecture guide](/repos/jeffrey-keyser-dev-inbox/architecture/) and [services and dependencies](/repos/jeffrey-keyser-dev-inbox/services-and-dependencies/)), Ping and the Ping architecture guide, and from the openclaw-bridge, Logos, Struct, Pay, pay-auth-integration, Insta Travel Map, Life architecture and Solo Vault architecture guides. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
+> **Snapshot: 30 October 2026.** Based on the ecosystem registry, the current host reference, and repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox (including its [architecture guide](/repos/jeffrey-keyser-dev-inbox/architecture/) and [services and dependencies](/repos/jeffrey-keyser-dev-inbox/services-and-dependencies/)), Ping and the Ping architecture guide, and from the openclaw-bridge, Logos, Struct, Pay, pay-auth-integration, Insta Travel Map, Life architecture and Solo Vault architecture guides. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
 
 ## The big picture
 
