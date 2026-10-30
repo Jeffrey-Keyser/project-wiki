@@ -38,13 +38,14 @@ Solo Vault is a deployable service, not a library. The root package is private, 
 - **Startup banner** prints version, `NODE_ENV`, `PORT`, and schema ([server/app.ts:L42-L48](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/app.ts#L42-L48)).
 - **Request log** uses the `dev` format ([server/app.ts:L70-L72](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/app.ts#L70-L72)).
 - **Errors** are logged with method and path ([server/app.ts:L129-L134](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/app.ts#L129-L134)).
-- **Audit logs** are in the database and exportable as CSV by admins ([server/routes/audit.ts:L82-L84](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/routes/audit.ts#L82-L84)). Retention defaults to 90 days ([server/config/env.ts:L108](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/config/env.ts#L108)).
+- **Audit logs** are in the database and exportable as CSV by admins ([server/routes/audit.ts:L82-L84](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/routes/audit.ts#L82-L84)). Retention defaults to 90 days ([server/config/env.ts:L108](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/config/env.ts#L108)). The audit IP is the client IP described under Rate limits below ([server/routes/secrets.ts:L7](https://github.com/Jeffrey-Keyser/solo-vault/blob/5e429e7d79ff89650f7798134fa7f32ef7c0a250/server/routes/secrets.ts#L7)).
 - No metrics or tracing appear in the excerpts. Where Lambda logs land is not configured in the excerpts.
 
 ## Rate limits
 
-- **Per-IP auth limiter**: default 20 requests per 15 minutes, with localhost at 5x ([server/middleware/rate-limit.ts:L10-L15](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/middleware/rate-limit.ts#L10-L15), [server/config/env.ts:L109-L110](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/config/env.ts#L109-L110)).
-- **Per-key write limiter**: default 60 writes per minute on `/v1/secrets` ([server/middleware/rate-limit.ts:L54-L64](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/middleware/rate-limit.ts#L54-L64), [server/config/env.ts:L111-L112](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/config/env.ts#L111-L112)).
+- **Per-client auth limiter**: default 20 requests per 15 minutes. Direct localhost callers get 5x the limit (100 by default). Tunnelled traffic does not get the localhost allowance, because its client is identified by `CF-Connecting-IP` ([server/middleware/rate-limit.ts:L15-L18](https://github.com/Jeffrey-Keyser/solo-vault/blob/5e429e7d79ff89650f7798134fa7f32ef7c0a250/server/middleware/rate-limit.ts#L15-L18), [server/config/env.ts:L109-L110](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/config/env.ts#L109-L110)).
+- **Client identity**: the key is the `CF-Connecting-IP` value when the TCP peer is loopback, which is the local cloudflared tunnel. Otherwise it is the socket address. `X-Forwarded-For` is never read. IPv6 clients are grouped by /56 ([server/utils/client-ip.ts:L26-L36](https://github.com/Jeffrey-Keyser/solo-vault/blob/5e429e7d79ff89650f7798134fa7f32ef7c0a250/server/utils/client-ip.ts#L26-L36), [server/middleware/rate-limit.ts:L23](https://github.com/Jeffrey-Keyser/solo-vault/blob/5e429e7d79ff89650f7798134fa7f32ef7c0a250/server/middleware/rate-limit.ts#L23)).
+- **Per-key write limiter**: default 60 writes per minute on `/v1/secrets`. It is keyed by API key ID, with the client IP as fallback ([server/middleware/rate-limit.ts:L54-L64](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/middleware/rate-limit.ts#L54-L64), [server/config/env.ts:L111-L112](https://github.com/Jeffrey-Keyser/solo-vault/blob/b629632e1fea8586822c2bfd99be1e588e825813/server/config/env.ts#L111-L112)).
 
 ## Tests and deploys
 
@@ -55,7 +56,7 @@ Solo Vault is a deployable service, not a library. The root package is private, 
 
 ## Documented versus verified
 
-- **Verified in source**: start scripts, schema check, health route, rate limits, and workflow triggers.
+- **Verified in source**: start scripts, schema check, health route, rate limits, client IP resolution, and workflow triggers.
 - **Documented only**: the production URL, Secrets Manager storage of the encryption key, and ecosystem consumers.
 - **Unknown**: whether the Lambda is live, whether the `/health` probe is wired to anything, how the cron routes are triggered, and whether the scheduler runs in production. The handler does not start it.
 - **Rollback**: no procedure appears in the excerpts. Consult the platform owner.
