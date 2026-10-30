@@ -159,7 +159,7 @@
     {
       "repo": "Jeffrey-Keyser/beelink-deploy",
       "group": "operations",
-      "summary": "GitHub webhook deploy service on Beelink that runs deploy scripts, publishes packages and emits wiki update events.",
+      "summary": "Beelink webhook deploy service that binds localhost port 9000, fails closed when no webhook secret is configured, checks GitHub HMAC signatures when one is set, runs per-repo deploy scripts with per-repo serialization, and publishes packages.events and wiki.update events.",
       "state": "documented",
       "pages": [
         {
@@ -552,7 +552,7 @@
     {
       "repo": "Jeffrey-Keyser/insta-travel-map",
       "group": "products",
-      "summary": "Map-based travel request app where signed-in users pin locations and admins review submissions.",
+      "summary": "Map-based travel request app where signed-in users pin locations and admins review submissions; uses Pay for sign-in and access-control lookups, with route handles validated before they reach Pay paths.",
       "state": "documented",
       "pages": [
         {
