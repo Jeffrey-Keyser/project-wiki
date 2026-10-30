@@ -15,7 +15,7 @@ description: "What beelink-deploy depends on, including GitHub, RabbitMQ, Pay, T
 
 **Pay.** Access checks call `/api/v1/auth/me` on `PAY_SERVICE_URL`, which defaults to `127.0.0.1:3017` ([src/log-access.ts:L26](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/log-access.ts#L26), [src/log-access.ts:L58](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/log-access.ts#L58)). The live value is unknown.
 
-**GitHub.** Webhook signatures are checked with HMAC ([src/github.ts:L6-L28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/github.ts#L6-L28)).
+**GitHub.** Webhook requests need `GITHUB_WEBHOOK_SECRET`. Without it the route returns HTTP 500 and queues nothing. With it, signatures are checked with HMAC ([src/server.ts:L159-L166](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/8ff4e92609b74aaa8ed1265292007ef26f6c035e/src/server.ts#L159-L166), [src/github.ts:L6-L28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/github.ts#L6-L28)).
 
 **Telegram.** Messages go to `api.telegram.org` when both credentials are set ([src/notify.ts:L5-L9](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/notify.ts#L5-L9)).
 

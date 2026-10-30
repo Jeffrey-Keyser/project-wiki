@@ -19,7 +19,7 @@ description: "Project-specific terms used in beelink-deploy, each tied to the so
 
 **Lockfile drift.** Host-side changes to tracked `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock` or `pnpm-lock.yaml` left by install steps. Checkout deployments restore them to `HEAD` before updating so `git pull --ff-only` is not blocked ([src/deploy.ts:L335-L362](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/69c67435cab42acd0c3be42fedee39e71eafac55/src/deploy.ts#L335-L362)).
 
-**Drain.** The shutdown window that waits for queued or active deploys, up to 240 s ([src/index.ts:L7](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L7), [src/deploy.ts:L124-L137](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L124-L137)).
+**Drain.** The shutdown window that waits for queued or active deploys, up to 240 s ([src/index.ts:L7](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/index.ts#L7), [src/deploy.ts:L124-L137](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L124-L137)). Under `KillMode=mixed` only the Node process receives SIGTERM, so in-flight deploy children are drained rather than killed by systemd ([beelink-deploy.service:L13-L15](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/8ff4e92609b74aaa8ed1265292007ef26f6c035e/beelink-deploy.service#L13-L15)).
 
 **`packages.events`.** Durable topic exchange for `package.push.<owner>.<repo>` events ([src/rabbit.ts:L10](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L10), [src/rabbit.ts:L144](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/rabbit.ts#L144)).
 
@@ -35,7 +35,9 @@ description: "Project-specific terms used in beelink-deploy, each tied to the so
 
 **Diagnostic code.** A fixed label such as `AGENCY_REVISION` or an npm or TypeScript code, shown in summaries. Codes are clues, not root causes ([src/deploy-diagnostics.ts:L10-L11](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy-diagnostics.ts#L10-L11), [README.md:L138-L141](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/README.md#L138-L141)).
 
-**Status store.** `status.json` under `DATA_DIR`, with one record per repo ([src/status.ts:L8-L18](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/status.ts#L8-L18)).
+**Status store.** `status.json` under `DATA_DIR`, with one record per repo. Each record holds the latest attempt, and a successful record's commit is the live revision ([src/status.ts:L8-L18](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/status.ts#L8-L18), [src/status.ts:L101-L108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/8ff4e92609b74aaa8ed1265292007ef26f6c035e/src/status.ts#L101-L108)).
+
+**Live revision.** The commit of a repo's latest deploy attempt when that attempt succeeded. After a failed attempt it is unknown, so any revision may be redeployed ([src/status.ts:L101-L108](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/8ff4e92609b74aaa8ed1265292007ef26f6c035e/src/status.ts#L101-L108), [src/deploy.ts:L80-L101](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/8ff4e92609b74aaa8ed1265292007ef26f6c035e/src/deploy.ts#L80-L101)).
 
 **Deploy log buffer.** In-memory list of up to 20 entries per repo ([src/deploy.ts:L27-L28](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L27-L28), [src/deploy.ts:L162-L182](https://github.com/Jeffrey-Keyser/beelink-deploy/blob/ca28cae58541cdd63ff9ad5e1601b13e3450a4b6/src/deploy.ts#L162-L182)).
 
