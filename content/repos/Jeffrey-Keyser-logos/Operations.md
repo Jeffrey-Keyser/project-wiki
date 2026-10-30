@@ -38,7 +38,7 @@ It then takes a non-blocking lock on `~/releases/logos/.logos-deployment.lock`. 
 Steps run in this order:
 
 1. Link the shared `~/logos/.env` into the release as `.env`.
-2. Pull secrets with `solo-vault pull` into the shared `.env`. If that fails, fall back to Vault over HTTP. If that also fails, keep the existing `.env`.
+2. Pull secrets with `solo-vault pull` into the shared `.env`. If that fails, fall back to Vault over HTTP. The HTTP fallback fetches each secret key independently. A key whose fetch fails, returns an HTTP error, is unparsable, or is missing, null or empty keeps its existing `.env` value. The keys that were fetched successfully are staged on a copy of `.env` and written in one atomic rename. If no key can be fetched, the function fails and `.env` stays byte-identical ([deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/91d3a349b1a27e3036cf774e14c31d27119b6458/deploy.sh)).
 3. `npm ci --include=dev`.
 4. `prepare:models`, which uses the shared model cache.
 5. `build`.
@@ -54,7 +54,7 @@ Steps run in this order:
 
 **Pruning.** After a healthy deploy, older release worktrees are removed from the source checkout with `git worktree remove --force`. The three most recently modified release directories are kept. The current and previous releases are never removed ([deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/c7ea06ff741f3e3daab4d624768ba94553d85708/deploy.sh)).
 
-Secret keys written into `.env` are `DATABASE_PASSWORD`, `LOGOS_SERVICE_TOKEN`, `LOGOS_STRUCT_TOKEN`, `RABBITMQ_URL` and optionally `CRON_API_KEY` ([deploy.sh:L68-L82](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L68-L82)).
+Secret keys written into `.env` are `DATABASE_PASSWORD`, `LOGOS_SERVICE_TOKEN`, `LOGOS_STRUCT_TOKEN`, `RABBITMQ_URL` and optionally `CRON_API_KEY` ([deploy.sh:L68-L82](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/deploy.sh#L68-L82)). The HTTP fallback fetches `CRON_API_KEY` from `cron-service/production/CRON_API_KEY` and treats it like the other keys: if that fetch fails, the existing value is kept ([deploy.sh](https://github.com/Jeffrey-Keyser/logos/blob/91d3a349b1a27e3036cf774e14c31d27119b6458/deploy.sh)).
 
 **Public hostname.** The CLI defaults to `https://logos.jeffreykeyser.net` ([src/bin/logos.ts:L5](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bin/logos.ts#L5)). A code comment mentions a cloudflared edge in front of Logos ([src/query/synthesize.ts:L29-L37](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/query/synthesize.ts#L29-L37)). The tunnel configuration itself is not in the provided source.
 
@@ -72,7 +72,7 @@ Secret keys written into `.env` are `DATABASE_PASSWORD`, `LOGOS_SERVICE_TOKEN`, 
 
 - **Request logs.** Logs use Morgan's `dev` format, and `/health` and `/ready` are skipped ([src/app.ts:L33-L37](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/app.ts#L33-L37)). Errors are logged with the request method and path ([src/app.ts:L56-L64](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/app.ts#L56-L64)).
 - **Console prefixes:**
-  - `[bus]` for connect, reconnect and publish drops ([src/bus/rabbit.ts:L207-L228](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bus/rabbit.ts#L207-L228)).
+  - `[bus]` for connect, reconnect, publish drops and consumer settle failures. A failed ack or nack on a closed channel is logged as a warning and not retried by the process; the broker redelivers the unacked message ([src/bus/rabbit.ts:L207-L228](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/bus/rabbit.ts#L207-L228), [src/bus/consumer.ts](https://github.com/Jeffrey-Keyser/logos/blob/91d3a349b1a27e3036cf774e14c31d27119b6458/src/bus/consumer.ts)).
   - `[ingest]` for worker jobs ([src/worker/ingest.ts:L293](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/worker/ingest.ts#L293)).
   - `[cron]` for RSS, digest and reembed summaries ([src/cron/rss-poll.ts:L123-L125](https://github.com/Jeffrey-Keyser/logos/blob/818a9eeb9f98a6c82656c22be7eeeb73bd1f9cd0/src/cron/rss-poll.ts#L123-L125)).
 - **Where logs go.** Logs go to stdout. Reading them through the user journal is likely but not confirmed.
