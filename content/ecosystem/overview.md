@@ -10,7 +10,7 @@ The self-hosted core of the ecosystem lives on **two small Linux boxes with sepa
 
 Around those two hosts sit a set of shared npm building blocks and a few cross-cutting services: Pay for identity, Solo Vault for credentials, Prompt Registry for prompts, AI Proxy and Struct for model inference, and Logos for knowledge.
 
-> **Snapshot: 30 October 2026.** Based on the ecosystem registry, the current host reference, and repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox (including its [architecture guide](/repos/jeffrey-keyser-dev-inbox/architecture/) and [services and dependencies](/repos/jeffrey-keyser-dev-inbox/services-and-dependencies/)), Ping and the Ping architecture guide, and from the openclaw-bridge, Logos, Struct, Pay, pay-auth-integration, Insta Travel Map, Life architecture and Solo Vault architecture guides. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
+> **Snapshot: 30 October 2026.** Based on the ecosystem registry, the current host reference, and repository guide excerpts supplied for this update from Life, Switchboard, Agency HQ, AI Proxy, Analytics Pulse, dev-inbox (including its [architecture guide](/repos/jeffrey-keyser-dev-inbox/architecture/) and [services and dependencies](/repos/jeffrey-keyser-dev-inbox/services-and-dependencies/)), Ping and the Ping architecture guide, and from the openclaw-bridge, Logos, Struct, Pay (including its [operations guide](/repos/jeffrey-keyser-pay/operations/)), pay-auth-integration, Insta Travel Map, Life architecture and Solo Vault architecture guides. Where the older registry and the current host reference disagree about where a component runs, the current host reference is used.
 
 ## The big picture
 
@@ -103,6 +103,8 @@ Many shared packages publish to GitHub Packages; private package installs need c
 A browser request reaches a product's frontend and API through Cloudflare. Pay-enabled apps use [pay-auth-integration](/repos/jeffrey-keyser-pay-auth-integration/architecture/) for shared server and React sign-in helpers. A common path proxies authentication through the app server to [Pay](/repos/jeffrey-keyser-pay/home/); redirects, token handling and authorization rules depend on the application.
 
 The default server gate in pay-auth-integration checks bearer tokens against Pay's protected `/auth/me` endpoint and takes identity from that response, not from unverified JWT claims. The package changeset says this has been the default since 6.10.2, so consumers still on 6.10.1 or earlier should upgrade ([pay-auth-integration changeset](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/.changeset/validators-use-profile-identity.md)). In Pay itself, `/auth/ping` answers anonymously, but if an `Authorization` header is sent the token is verified and an invalid one gets 401 ([Pay operations](/repos/jeffrey-keyser-pay/operations/)).
+
+The Pay operations guide documents a VPS deploy target and does not verify the live port. The current host reference places Pay on Beelink at port 3017, and that host reference is used here.
 
 Pay-integrated examples include:
 
