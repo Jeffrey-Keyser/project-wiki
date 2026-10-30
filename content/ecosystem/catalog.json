@@ -159,7 +159,7 @@
     {
       "repo": "Jeffrey-Keyser/beelink-deploy",
       "group": "operations",
-      "summary": "Beelink webhook deploy service that binds localhost port 9000, fails closed when no webhook secret is configured, checks GitHub HMAC signatures when one is set, runs per-repo deploy scripts with per-repo serialization, and publishes packages.events and wiki.update events.",
+      "summary": "Beelink webhook deploy service that binds 127.0.0.1 port 9000 by default, fails closed when no webhook secret is configured, checks GitHub HMAC signatures when one is set, runs per-repo deploy scripts with per-repo serialization, and publishes packages.events and wiki.update events.",
       "state": "documented",
       "pages": [
         {
