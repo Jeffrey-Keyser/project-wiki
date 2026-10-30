@@ -80,3 +80,19 @@ A per-request ID attached before other middleware so downstream logs can be join
 ### Life schema and public schema
 
 `life` maps Pay users to local users. `public` holds journal data such as entries, persons, and tags ([CLAUDE.md:131-136](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/CLAUDE.md#L131-L136)).
+
+### Web Push registration
+
+The server record that links one signed-in account to one browser push endpoint. It lives in the `push_subscription` table, is created only through an authenticated request, and is revoked when the device turns notifications off or signs out ([server/db/schema/2026_10_30_push_subscription.sql](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/db/schema/2026_10_30_push_subscription.sql), [server/routes/push.routes.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/routes/push.routes.ts), [client/src/services/pushSubscription.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/client/src/services/pushSubscription.ts)).
+
+### VAPID keys
+
+The optional server key pair that identifies Life to browser push services. Generate it once and keep it stable, since existing phone enrollments are bound to the public key ([server/.env.example](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/.env.example), [server/services/push/config.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/services/push/config.ts)).
+
+### Push service worker
+
+The push-only worker at `/push-sw.js`, registered with scope `/`. It shows a fixed generic Life notification and opens the fixed `/journal` route on click. It never renders payload text ([client/public/push-sw.js](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/client/public/push-sw.js)).
+
+### Push-aware sign-out
+
+The single sign-out path used by the AppShell menus and the Profile sheet. It revokes this device's push registration before Pay logout. If revocation fails, the owner stays signed in and can retry, stay signed in, or sign out anyway ([client/src/hooks/usePushAwareSignOut.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/client/src/hooks/usePushAwareSignOut.ts)).

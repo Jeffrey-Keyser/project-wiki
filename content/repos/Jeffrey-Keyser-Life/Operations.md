@@ -30,6 +30,13 @@ Life is a deployed web application, not a library. Both packages are private and
 
 - `deploy.sh` is the authoritative entry point. It pulls, builds, applies database changes, backfills embeddings, and restarts `life-api` and `life-frontend` ([deploy.sh:8-36](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/deploy.sh#L8-L36)).
 - Auto-deploy on push to `master` is documented, not verified in these excerpts ([docs/DEPLOYMENT.md:24](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L24)).
+- The Web Push rollout documented in [docs/DEPLOYMENT.md](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/docs/DEPLOYMENT.md) releases the schema and API before the frontend. It also covers frontend-root worker hosting, rollback, and the manual closed-page phone check.
+
+## Web Push
+
+- Web Push is opt-in. Its variables are `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT`. Without them, the API starts and phone notifications stay unavailable ([server/.env.example](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/.env.example), [server/config/env.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/config/env.ts)).
+- Provisioning the VAPID keys, exact-origin API access, outbound provider hosts, and rollback are documented in [docs/DEPLOYMENT.md](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/docs/DEPLOYMENT.md). Closed-page delivery is verified manually from another authenticated session, not by an automated test.
+- Sign-out is push-aware. If server revocation of this device's registration fails, the owner stays signed in. The owner can retry, stay signed in, or use the explicit sign out anyway, which drops the browser subscription first ([client/src/hooks/usePushAwareSignOut.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/client/src/hooks/usePushAwareSignOut.ts)).
 
 ## Health and diagnostics
 

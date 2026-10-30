@@ -50,12 +50,23 @@ Life is an application, not a library. It depends on several services and has a 
 
 - At startup the server loads selected secrets from a local vault URL when `SOLO_VAULT_KEY` is set. Otherwise it logs a warning and uses `.env` ([server/config/vault.ts:1](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/vault.ts#L1), [server/config/vault.ts:27-32](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/vault.ts#L27-L32)).
 
+### Web Push delivery to browser push services (confirmed in code, optional)
+
+- The server sends notifications to the push-service endpoint that each browser registers. The host of each endpoint is stored as `providerHost` ([server/services/push/sender.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/services/push/sender.ts), [server/dal/push.dal.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/dal/push.dal.ts)).
+- The outbound hosts that must be reachable, and the manual phone check, are documented in [docs/DEPLOYMENT.md](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/docs/DEPLOYMENT.md). This page does not restate that list.
+
+### VAPID keys (confirmed in code, optional)
+
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` configure Web Push. `VAPID_SUBJECT` must be a `mailto:` address or an `https:` URL. Leaving them blank keeps phone notifications unavailable and the API still starts ([server/.env.example](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/.env.example), [server/config/env.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/config/env.ts), [server/services/push/config.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/server/services/push/config.ts)).
+- Existing phone enrollments are bound to the public key. The keys should be generated once and not rotated casually.
+
 ## Consumed by
 
 ### Browser clients (confirmed)
 
 - The client calls the API base from `VITE_API_URL` ([client/src/config/api.ts:2](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/client/src/config/api.ts#L2)).
 - Share readers call the unauthenticated public routes ([server/app.ts:110](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/app.ts#L110)).
+- Signed-in browsers call `/api/v1/push` with the Pay bearer token, using the API origin from `VITE_API_URL`. The push service worker is served from the frontend root ([client/src/services/pushSubscription.ts](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/client/src/services/pushSubscription.ts), [client/public/push-sw.js](https://github.com/Jeffrey-Keyser/Life/blob/a633ba54f10012c72dd551b6e0125e31eb76124e/client/public/push-sw.js)).
 
 ### Smoke script (documented caller)
 
