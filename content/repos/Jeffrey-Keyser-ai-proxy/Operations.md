@@ -21,10 +21,11 @@ AI Proxy is a deployable HTTP service, not a library. Everything below comes fro
 ## Deploy
 
 1. On the host, run `./deploy.sh` from the repo root. Tune it with `HEALTH_URL`, `HEALTH_TIMEOUT_SECS` (default 45), `HEALTH_INTERVAL_SECS` (default 3) and `RESTART_CMD` ([docs/deployment.md:L146-L167](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L146-L167)).
-2. `deploy.sh` runs `node scripts/migrate-batches.cjs` after the build. The migration is additive and creates `message_batches` and `message_batch_items`. It should be run before the new server starts (README, `deploy.sh`).
-3. If you need to restart manually: `sudo systemctl restart ai-proxy`.
-4. Check the service: `systemctl status ai-proxy`.
-5. Read logs: `journalctl -u ai-proxy -f` ([CLAUDE.md:L164-L176](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L164-L176)).
+2. `deploy.sh` runs `node scripts/migrate-batches.cjs` after the build. The script applies, in order, the additive migrations `009_create_message_batches.sql` (creates `message_batches` and `message_batch_items`) and `010_add_application_api_key_lookup.sql` (adds the nullable `applications.api_key_lookup` column and a unique index). Each migration is idempotent. They should be run before the new server starts (README, [server/scripts/migrate-batches.cjs](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/scripts/migrate-batches.cjs)).
+3. After migration 010, existing application keys have no lookup digest. Each key gets one the first time it successfully authenticates, so its first request after the deploy is slower. Keys that have not been used since the deploy have no digest yet. An unknown key costs no bcrypt comparisons once every row has a digest. Until then, unknown keys can trigger a bcrypt scan of the rows that still lack a digest. Watch for this during rollout ([server/dal/ApplicationDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/dal/ApplicationDal.ts)).
+4. If you need to restart manually: `sudo systemctl restart ai-proxy`.
+5. Check the service: `systemctl status ai-proxy`.
+6. Read logs: `journalctl -u ai-proxy -f` ([CLAUDE.md:L164-L176](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L164-L176)).
 
 The old wiki described a systemd *user* unit. The current docs and unit file use a system unit, and the AWS deployment path is legacy ([docs/deployment.md:L181](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L181)).
 
@@ -64,6 +65,7 @@ The old wiki described a systemd *user* unit. The current docs and unit file use
 | Public hostname | `ai-proxy.jeffreykeyser.net` ([docs/deployment.md:L7](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L7)), `api.ai-proxy.jeffreykeyser.net` ([README.md:L183](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L183)) and `ai-proxy-api.jeffreykeyser.net` ([docs/TYPESAFE_SYSTEM_ONE.md:L54](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L54)) all appear. | Inconsistent |
 | TypeSafe endpoint | Local and public `/v1/systemone` calls returned 200 on the recorded date ([docs/TYPESAFE_SYSTEM_ONE.md:L23-L27](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/TYPESAFE_SYSTEM_ONE.md#L23-L27)) | Point-in-time evidence |
 | Batch live behaviour | The README documents the design and a PostgreSQL test suite that runs only with a private config file. | Not verified against the provider or live host |
+| API-key auth cost | Authentication does at most one bcrypt comparison per request. Legacy keys without a lookup digest are backfilled on first use ([server/dal/ApplicationDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/dal/ApplicationDal.ts)). | Covered by unit tests; not measured on the live host |
 
 ## Known gotchas
 

@@ -6,15 +6,17 @@ description: "Project-specific terms used in the AI Proxy codebase and docs, wit
 # Glossary
 
 **Application.** A tenant record holding:
-- a bcrypt hash of its API key
+- a bcrypt hash of its API key, plus a SHA-256 lookup digest (`api_key_lookup`) used to locate the row
 - a status of active, inactive or suspended
 - daily request and token limits
 - `allowed_models`
 - metadata, including the batch opt-in fields described under *Batch allowance*
 
-It is stored in the `applications` table ([server/dal/ApplicationDal.ts:L35-L40](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/ApplicationDal.ts#L35-L40), [server/routes/applications.ts:L67-L69](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/applications.ts#L67-L69)).
+It is stored in the `applications` table ([server/dal/ApplicationDal.ts:L35-L40](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/dal/ApplicationDal.ts#L35-L40), [server/routes/applications.ts:L67-L69](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/routes/applications.ts#L67-L69), [server/db/migrations/010_add_application_api_key_lookup.sql](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/db/migrations/010_add_application_api_key_lookup.sql)).
 
-**Application API key.** A Bearer credential such as `app_live_…`, returned once when the application is created ([README.md:L203-L208](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L203-L208)). `applicationAuth` checks it against stored hashes and rejects inactive applications ([server/middleware/applicationAuth.ts:L36-L61](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/applicationAuth.ts#L36-L61)). If the application's metadata sets `batch_only: true`, the key is limited to `/v1/batches` paths (`server/middleware/applicationAuth.ts`).
+**Application API key.** A Bearer credential such as `app_live_…`, returned once when the application is created ([README.md:L203-L208](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/README.md#L203-L208)). `applicationAuth` passes the key to `findByApiKey`, which selects the row by lookup digest and verifies it with one bcrypt comparison. It then rejects inactive applications ([server/middleware/applicationAuth.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/middleware/applicationAuth.ts), [server/dal/ApplicationDal.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/dal/ApplicationDal.ts)). If the application's metadata sets `batch_only: true`, the key is limited to `/v1/batches` paths (`server/middleware/applicationAuth.ts`).
+
+**API key lookup digest.** The SHA-256 hex digest of a plaintext application key, stored in `applications.api_key_lookup` with a unique index. It is a fast, indexed way to find the candidate row. It is not the verifier: bcrypt in `api_key_lookup`'s row remains authoritative. Applications created before migration 010 have a NULL digest until their key authenticates once ([server/domain/value-objects/ApiKey.ts](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/domain/value-objects/ApiKey.ts), [server/db/migrations/010_add_application_api_key_lookup.sql](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/db/migrations/010_add_application_api_key_lookup.sql)).
 
 **Service API key (`AI_PROXY_API_KEY`).** A service-wide key, sent via `X-API-Key` or Bearer, that gates routes which are neither public nor application-authenticated ([server/middleware/serviceApiKey.ts:L31-L45](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/middleware/serviceApiKey.ts#L31-L45)).
 

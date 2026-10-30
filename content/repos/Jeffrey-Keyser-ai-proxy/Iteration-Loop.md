@@ -16,7 +16,7 @@ flowchart TD
   E --> F["npm run build - tsc to dist"]
   F --> G["Commit and push to main"]
   G --> H["deploy.sh on host"]
-  H --> H2["Run batch schema migration"]
+  H --> H2["Run schema migrations 009 and 010"]
   H2 --> I["Health gate on /health"]
   I -->|"2xx"| J["Done"]
   I -->|"timeout"| K["Dump journal and fail"]
@@ -43,6 +43,7 @@ Startup fails fast if any of these are missing ([server/config/env.ts:L127-L132]
   - Tests live in `server/tests/__tests__/` and mocks in `server/tests/__mocks__/` ([CLAUDE.md:L318-L319](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L318-L319)).
   - To run one file: `npm test -- path/to/test.test.ts` ([CLAUDE.md:L59-L60](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L59-L60)).
   - The batch PostgreSQL lifecycle suite (`server/tests/__tests__/batch/message-batches.postgres.test.ts`) runs only when `BATCH_TEST_CONFIG_FILE` points to a private `pg` Pool config. It creates and drops a random isolated schema. Without that file, its DB cases are skipped (README).
+  - The application DAL and auth middleware tests cover the lookup-digest path. They check that an unknown key runs no bcrypt comparison once all rows have a digest, that legacy rows are backfilled on first match, and that the middleware does not re-verify the key (`server/tests/__tests__/unit/dal/ApplicationDal.test.ts`, `server/tests/__tests__/unit/middleware/applicationAuth.test.ts`).
 - **Provider costs in tests.** The image-provider tests make no billable calls ([docs/image-model-setup.md:L44-L45](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/image-model-setup.md#L44-L45)). Model-control validation uses mocked model calls ([docs/model-controls.md:L13](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/model-controls.md#L13)).
 - **Build.** `npm run build` runs `tsc` with strict ES2020 settings and writes to `dist/`. The `tests` directory is excluded from compilation ([server/tsconfig.json:L3-L8](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/tsconfig.json#L3-L8), [server/tsconfig.json:L25](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/server/tsconfig.json#L25)).
 
@@ -57,12 +58,12 @@ Swagger collects annotations from `./routes/**/*.ts` and is disabled when `NODE_
 
 ## 4. Shipping
 
-CLAUDE.md says pushes to main use `deploy.sh`. The script does a lockfile-exact install, builds, runs the batch schema migration, restarts the systemd service and then applies a health gate ([CLAUDE.md:L162](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L162), [deploy.sh](https://github.com/Jeffrey-Keyser/ai-proxy/blob/9feca9aa4e6057291add262fc1cf268f2abff052/deploy.sh)). The deployment guide lists the steps as ([docs/deployment.md:L146-L158](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L146-L158)):
+CLAUDE.md says pushes to main use `deploy.sh`. The script does a lockfile-exact install, builds, runs the schema migrations, restarts the systemd service and then applies a health gate ([CLAUDE.md:L162](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L162), [deploy.sh](https://github.com/Jeffrey-Keyser/ai-proxy/blob/9feca9aa4e6057291add262fc1cf268f2abff052/deploy.sh)). The deployment guide lists the steps as ([docs/deployment.md:L146-L158](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/docs/deployment.md#L146-L158)):
 
 1. `git pull`
 2. `npm install`
 3. `npm run build`, with build errors no longer masked
-4. Run `node scripts/migrate-batches.cjs` from the server directory. This applies the additive `009_create_message_batches.sql` migration. It must run before the new server starts.
+4. Run `node scripts/migrate-batches.cjs` from the server directory. The name is kept for `deploy.sh` compatibility. The script now applies, in order, the additive `009_create_message_batches.sql` migration and `010_add_application_api_key_lookup.sql`, which adds the nullable `applications.api_key_lookup` column and its unique index. Both must run before the new server starts ([server/scripts/migrate-batches.cjs](https://github.com/Jeffrey-Keyser/ai-proxy/blob/c9566a1158436ae7de09ae1be17bd2a697ed6faa/server/scripts/migrate-batches.cjs)).
 5. `systemctl restart`
 6. Poll `/health`; on timeout, dump the journal and exit non-zero
 
@@ -70,7 +71,7 @@ The two documents disagree in two places:
 - **Install command:** the guide says `npm install`, while CLAUDE.md says the install is lockfile-exact.
 - **Health URL:** the guide's default is `127.0.0.1:3001`, while CLAUDE.md says `127.0.0.1:3005`.
 
-The migration step is not yet described in the deployment guide. The `deploy.sh` file itself was not part of the original snapshot, so the other steps remain unconfirmed.
+The deployment guide does not yet describe migration step 4 or migration 010. The `deploy.sh` file itself was not part of the original snapshot, so the other steps remain unconfirmed.
 
 **CI status is unknown.** No GitHub Actions workflow files were provided. The Lambda/ECR pipeline described in CLAUDE.md is labelled legacy ([CLAUDE.md:L187](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L187), [CLAUDE.md:L336-L342](https://github.com/Jeffrey-Keyser/ai-proxy/blob/bdbfe33bbacd4b9ca75b10e845c2ed11fc3f79df/CLAUDE.md#L336-L342)). It is also not documented here how a push to main triggers `deploy.sh` on the host.
 
