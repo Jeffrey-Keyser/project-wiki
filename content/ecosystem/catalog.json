@@ -946,7 +946,7 @@
     {
       "repo": "Jeffrey-Keyser/pay",
       "group": "platform",
-      "summary": "Central authentication and payment backend providing JWT identity, guest login and Stripe processing.",
+      "summary": "Central authentication and payment backend providing JWT identity, guest login, Stripe processing and an admin-only app registry with a public anonymous catalog that omits portfolio hostnames.",
       "state": "documented",
       "pages": [
         {
