@@ -429,7 +429,7 @@
     {
       "repo": "Jeffrey-Keyser/feedback-registry",
       "group": "platform",
-      "summary": "Collects user bug reports and feature requests, auto-triages them and creates linked GitHub issues.",
+      "summary": "Collects user bug reports and feature requests, triages them through Jev, then Struct when configured, then keyword rules, creates linked GitHub issues, and supports bulk resolution that writes reporter in-app notices and optional emails after commit.",
       "state": "documented",
       "pages": [
         {
