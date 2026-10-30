@@ -593,7 +593,7 @@
     {
       "repo": "Jeffrey-Keyser/Life",
       "group": "products",
-      "summary": "Voice-first journal that transcribes, structures and links entries into a people and tag graph, using Pay sign-in, AI Proxy and Struct.",
+      "summary": "Voice-first journal that transcribes, structures and links entries into a people and tag graph, using Pay sign-in, AI Proxy and Struct, with opt-in Web Push phone notifications that are unavailable until VAPID settings are provided.",
       "state": "documented",
       "pages": [
         {
@@ -749,7 +749,7 @@
     {
       "repo": "Jeffrey-Keyser/myrrs",
       "group": "products",
-      "summary": "Routine scheduling web app combining probability-based selection, streak tracking and a rule engine.",
+      "summary": "Routine scheduling web app combining probability-based selection, streak tracking and a rule engine; uses pay-auth-integration sign-in with Pay profile proxying and a client feedback widget that posts directly to Feedback Registry. Source excerpts do not confirm that its systemd units are running.",
       "state": "documented",
       "pages": [
         {
