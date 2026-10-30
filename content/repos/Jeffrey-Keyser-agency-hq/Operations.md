@@ -48,3 +48,5 @@ SIGTERM/SIGINT stop listeners, interval services, the projection worker and Rabb
 ## Backups (documented)
 
 Nightly cron at 02:00 UTC writes gzipped SQL dumps of `agency_hq` to `/home/jkeyser/backups/agency-hq/`, kept 30 days; see BACKUP.md ([README.md:L115-L120](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/README.md#L115-L120)).
+
+Restore safety: `scripts/restore-agency-hq.sh` takes a pre-restore safety dump before it drops `agency_hq`, when that database exists. If the dump fails, or lacks pg_dump's completion trailer, the script aborts before `dropdb`. `AGENCY_HQ_RESTORE_SKIP_SAFETY_DUMP=1` is the explicit override that drops without a dump. When the database does not exist, no safety dump is taken. A failed restore message states whether a safety dump was kept ([scripts/restore-agency-hq.sh](https://github.com/Jeffrey-Keyser/agency-hq/blob/0bebfed651e212d324e75770d23c6f2c583ee70e/scripts/restore-agency-hq.sh), [src/__tests__/restore-agency-hq-script.test.ts](https://github.com/Jeffrey-Keyser/agency-hq/blob/0bebfed651e212d324e75770d23c6f2c583ee70e/src/__tests__/restore-agency-hq-script.test.ts)).
