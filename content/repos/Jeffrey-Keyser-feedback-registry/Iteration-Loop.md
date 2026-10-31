@@ -35,6 +35,15 @@ Two further integration tests follow the MyRRS pattern, with the same isolated-d
 
 Both tests check that `deploy.sh` runs their preparation script before the `systemctl restart` line ([server/tests/__tests__/integration/image-studio-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/tests/__tests__/integration/image-studio-feedback-onboarding.test.ts), [server/tests/__tests__/integration/spanish-studio-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/tests/__tests__/integration/spanish-studio-feedback-onboarding.test.ts)).
 
+## Life and NanoClaw onboarding tests
+
+Two integration tests cover the Life and NanoClaw registrations, using the same isolated-database and built-entry requirements:
+
+- `server/tests/__tests__/integration/life-feedback-onboarding.test.ts` uses `server/tests/fixtures/life-isolated-registry.ts`. It checks the `life` registration shape with triage disabled and no recipient, idempotent preparation, preservation of customized settings on conflict, coexistence with the MyRRS and Spanish Studio rows, and the exact server-side payload persisted for a `question` report. It also checks that the retired `life-journal` payload shape is rejected and that the CORS allowlist is unchanged.
+- `server/tests/__tests__/integration/nanoclaw-feedback-onboarding.test.ts` uses `server/tests/fixtures/nanoclaw-isolated-registry.ts`. It applies the same checks to the `nanoclaw` registration, and verifies the persisted `bug` payload from the NanoClaw IPC handler. It also checks that the retired `appId`-less payload is rejected.
+
+Both tests check that `deploy.sh` runs their preparation script before the `systemctl restart` line ([server/tests/__tests__/integration/life-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/server/tests/__tests__/integration/life-feedback-onboarding.test.ts), [server/tests/__tests__/integration/nanoclaw-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/server/tests/__tests__/integration/nanoclaw-feedback-onboarding.test.ts)).
+
 ## Sequence
 
 ```mermaid
@@ -61,7 +70,7 @@ sequenceDiagram
 - Backend and frontend tests run only for pull requests, on Node 20, using a composite action from a private actions repository ([.github/workflows/ci-cd-pipeline.yml:L15-L16](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L15-L16), [.github/workflows/ci-cd-pipeline.yml:L34-L38](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L34-L38)). The composite action's internal commands are not in the excerpts.
 - The deploy job posts the service name and commit SHA to the webhook ([.github/workflows/ci-cd-pipeline.yml:L80-L85](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L80-L85)). The workflow comment says the webhook pulls and restarts the service ([.github/workflows/ci-cd-pipeline.yml:L9-L10](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L9-L10)).
 - A QA regression job runs after deploy against configured URLs ([.github/workflows/ci-cd-pipeline.yml:L88-L108](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L88-L108)). The script it runs is not in these sources.
-- The repository's `deploy.sh` runs the migration script, then `scripts/ensure-myrrs-app.cjs`, then `scripts/ensure-image-studio-app.cjs` and `scripts/ensure-spanish-studio-app.cjs`, then restarts the `feedback-registry` service. The three registration steps are ordered before the restart ([deploy.sh](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/deploy.sh)). Whether the webhook runs `deploy.sh` is not shown in these sources.
+- The repository's `deploy.sh` runs the migration script, then `scripts/ensure-myrrs-app.cjs`, then `scripts/ensure-image-studio-app.cjs`, `scripts/ensure-spanish-studio-app.cjs`, `scripts/ensure-life-app.cjs` and `scripts/ensure-nanoclaw-app.cjs`, then restarts the `feedback-registry` service. The registration steps are ordered before the restart ([deploy.sh](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/deploy.sh)). Whether the webhook runs `deploy.sh` is not shown in these sources.
 
 ## Other workflows
 
@@ -70,7 +79,7 @@ sequenceDiagram
 
 ## Verification commands
 
-`config/verify/feedback-registry.json` lists four verification commands, each run from `server/`: the unit test file for bulk resolution notifications, the matching integration test file, the full unit test run with `--runInBand`, and `npm run build` ([config/verify/feedback-registry.json:L2-L7](https://github.com/Jeffrey-Keyser/feedback-registry/blob/00f50b07b61ec27e1f46366835537f3ad4399d95/config/verify/feedback-registry.json#L2-L7)). The file does not say how or where these commands are invoked. The MyRRS, Image Studio and Spanish Studio onboarding integration tests are not listed in that file ([server/tests/__tests__/integration/myrrs-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/server/tests/__tests__/integration/myrrs-feedback-onboarding.test.ts)).
+`config/verify/feedback-registry.json` lists four verification commands, each run from `server/`: the unit test file for bulk resolution notifications, the matching integration test file, the full unit test run with `--runInBand`, and `npm run build` ([config/verify/feedback-registry.json:L2-L7](https://github.com/Jeffrey-Keyser/feedback-registry/blob/00f50b07b61ec27e1f46366835537f3ad4399d95/config/verify/feedback-registry.json#L2-L7)). The file does not say how or where these commands are invoked. The MyRRS, Image Studio, Spanish Studio, Life and NanoClaw onboarding integration tests are not listed in that file ([server/tests/__tests__/integration/myrrs-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/server/tests/__tests__/integration/myrrs-feedback-onboarding.test.ts)).
 
 ## Contributor checklist
 

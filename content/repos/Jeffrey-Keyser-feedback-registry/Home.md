@@ -14,7 +14,7 @@ Feedback Registry is a private Node service for collecting user feedback (bug re
 - **Data**: PostgreSQL. Application and submission tables live in the `feedback` schema ([server/dal/apps.ts:L61](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/dal/apps.ts#L61), [server/dal/submissions.ts:L63](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/dal/submissions.ts#L63)).
 - **Identity**: JWTs are validated through the Pay service, defaulting to `https://pay.jeffreykeyser.net` ([server/app.ts:L47](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/app.ts#L47)).
 - **Admin client**: React/Vite dashboard in `client/` ([client/package.json:L2-L4](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/client/package.json#L2-L4)).
-- **Widget**: `@jeffrey-keyser/feedback-widget` version 1.0.0 ([packages/feedback-widget/package.json:L2-L4](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/packages/feedback-widget/package.json#L2-L4)).
+- **Widget**: `@jeffrey-keyser/feedback-widget` version 1.0.1 ([packages/feedback-widget/package.json:L3](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/packages/feedback-widget/package.json#L3)).
 - **Deploy trigger**: a push to `main` calls a `beelink-deploy` webhook; the CI file states that deployment is not performed by GitHub Actions ([.github/workflows/ci-cd-pipeline.yml:L9-L10](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L9-L10)). The live homelab state is not verified by these sources.
 
 ## Who uses it
@@ -23,6 +23,7 @@ Feedback Registry is a private Node service for collecting user feedback (bug re
 - **Registered apps** are identified by an `appId` and a GitHub repository in `owner/repo` form ([server/routes/admin/apps.ts:L112-L127](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/routes/admin/apps.ts#L112-L127)).
 - **Maintainers** use admin routes, which require the `admin` role or the `feedback:admin` permission ([server/routes/admin/index.ts:L29-L37](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/routes/admin/index.ts#L29-L37)).
 - **Embedding apps**: the widget package is published from this repo, but the source provided does not confirm which applications embed it.
+- **Server-side app submitters**: the Life and NanoClaw onboarding tests describe these apps as submitting feedback server-side, so they are registered without browser CORS access ([server/tests/__tests__/integration/life-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/server/tests/__tests__/integration/life-feedback-onboarding.test.ts), [server/tests/__tests__/integration/nanoclaw-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/server/tests/__tests__/integration/nanoclaw-feedback-onboarding.test.ts)).
 
 ## Main flow
 

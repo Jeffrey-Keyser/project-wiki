@@ -35,7 +35,7 @@ The comment that gives this command is in the Dockerfile itself ([Dockerfile_Ser
 - Startup fails when `ORIGIN_BASE_URL`, `CORS_ALLOWED_ORIGINS`, `SESSION_SECRET`, `JWT_SECRET` or `PAY_SERVICE_URL` is missing ([server/config/env.ts:L161-L176](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L161-L176)).
 - Warnings are logged when GitHub, RabbitMQ or SMTP settings are absent ([server/config/env.ts:L188-L213](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L188-L213)).
 - Database variables accept `DATABASE_*` or legacy `DB_*` names ([server/config/env.ts:L96-L100](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L96-L100)).
-- **CORS allowlist composition.** The CORS origin list is built by `resolveCorsAllowedOrigins`, which splits `CORS_ALLOWED_ORIGINS` on commas, trims entries, removes empty values and exact duplicates, and appends the exact adopted-app origins when they are absent: MyRRS `https://myrrs.jeffreykeyser.net`, Image Studio `https://images.jeffreykeyser.net` and Spanish Studio `https://spanish-studio.jeffreykeyser.net`. Configured origins are retained. It never adds a wildcard. `server/app.ts` uses this function for the CORS `origin` setting ([server/config/env.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/config/env.ts), [server/app.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/server/app.ts)).
+- **CORS allowlist composition.** The CORS origin list is built by `resolveCorsAllowedOrigins`, which splits `CORS_ALLOWED_ORIGINS` on commas, trims entries, removes empty values and exact duplicates, and appends the exact adopted-app origins when they are absent: MyRRS `https://myrrs.jeffreykeyser.net`, Image Studio `https://images.jeffreykeyser.net` and Spanish Studio `https://spanish-studio.jeffreykeyser.net`. Configured origins are retained. It never adds a wildcard. The Life and NanoClaw onboarding slices leave this list unchanged, because both apps submit server-side and do not need a browser origin ([server/config/env.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/config/env.ts), [server/app.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/server/app.ts), [server/tests/__tests__/integration/life-feedback-onboarding.test.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/server/tests/__tests__/integration/life-feedback-onboarding.test.ts)).
 
 ## MyRRS app registration
 
@@ -49,6 +49,17 @@ Two further scripts follow the same pattern as the MyRRS script. Each uses `INSE
 - `server/scripts/ensure-spanish-studio-app.cjs` registers `spanish-studio`, named `Spanish Studio`, with GitHub repo `Jeffrey-Keyser/spanish-studio`.
 
 Both scripts log only whether the row was created or already present, or an error code on failure ([server/scripts/ensure-image-studio-app.cjs](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/scripts/ensure-image-studio-app.cjs), [server/scripts/ensure-spanish-studio-app.cjs](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/scripts/ensure-spanish-studio-app.cjs)).
+
+## Life and NanoClaw app registration
+
+Two more scripts use the same idempotent pattern, with `auto_triage` set to false and no notification email:
+
+- `server/scripts/ensure-life-app.cjs` registers `life`, named `Life`, with GitHub repo `Jeffrey-Keyser/Life`.
+- `server/scripts/ensure-nanoclaw-app.cjs` registers `nanoclaw`, named `NanoClaw`, with GitHub repo `Jeffrey-Keyser/nanoclaw`.
+
+Both scripts log only whether the row was created or already present, or an error code on failure. Without these rows, server-side submissions for `life` or `nanoclaw` are rejected as unregistered ([server/scripts/ensure-life-app.cjs](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/server/scripts/ensure-life-app.cjs), [server/scripts/ensure-nanoclaw-app.cjs](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/server/scripts/ensure-nanoclaw-app.cjs)).
+
+The merge commit notes that `deploy.sh` self-pulls, so these two steps do not run on the deploy that ships them. Both scripts must be run once by hand from `server/` after that deploy ([merge commit 321c3f798b87](https://github.com/Jeffrey-Keyser/feedback-registry/commit/321c3f798b873b8823734899172603e746db3eed)).
 
 ## Health and diagnostics
 
@@ -66,6 +77,6 @@ Both scripts log only whether the row was created or already present, or an erro
 ## Deployment: documented versus verified
 
 - **Verified in source**: push to `main` posts to a deploy webhook ([.github/workflows/ci-cd-pipeline.yml:L80-L85](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L80-L85)).
-- **Verified in source**: `deploy.sh` applies the runtime incident and feedback outbox schemas, then runs `node scripts/ensure-myrrs-app.cjs`, then `node scripts/ensure-image-studio-app.cjs` and `node scripts/ensure-spanish-studio-app.cjs` from `server/`, and only then restarts the `feedback-registry` systemd service ([deploy.sh](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/deploy.sh)). All three registration steps therefore run before the restart.
+- **Verified in source**: `deploy.sh` applies the runtime incident and feedback outbox schemas, then runs `node scripts/ensure-myrrs-app.cjs`, then `node scripts/ensure-image-studio-app.cjs` and `node scripts/ensure-spanish-studio-app.cjs` from `server/`. At `321c3f798b87` it also runs `node scripts/ensure-life-app.cjs` and `node scripts/ensure-nanoclaw-app.cjs` before the `feedback-registry` systemd service restart ([deploy.sh](https://github.com/Jeffrey-Keyser/feedback-registry/blob/321c3f798b873b8823734899172603e746db3eed/deploy.sh)). All registration steps therefore run before the restart.
 - **Documented only**: the webhook pulls code and restarts a unit on the homelab. The webhook implementation is outside these sources, so it is not shown whether it invokes `deploy.sh`.
 - **Unknown**: the live host, port mapping and public routing.
