@@ -35,11 +35,20 @@ The comment that gives this command is in the Dockerfile itself ([Dockerfile_Ser
 - Startup fails when `ORIGIN_BASE_URL`, `CORS_ALLOWED_ORIGINS`, `SESSION_SECRET`, `JWT_SECRET` or `PAY_SERVICE_URL` is missing ([server/config/env.ts:L161-L176](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L161-L176)).
 - Warnings are logged when GitHub, RabbitMQ or SMTP settings are absent ([server/config/env.ts:L188-L213](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L188-L213)).
 - Database variables accept `DATABASE_*` or legacy `DB_*` names ([server/config/env.ts:L96-L100](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/server/config/env.ts#L96-L100)).
-- **CORS allowlist composition.** The CORS origin list is built by `resolveCorsAllowedOrigins`, which splits `CORS_ALLOWED_ORIGINS` on commas, trims entries, removes empty values and exact duplicates, and appends the exact MyRRS origin `https://myrrs.jeffreykeyser.net` when it is absent. It never adds a wildcard. `server/app.ts` uses this function for the CORS `origin` setting ([server/config/env.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/server/config/env.ts), [server/app.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/server/app.ts)).
+- **CORS allowlist composition.** The CORS origin list is built by `resolveCorsAllowedOrigins`, which splits `CORS_ALLOWED_ORIGINS` on commas, trims entries, removes empty values and exact duplicates, and appends the exact adopted-app origins when they are absent: MyRRS `https://myrrs.jeffreykeyser.net`, Image Studio `https://images.jeffreykeyser.net` and Spanish Studio `https://spanish-studio.jeffreykeyser.net`. Configured origins are retained. It never adds a wildcard. `server/app.ts` uses this function for the CORS `origin` setting ([server/config/env.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/config/env.ts), [server/app.ts](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/server/app.ts)).
 
 ## MyRRS app registration
 
 `server/scripts/ensure-myrrs-app.cjs` idempotently registers the `myrrs` app in `feedback.apps` with name `MyRRS`, GitHub repo `Jeffrey-Keyser/myrrs`, `auto_triage` set to false and no notification email. It uses `INSERT ... ON CONFLICT (app_id) DO NOTHING`, so an existing row is left unchanged. It reads `DATABASE_*` or `DB_*` variables, logs whether the row was created or already present, and on failure logs only an error code ([server/scripts/ensure-myrrs-app.cjs](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/server/scripts/ensure-myrrs-app.cjs)).
+
+## Image Studio and Spanish Studio app registration
+
+Two further scripts follow the same pattern as the MyRRS script. Each uses `INSERT ... ON CONFLICT (app_id) DO NOTHING` with `auto_triage` set to false and no notification email:
+
+- `server/scripts/ensure-image-studio-app.cjs` registers `image-studio`, named `Image Studio`, with GitHub repo `Jeffrey-Keyser/image-studio`.
+- `server/scripts/ensure-spanish-studio-app.cjs` registers `spanish-studio`, named `Spanish Studio`, with GitHub repo `Jeffrey-Keyser/spanish-studio`.
+
+Both scripts log only whether the row was created or already present, or an error code on failure ([server/scripts/ensure-image-studio-app.cjs](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/scripts/ensure-image-studio-app.cjs), [server/scripts/ensure-spanish-studio-app.cjs](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/server/scripts/ensure-spanish-studio-app.cjs)).
 
 ## Health and diagnostics
 
@@ -57,6 +66,6 @@ The comment that gives this command is in the Dockerfile itself ([Dockerfile_Ser
 ## Deployment: documented versus verified
 
 - **Verified in source**: push to `main` posts to a deploy webhook ([.github/workflows/ci-cd-pipeline.yml:L80-L85](https://github.com/Jeffrey-Keyser/feedback-registry/blob/e21e9339c65151a9f0e1293bfc071a2b3ed034f8/.github/workflows/ci-cd-pipeline.yml#L80-L85)).
-- **Verified in source**: `deploy.sh` applies the runtime incident and feedback outbox schemas, then runs `node scripts/ensure-myrrs-app.cjs` from `server/`, and only then restarts the `feedback-registry` systemd service ([deploy.sh](https://github.com/Jeffrey-Keyser/feedback-registry/blob/32bf687677906b8e0beaf320fbc3768d036e114e/deploy.sh)). The step therefore runs before the restart.
+- **Verified in source**: `deploy.sh` applies the runtime incident and feedback outbox schemas, then runs `node scripts/ensure-myrrs-app.cjs`, then `node scripts/ensure-image-studio-app.cjs` and `node scripts/ensure-spanish-studio-app.cjs` from `server/`, and only then restarts the `feedback-registry` systemd service ([deploy.sh](https://github.com/Jeffrey-Keyser/feedback-registry/blob/0ce5a8b8e940c1e650841031c5c8d087a75d3ad9/deploy.sh)). All three registration steps therefore run before the restart.
 - **Documented only**: the webhook pulls code and restarts a unit on the homelab. The webhook implementation is outside these sources, so it is not shown whether it invokes `deploy.sh`.
 - **Unknown**: the live host, port mapping and public routing.
