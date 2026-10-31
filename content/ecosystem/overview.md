@@ -288,7 +288,6 @@ The AWS Terraform repos remain as legacy reference.
 
 The Forge wiki worker checks the ecosystem and host registries daily and coalesces wiki changes for 30 minutes. Directory links come from checked-in guide files. Background narrative and repository updates use Claude Message Batches through AI Proxy; structural changes receive an Opus review. Updates are validated and built before publication. Failed or stale results keep the last published version. Paid submissions stop when the configured credit allowance expires; directory checks continue.
 
-
 ## Repository and wiki directory
 
 This directory covers **69 repositories**, including **33 complete six-page wiki guides**. “Documented” describes source coverage. Guide links are derived from files that exist in the wiki.
