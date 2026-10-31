@@ -9,6 +9,18 @@ description: "Project-specific Life terms with source citations: voice pipeline,
 
 The flow from recording to saved entry: record, transcribe, structure, resolve ambiguities, save. Server handlers are in the voice route file ([server/routes/voiceEntry.ts:82-87](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/voiceEntry.ts#L82-L87), [server/routes/voiceEntry.ts:310-317](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/routes/voiceEntry.ts#L310-L317)).
 
+### External voice capture
+
+A voice file delivered by an external caller and retained by Life before processing. Life stores the original bytes and a receipt, then processes them through the same transcription and structuring owners as the browser flow. A capture ends in one private entry with original-audio playback. The receiver is verified in Life. The sender (NanoClaw or Telegram) is not implemented or verified in this repository ([docs/external-voice-capture.md](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/docs/external-voice-capture.md), [server/routes/voiceCaptures.routes.ts](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/server/routes/voiceCaptures.routes.ts)).
+
+### Source message key
+
+An opaque caller-supplied identifier, for example `telegram:<chatId>:<messageId>`, that identifies one external message. It is unique per account and journal. Reusing it with identical bytes replays the existing capture, and reusing it with different bytes returns a conflict. It never authenticates anyone ([docs/external-voice-capture.md](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/docs/external-voice-capture.md), [server/db/schema/2026_10_31_voice_capture.sql](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/server/db/schema/2026_10_31_voice_capture.sql)).
+
+### Prompt instance
+
+An issued prompt that Life stores with its exact text. A saved reply entry can be associated with it, and one prompt can have several replies. The instance id identifies one issued rendering. It is not a template or pattern identity ([docs/prompt-instances.md](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/docs/prompt-instances.md), [server/db/schema/2026_10_31_prompt_instances.sql](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/server/db/schema/2026_10_31_prompt_instances.sql)).
+
 ### Structure
 
 The step that turns a transcript into a title, content, matched people and tags, and ambiguity records. Unmatched IDs are dropped against the journal's known people and tags ([server/services/voiceEntry.ts:271-286](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/voiceEntry.ts#L271-L286)).

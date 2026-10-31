@@ -33,6 +33,7 @@ Life is an application, not a library. It depends on several services and has a 
 ### Object storage (confirmed in code)
 
 - The storage factory supports only the `s3` provider ([server/services/storage/index.ts:9-12](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/storage/index.ts#L9-L12)). The bucket and region are configurable ([server/config/env.ts:235-236](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/config/env.ts#L235-L236)).
+- The provider interface includes a bounded `readObject`. Voice-capture processing uses it to read retained audio. The read is bounded to 25 MiB and 30 seconds, and the size and SHA-256 are checked ([server/services/storage/types.ts](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/server/services/storage/types.ts), [server/services/storage/s3Provider.ts](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/server/services/storage/s3Provider.ts), [docs/external-voice-capture.md](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/docs/external-voice-capture.md)).
 
 ### Local embedding model (confirmed in code)
 
@@ -75,6 +76,10 @@ Life is an application, not a library. It depends on several services and has a 
 ### beelink-deploy webhook (documented, not verified)
 
 - The docs say GitHub pushes trigger this listener, which runs `./deploy.sh` ([docs/DEPLOYMENT.md:24](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/docs/DEPLOYMENT.md#L24)). Its code is not in the excerpts.
+
+### External voice capture senders (documented boundary, not implemented or verified here)
+
+- A future NanoClaw or Telegram sender would upload audio to `POST /api/v1/journals/{journalId}/voice/captures` with a Pay token. Life makes no Telegram calls, fetches no remote URLs, and does not bind chat accounts. Credentials for that sender are not provisioned here. The LIFE-LF02-01 journey is not verified ([docs/external-voice-capture.md](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/docs/external-voice-capture.md), [server/routes/voiceCaptures.routes.ts](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/server/routes/voiceCaptures.routes.ts)).
 
 ### Unknown or expected callers
 
