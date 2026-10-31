@@ -18,7 +18,8 @@ Spanish Studio is a deployed web application with an API, a static client, and a
 ## Deploy
 
 - Documented steps: build server and client, run `npm run migrate`, then restart the units ([README.md:227-233](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/README.md#L227-L233)).
-- `deploy.sh` runs the same migration step before restart, and `set -e` stops deployment on failure ([README.md:235-237](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/README.md#L235-L237)). The script itself is not in the excerpts, so its contents are documented, not verified.
+- `deploy.sh` runs `git pull origin main`, then installs dependencies from the lockfiles for both workspaces before building: `npm --prefix server ci --include=dev` and `npm --prefix client ci --include=dev`. The script comment says the build scripts only run `npm ci` when `tsc` is missing, so a newly added dependency could otherwise build against stale `node_modules`. It also says GitHub Packages auth comes from `GITHUB_TOKEN` in the beelink-deploy runner environment ([deploy.sh#L16-L23](https://github.com/Jeffrey-Keyser/spanish-studio/blob/24c7c67407cd/deploy.sh#L16-L23)).
+- `deploy.sh` then builds the server and runs the same migration step before restart, and `set -e` stops deployment on failure ([README.md:235-237](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/README.md#L235-L237)). The diff shows only the dependency-install hunk, so the remaining script contents are documented, not fully verified here.
 - A 2026-07-05 record says deploy.sh health-gates ports 3054, 3055, and 3056 ([phase3b-smoke-evidence.md:27-28](https://github.com/Jeffrey-Keyser/spanish-studio/blob/e93efeff9acd23c86435e82003bab960a94bfd38/docs/phase3b-smoke-evidence.md#L27-L28)).
 
 ## Test
