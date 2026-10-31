@@ -1061,7 +1061,7 @@
     {
       "repo": "Jeffrey-Keyser/ping",
       "group": "products",
-      "summary": "Location, health and life-tracking service that resolves zones, records visits and dwell arrivals, and sends capture-attention web push alerts when VAPID keys are configured; its RabbitMQ event publisher is currently inactive.",
+      "summary": "Location, health and life-tracking service that resolves zones, records visits and dwell arrivals, sends capture-attention web push alerts when VAPID keys are configured, has its RabbitMQ event publisher inactive, and has weekly digest delivery disabled.",
       "state": "documented",
       "pages": [
         {
