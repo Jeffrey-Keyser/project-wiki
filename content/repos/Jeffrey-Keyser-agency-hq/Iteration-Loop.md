@@ -30,13 +30,18 @@ Do not add features to, or deepen dependencies on, the legacy dashboard, Kanban,
 
 Always create migrations with `npm run migrate:create -- <name>`, which produces a sequential timestamp; never use `Date.now()` because it breaks the runner ([CLAUDE.md:L66-L70](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/CLAUDE.md#L66-L70)). The scripts are wired to `scripts/run-migrate.js`, `run-migrate-down.js` and `create-migration.js` ([package.json:L17-L20](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L17-L20)). The server refuses to start if required schema elements are missing ([src/bin/www.ts:L133-L138](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/src/bin/www.ts#L133-L138)).
 
+After writing a migration, run `npm run declare:migrations` and commit `deployment-compatibility.json` with it. `npm run typecheck` and `npm run build` first run `scripts/deployment-release.js check-declaration .`, which compares the `migrations/` digest with the declared `targetSchema` and fails while they differ. An undeclared migration therefore fails slice verification and local builds rather than later deploys, which otherwise fail closed with `AGENCY_COMPAT_STALE` ([package.json:L8-L10](https://github.com/Jeffrey-Keyser/agency-hq/blob/faaa049b8d1ede8ec302c1e2129b83c04f6bafd5/package.json#L8-L10), [docs/operations/deployment-drain.md](https://github.com/Jeffrey-Keyser/agency-hq/blob/faaa049b8d1ede8ec302c1e2129b83c04f6bafd5/docs/operations/deployment-drain.md)). `migrate:create` prints the same reminder ([scripts/create-migration.js](https://github.com/Jeffrey-Keyser/agency-hq/blob/faaa049b8d1ede8ec302c1e2129b83c04f6bafd5/scripts/create-migration.js)).
+
+The declaration step refuses changed or removed applied migrations, and destructive operations in a new migration's `up`: DROP, RENAME, column type, SET NOT NULL or DROP DEFAULT changes, TRUNCATE, destructive node-pg-migrate builders, and NOT NULL columns added without a default. After a human review shows that old code still running during the migration is safe, pass the migration with `--reviewed <migration>`. Otherwise split the change into expand and contract releases ([scripts/deployment-release.js](https://github.com/Jeffrey-Keyser/agency-hq/blob/faaa049b8d1ede8ec302c1e2129b83c04f6bafd5/scripts/deployment-release.js)).
+
 ## 3. Build and test in a clean worktree
 
 Clean worktrees intentionally skip dependency install. `scripts/with-release-deps.sh -- <command>` reuses the deployed release's `node_modules` only when lockfile hashes match, and fails closed otherwise ([docs/clean-worktree-verification.md:L3-L18](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/clean-worktree-verification.md#L3-L18)). Override the release location with `AGENCY_HQ_RELEASE_DIR` ([docs/clean-worktree-verification.md:L20-L21](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/docs/clean-worktree-verification.md#L20-L21)).
 
-Useful scripts ([package.json:L8-L16](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L8-L16)):
+Useful scripts ([package.json:L8-L16](https://github.com/Jeffrey-Keyser/agency-hq/blob/faaa049b8d1ede8ec302c1e2129b83c04f6bafd5/package.json#L8-L16)):
 
-- `npm run typecheck` (`tsc --noEmit`) and `npm run build` (`tsc`).
+- `npm run typecheck` runs the declaration check and then `tsc --noEmit`. `npm run build` runs the declaration check and then `tsc`. A stale migration declaration fails both.
+- `npm run declare:migrations` re-declares `deployment-compatibility.json` after a migration is added.
 - `npm test` runs `npx vitest run`; pass a file path for focused runs.
 - `npm run test:postgres:sessions` and `test:postgres:projection` set `AGENCY_HQ_REQUIRE_TEST_DATABASE=1` and need a test database.
 - `npm run test:verify` runs `scripts/verify-notification-metrics.js`.
@@ -50,7 +55,7 @@ No CI workflow file is included in this snapshot's excerpts, so whether CI runs 
 
 ## 5. Ship
 
-The documented deploy is `npm run build` followed by `systemctl --user restart agency-hq` ([README.md:L101-L106](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/README.md#L101-L106)). The unit file runs from a `releases/agency-hq/current` directory, so production may be promoted through a release step not shown here ([agency-hq.service:L9-L10](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/agency-hq.service#L9-L10)). `npm run build:deploy` compiles and writes a `reload_service` request into NanoClaw's IPC tasks directory ([package.json:L10](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/package.json#L10)). Verify with `/health` (see [Operations](../operations/)).
+The documented deploy is `npm run build` followed by `systemctl --user restart agency-hq` ([README.md:L101-L106](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/README.md#L101-L106)). Because `build` now runs the migration declaration check first, a stale declaration stops the build before `tsc` runs. The unit file runs from a `releases/agency-hq/current` directory, so production may be promoted through a release step not shown here ([agency-hq.service:L9-L10](https://github.com/Jeffrey-Keyser/agency-hq/blob/c107e01386cfa76587ccfd868b861936c4eea8b1/agency-hq.service#L9-L10)). `npm run build:deploy` compiles and writes a `reload_service` request into NanoClaw's IPC tasks directory ([package.json:L11](https://github.com/Jeffrey-Keyser/agency-hq/blob/faaa049b8d1ede8ec302c1e2129b83c04f6bafd5/package.json#L11)). Verify with `/health` (see [Operations](../operations/)).
 
 ## Other contributor scripts
 
