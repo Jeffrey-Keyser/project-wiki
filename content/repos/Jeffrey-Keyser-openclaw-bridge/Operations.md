@@ -60,11 +60,12 @@ Key environment variables seen in source:
 - `TWILIO_WEBHOOK_BASE_URL`. Overrides the URL that Twilio signs. Without it, the signed URL is rebuilt from the forwarded `Host` and `X-Forwarded-Proto` headers ([src/handlers/twilio.js @ 9e9b630e](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/9e9b630e3a0a58bb36de7556f272c792165adb94/src/handlers/twilio.js)).
 - `NANOCLAW_ENABLED` ([src/services/nanoclaw.js:L7](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/nanoclaw.js#L7))
 - `BRIDGE_STATE_DIR` ([src/services/bridgeState.js:L12-L13](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/bridgeState.js#L12-L13))
-- `DEV_INBOX_DIR` ([src/handlers/plan-manager.js:L19](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/plan-manager.js#L19))
+- `PLAN_MANAGER_ROUTES_ENABLED`. Mounts `/plan-manager/*` only when set to exactly `1`. Unset or any other value leaves the routes off and logs `[plan-manager] routes disabled`. The PR describes forge's `plan-manager-shim` as the server for these routes now ([src/index.js @ 95f6afb0](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/95f6afb0c23beb1eb75d10b8765ee605cdf55018/src/index.js), [src/handlers/plan-manager.js @ 95f6afb0](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/95f6afb0c23beb1eb75d10b8765ee605cdf55018/src/handlers/plan-manager.js)).
+- `DEV_INBOX_DIR` ([src/handlers/plan-manager.js:L19](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/plan-manager.js#L19)). It matters only where the plan-manager routes are mounted.
 - `RECONNECT_PROBE_QUEUES` ([src/handlers/reconnect-probe.js:L30](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/reconnect-probe.js#L30))
 - `GOOGLE_FLIGHTS_API_KEY`, documented in the README's environment block ([README.md:L36](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/48a98d91a89da554413b552bf3c3dd4b6c622e09/README.md#L36))
 
-The README's environment block lists these values, with placeholders in place of real secrets ([README.md @ 9e9b630e](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/9e9b630e3a0a58bb36de7556f272c792165adb94/README.md)).
+The README's environment block lists these values, with placeholders in place of real secrets ([README.md @ 9e9b630e](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/9e9b630e3a0a58bb36de7556f272c792165adb94/README.md)). The README also documents `PLAN_MANAGER_ROUTES_ENABLED=0` and the forge split ([README.md @ 95f6afb0](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/95f6afb0c23beb1eb75d10b8765ee605cdf55018/README.md)).
 
 ### Flights API key
 
@@ -86,6 +87,7 @@ The source no longer contains fallback passwords, tokens, or webhook secrets. A 
 - Poison messages are dropped after two failed deliveries ([src/services/rabbit.js:L92-L94](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/services/rabbit.js#L92-L94)).
 - Tunnel requests that the public edge blocks are logged by nothing in the excerpt. The gate returns 404 silently ([src/publicEdge.js @ 9e9b630e](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/9e9b630e3a0a58bb36de7556f272c792165adb94/src/publicEdge.js)).
 - Rejected Twilio webhooks log a warning with the method and path, but not the signature ([src/handlers/twilio.js @ 9e9b630e](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/9e9b630e3a0a58bb36de7556f272c792165adb94/src/handlers/twilio.js)).
+- At startup, the plan-manager either logs `init failed` (if mounted and init fails) or logs that its routes are disabled ([src/index.js @ 95f6afb0](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/95f6afb0c23beb1eb75d10b8765ee605cdf55018/src/index.js)).
 
 The excerpts show no metrics, alerting, or log shipping. The documented log command is `journalctl -u openclaw-bridge -f` ([README.md:L92-L93](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/README.md#L92-L93)).
 

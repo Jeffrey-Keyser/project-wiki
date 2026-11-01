@@ -75,11 +75,11 @@ Text from an outside sender (contact form fields, email body, SMS body). The bri
 
 ### Dev inbox
 
-The directory root used by plan-manager, defaulting to a path under the operator's home ([src/handlers/plan-manager.js:L19](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/plan-manager.js#L19)).
+The directory root used by plan-manager, defaulting to a path under the operator's home ([src/handlers/plan-manager.js:L19](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/plan-manager.js#L19)). The prod bridge no longer mounts the plan-manager routes, so its `~/dev-inbox` copy is a frozen tree there. The live plan-manager runs on forge ([src/index.js @ 95f6afb0](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/95f6afb0c23beb1eb75d10b8765ee605cdf55018/src/index.js)). The `POST /dev-inbox/submit` route, which wrote ideas into this tree, was removed in the same change ([src/index.js @ 95f6afb0](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/95f6afb0c23beb1eb75d10b8765ee605cdf55018/src/index.js)).
 
 ### Wake inbox and dead letter
 
-Plan-manager stores wake records per plan. After 24 attempts by default, a record moves to `dead/` ([src/handlers/plan-manager.js:L35](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/plan-manager.js#L35), [L112-L118](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/plan-manager.js#L112-L118)).
+Plan-manager stores wake records per plan. After 24 attempts by default, a record moves to `dead/` ([src/handlers/plan-manager.js:L35](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/plan-manager.js#L35), [L112-L118](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/d6c5d8e55b0d6ccdae14101efc8b33b9db0e8e11/src/handlers/plan-manager.js#L112-L118)). Startup wake-inbox recovery runs only when the plan-manager routes are mounted (`PLAN_MANAGER_ROUTES_ENABLED=1`) ([src/index.js @ 95f6afb0](https://github.com/Jeffrey-Keyser/openclaw-bridge/blob/95f6afb0c23beb1eb75d10b8765ee605cdf55018/src/index.js)).
 
 ### Reconnect probe
 
