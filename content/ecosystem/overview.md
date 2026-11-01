@@ -147,7 +147,7 @@ flowchart TB
 
 Subscribers do the actual work:
 
-- [OpenClaw Bridge](/repos/jeffrey-keyser-openclaw-bridge/architecture/) runs handlers for cron alerts, Ping events when they are published, briefings, Flights, Spanish lessons, Agency decisions and Cream City Web.
+- [OpenClaw Bridge](/repos/jeffrey-keyser-openclaw-bridge/architecture/) runs handlers for cron alerts, Ping events when they are published, briefings, Flights, Spanish lessons, Agency decisions and Cream City Web. Its RabbitMQ service uses one connection and channel with prefetch 1, and a connection close exits the process, which the systemd unit then restarts. The bridge cannot connect to RabbitMQ without `RABBITMQ_URL`, and it forwards nothing to OpenClaw without `OPENCLAW_HOOK_TOKEN`; both fail closed when unset ([OpenClaw Bridge operations](/repos/jeffrey-keyser-openclaw-bridge/operations/)).
 - Business HQ, Logos, QA Patrol, Feedback Registry and NanoClaw bind their own keys. Feedback Registry's RabbitMQ cron consumer binds `feedback.#` on the `cron.jobs` exchange ([Feedback Registry services and dependencies](/repos/jeffrey-keyser-feedback-registry/services-and-dependencies/)).
 - [Agency HQ](/repos/jeffrey-keyser-agency-hq/architecture/) binds queue `agency-hq.logos-proposal-cards` to `logos.proposal.created` and sends one Telegram approve or reject card per proposal. If enrichment from the Logos API fails, the card is still sent with the event fields. Its orchestration, heartbeat, ops-events, probe-failed, runstream and project-reconciliation consumers register after the broker connects, and a failed connect logs and reconnects.
 
