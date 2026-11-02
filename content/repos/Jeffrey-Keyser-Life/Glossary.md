@@ -19,7 +19,7 @@ An opaque caller-supplied identifier, for example `telegram:<chatId>:<messageId>
 
 ### Prompt instance
 
-An issued prompt that Life stores with its exact text. A saved reply entry can be associated with it, and one prompt can have several replies. The instance id identifies one issued rendering. It is not a template or pattern identity ([docs/prompt-instances.md](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/docs/prompt-instances.md), [server/db/schema/2026_10_31_prompt_instances.sql](https://github.com/Jeffrey-Keyser/Life/blob/6a28b1325c64e3024f99dd28a96fbc33726ac465/server/db/schema/2026_10_31_prompt_instances.sql)).
+An issued prompt that Life stores with its exact text and its browser kind when known. A saved reply entry can be associated with it, and one prompt can have several replies. The instance id identifies one issued rendering. It is not a template or pattern identity. Rows issued before the kind was stored read back with an unknown (null) kind ([docs/prompt-instances.md](https://github.com/Jeffrey-Keyser/Life/blob/533949d2412bbe7127d7e5fcdd66353eb1a1fcb1/docs/prompt-instances.md), [server/db/schema/2026_10_31_prompt_instances.sql](https://github.com/Jeffrey-Keyser/Life/blob/533949d2412bbe7127d7e5fcdd66353eb1a1fcb1/server/db/schema/2026_10_31_prompt_instances.sql)).
 
 ### Structure
 
