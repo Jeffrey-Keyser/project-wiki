@@ -296,7 +296,7 @@ The Forge wiki worker checks the ecosystem and host registries daily and coalesc
 
 ## Repository and wiki directory
 
-This directory covers **69 repositories**, including **33 complete six-page wiki guides**. “Documented” describes source coverage. Guide links are derived from files that exist in the wiki.
+This directory covers **70 repositories**, including **33 complete six-page wiki guides**. “Documented” describes source coverage. Guide links are derived from files that exist in the wiki.
 
 ### Platform services
 
@@ -406,6 +406,12 @@ This directory covers **69 repositories**, including **33 complete six-page wiki
 | [serverless-web-infra](https://github.com/Jeffrey-Keyser/serverless-web-infra) | Terraform module for CloudFront, S3, API Gateway and Lambda sites, kept for reference after self-hosting. | legacy | Not scaffolded |
 | [ServerlessWebTemplate](https://github.com/Jeffrey-Keyser/ServerlessWebTemplate) | Starter template for Lambda-based backends, legacy since most services moved to self-hosting. | legacy | Not scaffolded |
 | [shared-infra](https://github.com/Jeffrey-Keyser/shared-infra) | Core AWS Terraform infrastructure for publicly hosted sites, kept only for reference. | legacy | Not scaffolded |
+
+### Other registered repositories
+
+| Repository | Responsibility | Status | Wiki pages |
+| --- | --- | --- | --- |
+| [session-console](https://github.com/Jeffrey-Keyser/session-console) | Owner-only web UI (installable on iPhone) for ad hoc Claude Code and Codex CLI sessions on beelink: sessions sidebar (pins, folders, tags, archive, transcript search), streamed chat with tool/diff/approval cards, push-to | documented | Not scaffolded |
 
 ## Sources and coverage
 

@@ -1231,6 +1231,14 @@
       "fullGuide": false
     },
     {
+      "repo": "Jeffrey-Keyser/session-console",
+      "group": "unclassified",
+      "summary": "Owner-only web UI (installable on iPhone) for ad hoc Claude Code and Codex CLI sessions on beelink: sessions sidebar (pins, folders, tags, archive, transcript search), streamed chat with tool/diff/approval cards, push-to",
+      "state": "documented",
+      "pages": [],
+      "fullGuide": false
+    },
+    {
       "repo": "Jeffrey-Keyser/shared-infra",
       "group": "legacy",
       "summary": "Core AWS Terraform infrastructure for publicly hosted sites, kept only for reference.",
