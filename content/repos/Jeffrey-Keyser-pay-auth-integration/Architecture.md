@@ -47,7 +47,7 @@ flowchart LR
 
 ### Anonymous proxy endpoints
 
-`ANONYMOUS_PROXY_ENDPOINTS` lists the proxy endpoints that are called without Pay credentials: login, register, guest, refresh, password reset and validation, ping, OAuth sign-in, and the product and price catalog. `proxyPublicEndpoints(authPath)` prefixes that list with the mount path. Manual setups can pass the result as `publicEndpoints` ([src/server/pay-proxy-client.ts:L19-L56](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/pay-proxy-client.ts#L19-L56)).
+`ANONYMOUS_PROXY_ENDPOINTS` lists the proxy endpoints that are called without Pay credentials: login, register, guest, refresh, password reset and validation, ping, OAuth sign-in, the product and price catalog, and the email-MFA code step `mfa/verify`. `proxyPublicEndpoints(authPath)` prefixes that list with the mount path. Manual setups can pass the result as `publicEndpoints` ([src/server/pay-proxy-client.ts:L19-L56](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/pay-proxy-client.ts#L19-L56)). `mfa/verify` is also listed in `DEFAULT_PUBLIC_ROUTES` ([src/server/config/route-config.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/server/config/route-config.ts)). It is the only account-security route that is public. The sign-in code step has to reach Pay before a session exists.
 
 Matching is exact. `:param` segments match one path segment, and sub-paths are not included. `isPublicEndpoint()` implements this check ([src/server/auth-middleware.ts:L192-L208](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/e9ed426ccda1880c2d89ed76e40f9015229264c8/src/server/auth-middleware.ts#L192-L208)).
 
@@ -63,6 +63,8 @@ Matching is exact. `:param` segments match one path segment, and sub-paths are n
 ### Route table
 
 Route metadata is declarative. Each entry records `path`, `method`, `requiresAuth`, `cacheable` and `cacheTTL`, under the `API_V1 = '/api/v1'` prefix. The table covers auth, user, OAuth, admin and payment routes ([src/server/config/route-config.ts:L6-L194](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/config/route-config.ts#L6-L194), [src/server/config/payment-route-config.ts:L12-L175](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/server/config/payment-route-config.ts#L12-L175)).
+
+The account-security routes were added in the client MFA and password-change change. They are `POST mfa/verify`, `POST mfa/enable`, `POST mfa/disable` and `POST change-password`. Only `mfa/verify` is anonymous. The other three require a signed-in token ([src/server/config/route-config.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/server/config/route-config.ts), [src/server/endpoints/user-endpoints.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/server/endpoints/user-endpoints.ts), [src/server/endpoints/auth-endpoints.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/server/endpoints/auth-endpoints.ts)).
 
 ### ProxyRouteHandler
 
@@ -95,11 +97,14 @@ The changeset in this release says the default `setupPayAuth` / `authMiddleware`
 - `ConfigurationManager`
 - `TokenStorageService`
 - `AuthOperations` and `UserOperations`
+- `AccountSecurityOperations`, added for email MFA and password change ([src/client/services/account-security-operations.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/services/account-security-operations.ts))
 - an `AuthStateMachine`
 
-Its HTTP client refreshes the access token automatically when it receives a 401. The refresh token lives in an httpOnly cookie, not in client storage ([src/client/pay-auth.ts:L313-L353](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/pay-auth.ts#L313-L353)). A request that is still 401 after a successful refresh returns that 401 and does not retry again ([src/core/http/fetch-http-client.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/src/core/http/fetch-http-client.ts)).
+Its HTTP client refreshes the access token automatically when it receives a 401. The refresh token lives in an httpOnly cookie, not in client storage ([src/client/pay-auth.ts:L313-L353](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/pay-auth.ts#L313-L353)). A request that is still 401 after a successful refresh returns that 401 and does not retry again ([src/core/http/fetch-http-client.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/30144e234fa74be1a4d1d9de04d1f17af30c380f/src/core/http/fetch-http-client.ts)). The `mfa/verify` path is on that HTTP client's list of auth endpoints, alongside login. A 401 there means a wrong or used-up code, so it does not trigger a refresh ([src/core/http/fetch-http-client.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/core/http/fetch-http-client.ts)).
 
-Default endpoint paths are defined in `ConfigurationManager` ([src/client/services/configuration-manager.ts:L38-L63](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/services/configuration-manager.ts#L38-L63)).
+**Two-step sign-in and security settings.** `login()` resolves with `{ requiresMfa, mfaToken }` and no session for accounts with email MFA on. `verifyMfa(mfaToken, code)` completes that sign-in. `setEmailMfaEnabled(enabled, password)` and `changePassword(currentPassword, newPassword)` call Pay and then replace the stored session, so this device stays signed in while other devices are signed out. Failures throw `AccountSecurityError`, which carries the HTTP `status` ([src/client/pay-auth.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/pay-auth.ts), [src/client/index.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/index.ts)).
+
+Default endpoint paths are defined in `ConfigurationManager` ([src/client/services/configuration-manager.ts:L38-L63](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/services/configuration-manager.ts#L38-L63)). `getAccountSecurityUrl()` derives the `mfa/verify`, `mfa/enable`, `mfa/disable` and `change-password` URLs from the configured `login` endpoint. They resolve to `/users/...` when talking to Pay directly and to `/auth/...` through a proxy mounted at `/auth` ([src/client/services/configuration-manager.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/services/configuration-manager.ts)).
 
 ### PaymentClient
 
@@ -113,6 +118,12 @@ Default endpoint paths are defined in `ConfigurationManager` ([src/client/servic
 - i18n
 - auth state
 - auth operations
+
+The auth operations now include `verifyMfa`, `setEmailMfaEnabled` and `changePassword`, which are exposed through `usePayAuth()` ([src/client/react/context/PayAuthProvider.tsx](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/react/context/PayAuthProvider.tsx), [src/client/react/hooks/usePayAuthOperations.ts](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/react/hooks/usePayAuthOperations.ts)).
+
+`AuthModal` shows a code-entry step (`MfaChallengeForm`) after a correct password on an MFA account. If Pay then asks for email verification, it moves to the existing email-verification step ([src/client/react/components/AuthModal/AuthModal.tsx](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/react/components/AuthModal/AuthModal.tsx)).
+
+`AccountSecurity` is a settings panel for turning two-step verification on or off and changing the password. It renders nothing for guests. It appears inside `ProfileView` or `AuthModal` only when `showSecuritySettings` is set, which is off by default ([src/client/react/components/AccountSecurity/AccountSecurity.tsx](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/react/components/AccountSecurity/AccountSecurity.tsx), [src/client/react/components/ProfileView/ProfileView.tsx](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/c33f715e929552016dc7b40468b71b045313dad4/src/client/react/components/ProfileView/ProfileView.tsx)).
 
 `PaymentProvider` holds customer, subscription and product state on top of `PaymentClient` ([src/client/react/context/PaymentProvider.tsx:L87-L356](https://github.com/Jeffrey-Keyser/pay-auth-integration/blob/d4ecf76d913db4ff0a5178aae561fd0fe16c4e03/src/client/react/context/PaymentProvider.tsx#L87-L356)).
 
