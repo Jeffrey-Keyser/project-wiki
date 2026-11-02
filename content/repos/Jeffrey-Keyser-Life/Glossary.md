@@ -21,6 +21,18 @@ An opaque caller-supplied identifier, for example `telegram:<chatId>:<messageId>
 
 An issued prompt that Life stores with its exact text and its browser kind when known. A saved reply entry can be associated with it, and one prompt can have several replies. The instance id identifies one issued rendering. It is not a template or pattern identity. Rows issued before the kind was stored read back with an unknown (null) kind ([docs/prompt-instances.md](https://github.com/Jeffrey-Keyser/Life/blob/533949d2412bbe7127d7e5fcdd66353eb1a1fcb1/docs/prompt-instances.md), [server/db/schema/2026_10_31_prompt_instances.sql](https://github.com/Jeffrey-Keyser/Life/blob/533949d2412bbe7127d7e5fcdd66353eb1a1fcb1/server/db/schema/2026_10_31_prompt_instances.sql)).
 
+### Dialog session
+
+A journal-scoped, account-owned conversation that gathers owner voice turns into one private root entry and append-only addenda, with optional attributed Life replies. A session is `active` until it is finished, and active sessions can be resumed from the Home Dialog tab ([docs/dialog-capture-lifecycle.md](https://github.com/Jeffrey-Keyser/Life/blob/b2f8fe559c97e0a9db27c972c6d127571be9a925/docs/dialog-capture-lifecycle.md), [server/routes/journals/dialogSessions.routes.ts](https://github.com/Jeffrey-Keyser/Life/blob/b2f8fe559c97e0a9db27c972c6d127571be9a925/server/routes/journals/dialogSessions.routes.ts)).
+
+### Dialog turn
+
+One accepted owner voice capture in a dialog session, identified by a stable operation key. The first accepted turn creates the private root entry, and later turns create addenda. Each turn can have one attributed Life reply. Life reply text is not owner entry content ([docs/dialog-capture-lifecycle.md](https://github.com/Jeffrey-Keyser/Life/blob/b2f8fe559c97e0a9db27c972c6d127571be9a925/docs/dialog-capture-lifecycle.md), [server/db/schema/2026_11_02_dialog_sessions.sql](https://github.com/Jeffrey-Keyser/Life/blob/b2f8fe559c97e0a9db27c972c6d127571be9a925/server/db/schema/2026_11_02_dialog_sessions.sql)).
+
+### Life reply
+
+An attributed reflection or archive answer that Life generates for one accepted dialog turn after the owner chooses `reflect` or `archive`. A failed generation keeps the owner turn and records a retryable code, and the owner can retry or finish the session ([docs/dialog-capture-lifecycle.md](https://github.com/Jeffrey-Keyser/Life/blob/b2f8fe559c97e0a9db27c972c6d127571be9a925/docs/dialog-capture-lifecycle.md), [server/db/schema/2026_11_03_dialog_replies.sql](https://github.com/Jeffrey-Keyser/Life/blob/b2f8fe559c97e0a9db27c972c6d127571be9a925/server/db/schema/2026_11_03_dialog_replies.sql)).
+
 ### Structure
 
 The step that turns a transcript into a title, content, matched people and tags, and ambiguity records. Unmatched IDs are dropped against the journal's known people and tags ([server/services/voiceEntry.ts:271-286](https://github.com/Jeffrey-Keyser/Life/blob/e2171006c39ec539a94c1053414f833ccad2286f/server/services/voiceEntry.ts#L271-L286)).
